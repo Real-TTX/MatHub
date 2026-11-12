@@ -378,7 +378,44 @@ function readModel(root) {
 
 function catalogOf(root) {
   const types = JSON.parse(root.dataset.catalog || '[]');
-  return { types, byId: Object.fromEntries(types.map(x => [x.id, x])), categories: JSON.parse(root.dataset.categories || '{}') };
+  return {
+    types,
+    byId: Object.fromEntries(types.map(x => [x.id, x])),
+    categories: JSON.parse(root.dataset.categories || '{}'),
+    secrets: JSON.parse(root.dataset.secrets || '[]'),
+    fieldKinds: JSON.parse(root.dataset.fieldKinds || '{}'),
+  };
+}
+
+/** The palette of actions: a search and the areas of the catalog, each one folding (options.open: the areas open at first). Calls back with the id of the action chosen. */
+function palette(catalog, extra, onPick, options = {}) {
+  const groups = {};
+  for (const [key, list] of Object.entries(extra)) groups[key] = list;
+  for (const type of catalog.types.filter(x => !x.isCondition)) (groups[type.category] ??= []).push(type);
+  const search = el('input', { type: 'search', class: 'mat-input mat-input--sm mh-palette__search', placeholder: t('Editors.SearchActions'), 'aria-label': t('Editors.SearchActions') });
+  const none = el('p', { class: 'mat-muted mh-palette__none', text: t('Editors.NoActions'), hidden: true });
+  const sections = Object.entries(groups).map(([category, types]) => {
+    const items = types.map(type => el('button', {
+      type: 'button', class: 'mat-btn mat-btn--sm mh-palette__item ' + (options.buttonClass || 'mat-btn--ghost'), disabled: options.readonly,
+      'data-tip': type.hint || null, 'data-search': (type.label + ' ' + (type.hint || '')).toLowerCase(), onclick: () => onPick(type.id),
+    }, icon(type.icon), el('span', { text: type.label })));
+    const details = el('details', { class: 'mh-palette__group', open: !options.open || options.open.includes(category) ? '' : null },
+      el('summary', { class: 'mh-palette__label' }, el('span', { text: catalog.categories[category] || (category === 'flow' ? t('Editors.Flow') : category) }), el('span', { class: 'mh-palette__count', text: String(types.length) })),
+      el('div', { class: 'mh-palette__items' }, ...items));
+    return { details, items };
+  });
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    let shown = 0;
+    for (const { details, items } of sections) {
+      let any = false;
+      for (const item of items) { const hit = !q || item.dataset.search.includes(q); item.hidden = !hit; any ||= hit; if (hit) shown++; }
+      details.hidden = !any;
+      if (q && any) details.open = true;
+    }
+    none.hidden = shown > 0;
+  });
+  return el('div', { class: 'mh-palette' }, search, ...sections.map(s => s.details), none);
 }
 
 /** The preview: the PowerShell the model becomes, from the server (it is the one compiler). */
@@ -400,20 +437,51 @@ function previewer(root, editor) {
   }, 350);
 }
 
+/** Fields with words for people (a dialog, a message) are in the font of the page; paths, ids and code in the font of code. */
+const PLAIN_FIELDS = ['title', 'text', 'fullname', 'value'];
+
 /** The inputs of a block's fields; every change calls back. */
-function fieldInputs(type, values, readonly, onChange, idPrefix) {
+function fieldInputs(type, values, readonly, onChange, idPrefix, catalog) {
   return type.fields.map(f => {
     const id = idPrefix + '-' + f.name;
+    if (values[f.name] === undefined && f.default != null) values[f.name] = f.default;
     let input;
+    if (f.kind === 'bool') {
+      // a switch: "true" or empty
+      input = el('input', { type: 'checkbox', id, disabled: readonly });
+      input.checked = values[f.name] === 'true';
+      input.addEventListener('change', () => { values[f.name] = input.checked ? 'true' : ''; onChange(); });
+      return el('div', { class: 'mat-field mh-field--switch' }, el('label', { class: 'mat-switch' }, input, el('span', { class: 'mat-switch__track' }), el('span', { text: f.label })));
+    }
+    if (f.kind === 'fields') {
+      return el('div', { class: 'mat-field mat-field--full' }, el('span', { class: 'mat-label', text: f.label }), dialogFields(values, f.name, readonly, onChange, catalog));
+    }
+    if (f.kind === 'secret') {
+      // the name of a secret; the value never comes into the page
+      const secrets = catalog?.secrets || [];
+      input = el('select', { class: 'mat-select', id, disabled: readonly },
+        el('option', { value: '', text: t('Editors.ChooseSecret') }),
+        ...secrets.map(name => el('option', { value: name, text: name })));
+      if (values[f.name] && !secrets.includes(values[f.name])) input.append(el('option', { value: values[f.name], text: values[f.name] + ' (' + t('Editors.SecretMissing') + ')' }));
+      input.value = values[f.name] ?? '';
+      input.addEventListener('change', () => { values[f.name] = input.value; onChange(); });
+      return el('div', { class: 'mat-field' },
+        el('label', { class: 'mat-label', for: id }, f.label, f.required ? null : el('span', { class: 'mat-opt', text: ' (' + t('Editors.Optional') + ')' })),
+        input,
+        el('p', { class: 'mat-hint' }, icon('key'), el('span', { text: secrets.length ? t('Editors.SecretHint') + ' ' : t('Editors.NoSecrets') + ' ' }), el('a', { href: '/secrets', target: '_blank', text: t('Editors.Secrets') })));
+    }
     if (f.kind === 'select') {
       input = el('select', { class: 'mat-select', id, disabled: readonly }, (f.options || []).map(o => el('option', { value: o.value, text: o.label })));
       input.value = values[f.name] ?? f.options?.[0]?.value ?? '';
       if (values[f.name] === undefined && f.options?.length) values[f.name] = f.options[0].value;
+    } else if (f.kind === 'variable') {
+      input = el('input', { class: 'mat-input mat-mono', id, type: 'text', placeholder: f.placeholder || 'answer', readonly, pattern: '[A-Za-z][A-Za-z0-9_]{0,39}', spellcheck: 'false', autocomplete: 'off' });
+      input.value = values[f.name] ?? '';
     } else if (f.kind === 'textarea') {
-      input = el('textarea', { class: 'mat-textarea mat-mono', id, rows: 4, spellcheck: 'false', placeholder: f.placeholder || '', readonly });
+      input = el('textarea', { class: 'mat-textarea' + (PLAIN_FIELDS.includes(f.name) ? '' : ' mat-mono'), id, rows: 4, spellcheck: 'false', placeholder: f.placeholder || '', readonly });
       input.value = values[f.name] ?? '';
     } else {
-      input = el('input', { class: 'mat-input' + (f.kind === 'number' ? '' : ' mat-mono'), id, type: f.kind === 'number' ? 'number' : 'text', placeholder: f.placeholder || '', readonly, inputmode: f.kind === 'number' ? 'numeric' : null });
+      input = el('input', { class: 'mat-input' + (f.kind === 'number' || PLAIN_FIELDS.includes(f.name) ? '' : ' mat-mono'), id, type: f.kind === 'number' ? 'number' : 'text', placeholder: f.placeholder || '', readonly, inputmode: f.kind === 'number' ? 'numeric' : null });
       input.value = values[f.name] ?? '';
     }
     input.addEventListener('input', () => { values[f.name] = input.value; onChange(); });
@@ -422,6 +490,72 @@ function fieldInputs(type, values, readonly, onChange, idPrefix) {
       el('label', { class: 'mat-label', for: id }, f.label, f.required ? null : el('span', { class: 'mat-opt', text: ' (' + t('Editors.Optional') + ')' })),
       input);
   });
+}
+
+const FIELD_KINDS = ['text', 'password', 'choice', 'check', 'number', 'multiline', 'info', 'page'];
+
+/**
+ * The fields of a dialog (a form, a wizard): rows of fields, and rows that start the next page. Kept as JSON in the value of the block; the server reads it
+ * (ScriptSteps.Pages) and says what is wrong (a field without a name, a choice without options).
+ */
+function dialogFields(values, name, readonly, onChange) {
+  let entries;
+  try { entries = JSON.parse(values[name] || '[]'); } catch { entries = []; }
+  if (!Array.isArray(entries)) entries = [];
+  const wrap = el('div', { class: 'mh-dfields' });
+  const save = () => { values[name] = JSON.stringify(entries); onChange(); };
+  const move = (from, to) => { if (to < 0 || to >= entries.length) return; const [x] = entries.splice(from, 1); entries.splice(to, 0, x); save(); render(); };
+  const render = () => {
+    let page = entries[0]?.kind === 'page' ? 0 : 1;
+    const rows = entries.map((entry, index) => {
+      entry.kind ||= 'text';
+      const isPage = entry.kind === 'page';
+      if (isPage) page++;
+      const kind = el('select', { class: 'mat-select mat-select--sm', 'aria-label': t('Editors.FieldKind'), disabled: readonly },
+        FIELD_KINDS.map(k => el('option', { value: k, text: t('Editors.FieldKind.' + k) })));
+      kind.value = entry.kind;
+      kind.addEventListener('change', () => { entry.kind = kind.value; save(); render(); });
+      const input = (prop, label, mono) => {
+        const i = el('input', { class: 'mat-input mat-input--sm' + (mono ? ' mat-mono' : ''), type: 'text', placeholder: label, 'aria-label': label, readonly, spellcheck: mono ? 'false' : null });
+        i.value = entry[prop] ?? '';
+        i.addEventListener('input', () => { entry[prop] = i.value; save(); });
+        return i;
+      };
+      const parts = [kind];
+      if (isPage) {
+        parts.push(input('label', t('Editors.PageTitle')), input('default', t('Editors.PageText')));
+      } else {
+        if (entry.kind !== 'info') parts.push(input('name', t('Editors.FieldName'), true));
+        parts.push(input('label', entry.kind === 'info' ? t('Editors.InfoText') : t('Editors.FieldLabel')));
+        if (entry.kind === 'choice') parts.push(input('options', t('Editors.FieldOptions')));
+        if (entry.kind !== 'info' && entry.kind !== 'password') parts.push(input('default', entry.kind === 'check' ? t('Editors.FieldDefaultCheck') : t('Editors.FieldDefault')));
+        if (!['info', 'check'].includes(entry.kind)) {
+          const required = el('input', { type: 'checkbox', disabled: readonly });
+          required.checked = !!entry.required;
+          required.addEventListener('change', () => { entry.required = required.checked; save(); });
+          parts.push(el('label', { class: 'mat-check mh-dfields__required' }, required, el('span', { class: 'mat-check__text', text: t('Editors.Required') })));
+        }
+      }
+      const tool = (iconName, label, onclick, disabled) => el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm', 'aria-label': label, 'data-tip': label, disabled, onclick }, icon(iconName));
+      return el('li', { class: 'mh-dfields__row' + (isPage ? ' mh-dfields__row--page' : '') },
+        isPage ? el('span', { class: 'mh-dfields__page', text: t('Editors.PageNumber', page) }) : null,
+        el('div', { class: 'mh-dfields__inputs' }, ...parts),
+        readonly ? null : el('span', { class: 'mh-dfields__tools' },
+          tool('arrow-up', t('Editors.Up'), () => move(index, index - 1), index === 0),
+          tool('arrow-down', t('Editors.Down'), () => move(index, index + 1), index === entries.length - 1),
+          tool('trash', t('Editors.Remove'), () => { entries.splice(index, 1); save(); render(); })));
+    });
+    const add = (kind, iconName, label) => el('button', {
+      type: 'button', class: 'mat-btn mat-btn--secondary mat-btn--sm',
+      onclick: () => { entries.push(kind === 'page' ? { kind: 'page', label: '' } : { kind: 'text', name: 'field' + (entries.filter(e => e.kind !== 'page').length + 1), label: '' }); save(); render(); wrap.querySelector('.mh-dfields__row:last-child input')?.focus(); },
+    }, icon(iconName), el('span', { text: label }));
+    wrap.replaceChildren(
+      entries.length ? el('ol', { class: 'mh-dfields__list' }, ...rows) : el('p', { class: 'mat-muted', text: t('Editors.NoFields') }),
+      readonly ? '' : el('div', { class: 'mh-dfields__add' }, add('text', 'plus', t('Editors.AddField')), add('page', 'layers', t('Editors.AddPage'))),
+      el('p', { class: 'mat-hint', text: t('Editors.FieldsHint') }));
+  };
+  render();
+  return wrap;
 }
 
 /** The editor of a check (the condition of a block, the question of an "if"): which check, its fields, "not". */
@@ -440,7 +574,7 @@ function conditionEditor(catalog, condition, readonly, onChange, idPrefix) {
     negate.addEventListener('change', () => { condition.negate = negate.checked; onChange(); });
     wrap.replaceChildren(
       el('div', { class: 'mat-field' }, el('label', { class: 'mat-label', for: idPrefix + '-check', text: t('Editors.Check') }), select),
-      ...fieldInputs(type, condition.values, readonly, onChange, idPrefix + '-c'),
+      ...fieldInputs(type, condition.values, readonly, onChange, idPrefix + '-c', catalog),
       el('label', { class: 'mat-check' }, negate, el('span', { class: 'mat-check__text', text: t('Editors.Negate') })));
   };
   render();
@@ -495,7 +629,7 @@ function blockEditor(root) {
 
       const body = el('div', { class: 'mh-block__body' });
       if (type?.hint) body.append(el('p', { class: 'mat-hint', text: type.hint }));
-      if (type) body.append(el('div', { class: 'mh-block__fields' }, ...fieldInputs(type, block.values, readonly, changed, key)));
+      if (type) body.append(el('div', { class: 'mh-block__fields' }, ...fieldInputs(type, block.values, readonly, changed, key, catalog)));
 
       // the options of the step: only if …, go on after an error
       const when = el('input', { type: 'checkbox', id: key + '-when', disabled: readonly });
@@ -533,17 +667,14 @@ function blockEditor(root) {
   // the palette of steps, by area
   if (add && !readonly) {
     add.hidden = false;
-    const groups = {};
-    for (const type of catalog.types.filter(x => !x.isCondition)) (groups[type.category] ??= []).push(type);
-    add.append(el('h2', { class: 'mh-blocks__add-title', text: t('Editors.AddStep') }));
-    for (const [category, types] of Object.entries(groups)) {
-      add.append(el('div', { class: 'mh-palette__group' },
-        el('span', { class: 'mh-palette__label', text: catalog.categories[category] || category }),
-        el('div', { class: 'mh-palette__items' }, ...types.map(type => el('button', {
-          type: 'button', class: 'mat-btn mat-btn--secondary mat-btn--sm', 'data-tip': type.hint || null,
-          onclick: () => { model.blocks.push({ type: type.id, values: {} }); render(); changed(); list.lastElementChild?.querySelector('input, textarea, select')?.focus(); },
-        }, icon(type.icon), el('span', { text: type.label }))))));
-    }
+    add.append(el('h2', { class: 'mh-blocks__add-title', text: t('Editors.AddStep') }),
+      palette(catalog, {}, id => {
+        model.blocks.push({ type: id, values: {} });
+        render();
+        changed();
+        list.lastElementChild?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        list.lastElementChild?.querySelector('input, textarea, select')?.focus({ preventScroll: true });
+      }, { buttonClass: 'mat-btn--secondary', open: ['software', 'files', 'system'] }));
   }
 
   render();
@@ -563,7 +694,7 @@ function flowEditor(root) {
   if (!model.nodes.some(n => n.type === 'start')) model.nodes.unshift({ id: 'start', type: 'start', values: {}, x: 60, y: 40 });
   const input = root.querySelector('[data-model]');
   const canvas = root.querySelector('[data-canvas]');
-  const palette = root.querySelector('[data-palette]');
+  const paletteBox = root.querySelector('[data-palette]');
   const props = root.querySelector('[data-props]');
   const preview = previewer(root, 'flow');
   const svgNs = 'http://www.w3.org/2000/svg';
@@ -774,7 +905,7 @@ function flowEditor(root) {
     const parts = [el('h2', { class: 'mh-flow__props-title' }, icon(iconOf(node)), el('span', { text: label(node) }))];
     const type = catalog.byId[node.type];
     if (type?.hint) parts.push(el('p', { class: 'mat-hint', text: type.hint }));
-    if (type && !type.isCondition) parts.push(...fieldInputs(type, node.values ??= {}, readonly, () => { changed(); drawEdges(); }, key));
+    if (type && !type.isCondition) parts.push(...fieldInputs(type, node.values ??= {}, readonly, () => { changed(); drawEdges(); }, key, catalog));
     if (node.type === 'if') parts.push(conditionEditor(catalog, node.condition ??= { type: '', values: {} }, readonly, changed, key));
     if (node.type === 'end') {
       node.values ??= {};
@@ -799,15 +930,10 @@ function flowEditor(root) {
     props.replaceChildren(...parts);
   };
 
-  // the palette: what can be added
-  if (palette) {
-    const groups = { flow: [{ id: 'if', label: t('Editors.If'), icon: 'route' }, { id: 'end', label: t('Editors.End'), icon: 'stop' }] };
-    for (const type of catalog.types.filter(x => !x.isCondition)) (groups[type.category] ??= []).push(type);
-    palette.append(...Object.entries(groups).map(([category, types]) => el('div', { class: 'mh-palette__group' },
-      el('span', { class: 'mh-palette__label', text: category === 'flow' ? t('Editors.Flow') : (catalog.categories[category] || category) }),
-      el('div', { class: 'mh-palette__items' }, ...types.map(type => el('button', {
-        type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--sm mh-palette__item', disabled: readonly, 'data-tip': type.hint || null, onclick: () => addNode(type.id),
-      }, icon(type.icon), el('span', { text: type.label })))))));
+  // the palette: what can be added (searchable, the areas fold; "if" and "end" first)
+  if (paletteBox) {
+    paletteBox.append(palette(catalog, { flow: [{ id: 'if', label: t('Editors.If'), icon: 'route', hint: t('Editors.IfHint') }, { id: 'end', label: t('Editors.End'), icon: 'stop', hint: t('Editors.EndHint') }] },
+      id => addNode(id), { readonly, open: ['flow', 'software'] }));
   }
 
   canvas.addEventListener('click', e => { if (e.target === canvas || e.target === layer || e.target === svg || e.target === stage || e.target === sizer) { selected = null; selectedEdge = null; render(); } });

@@ -1,0 +1,106 @@
+@page "/sequences/edit"
+@using MatHub.Services.Jobs
+@model MatHub.Pages.Sequences.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Sequences.New"].Value : Model.Name;
+    ViewData["PageSub"] = L["Sequences.Edit.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Sequences.Title"].Value, "/sequences"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+    var readOnly = !Model.CanEdit;
+}
+
+<form class="mat-form" method="post" novalidate>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-cols">
+        <div class="mat-col-12 mat-col-lg-5">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("info")@L["Common.General"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="Name" label="@L["Common.Name"]" required value="@Model.Name" maxlength="120" msg-required="@L["Common.NameRequired"]" disabled="@readOnly" />
+                    <mh-field name="Category" label="@L["Scripts.Category"]" value="@Model.Category" maxlength="60" optional placeholder="@L["Sequences.Category.Placeholder"]" disabled="@readOnly" />
+                    <mh-field name="Description" kind="textarea" label="@L["Common.Description"]" value="@Model.Description" maxlength="1000" rows="3" optional disabled="@readOnly" />
+                </div>
+            </div>
+            @if (!Model.IsNew)
+            {
+                <section class="mat-card mat-card--flush" aria-labelledby="sequence-actions">
+                    <div class="mat-card__head"><h2 class="mat-card__title" id="sequence-actions">@Ui.Icon("play")@L["Clients.Actions"]</h2></div>
+                    <div class="mat-card__body">
+                        <ul class="mat-itemlist mat-itemlist--lines-inset">
+                            @if (Model.CanRun)
+                            {
+                                <li class="mat-item"><a class="mat-item__main" href="/jobs/new?sequence=@Model.Id">
+                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--ok">@Ui.Icon("play")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@L["Sequences.Run"]</span><span class="mat-item__text">@L["Sequences.Run.Hint"]</span></span>
+                                    <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                                </a></li>
+                            }
+                            @if (Model.CanKiosk)
+                            {
+                                <li class="mat-item"><a class="mat-item__main" href="/kiosk/edit?sequence=@Model.Id">
+                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("store")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@L["Kiosk.Offer"]</span><span class="mat-item__text">@L["Kiosk.Offer.Hint"]</span></span>
+                                    <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                                </a></li>
+                            }
+                            <li class="mat-item"><a class="mat-item__main" href="/jobs?q=@Uri.EscapeDataString(Model.Name)">
+                                <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("activity")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@L["Sequences.Runs"]</span><span class="mat-item__text">@L["Sequences.Runs.Hint", Model.Runs]</span></span>
+                                <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                            </a></li>
+                        </ul>
+                    </div>
+                </section>
+            }
+        </div>
+        <div class="mat-col-12 mat-col-lg-7">
+            <section class="mat-card" aria-labelledby="sequence-steps" data-steps data-max="@SequenceService.MaxSteps">
+                <div class="mat-card__head">
+                    <h2 class="mat-card__title" id="sequence-steps">@Ui.Icon("route")@L["Sequences.Steps"]</h2>
+                    <span class="mh-head-end mh-muted" data-step-count>@L["Sequences.StepCount", Model.Steps.Count]</span>
+                </div>
+                <div class="mat-card__body">
+                    <ol class="mh-steps" data-step-list aria-label="@L["Sequences.Steps"]">
+                        @for (var i = 0; i < Model.Steps.Count; i++)
+                        {
+                            <partial name="_Step" model="(i, Model.Steps[i], Model.ScriptChoices, Model.PackageChoices, readOnly)" />
+                        }
+                    </ol>
+                    <div class="mh-steps__empty" data-step-empty hidden="@(Model.Steps.Count > 0)">
+                        <span class="mat-empty__icon">@Ui.Icon("route")</span>
+                        <p class="mat-empty__title">@L["Sequences.NoSteps"]</p>
+                        <p class="mat-muted">@L["Sequences.NoSteps.Text"]</p>
+                    </div>
+                    <span class="mat-error" aria-live="polite">@ViewData.ModelState["Steps"]?.Errors.FirstOrDefault()?.ErrorMessage</span>
+                    @if (!readOnly)
+                    {
+                        <div class="mh-steps__add">
+                            <span class="mh-steps__add-title">@L["Sequences.AddStep"]</span>
+                            <div class="mh-steps__add-buttons">
+                                @foreach (var kind in Enum.GetValues<MatHub.Data.SequenceStepKind>())
+                                {
+                                    <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-step-add="@kind" data-tip="@L["Sequences.Kind." + kind + ".Hint"]">@Ui.Icon(SequenceService.Icon(kind))<span>@L["Sequences.Kind." + kind]</span></button>
+                                }
+                            </div>
+                        </div>
+                        @foreach (var kind in Enum.GetValues<MatHub.Data.SequenceStepKind>())
+                        {
+                            <template data-step-template="@kind"><partial name="_Step" model="(-1, new MatHub.Pages.Sequences.EditModel.StepInput { Kind = kind }, Model.ScriptChoices, Model.PackageChoices, false)" /></template>
+                        }
+                    }
+                </div>
+            </section>
+        </div>
+    </div>
+    @if (Model.CanEdit)
+    {
+        <mh-buttons save="@L["Common.Save"]" back="/sequences" delete-handler="@(Model.IsNew ? null : "Delete")" delete-label="@L["Sequences.Delete"]" delete-confirm="@L["Sequences.DeleteConfirm", Model.Name]" />
+    }
+    else
+    {
+        <mh-buttons back="/sequences" />
+    }
+</form>
+
+@section Scripts {
+    <script src="~/js/sequence.js" asp-append-version="true"></script>
+}

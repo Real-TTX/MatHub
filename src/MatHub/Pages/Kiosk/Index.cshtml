@@ -1,0 +1,41 @@
+@page "/kiosk"
+@model MatHub.Pages.Kiosk.IndexModel
+@{
+    ViewData["Title"] = L["Kiosk.Title"].Value;
+    ViewData["PageSub"] = L["Kiosk.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Kiosk.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("store", L[first ? "Kiosk.Empty" : "Kiosk.NoMatch"].Value, L[first ? "Kiosk.EmptyText" : "Lists.ChangeTools"].Value, first, "/kiosk/edit", L["Kiosk.New"].Value, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Kiosk.Title"]">
+            <thead><tr><th scope="col">@L["Kiosk.Field.Name"]</th><th scope="col">@L["Kiosk.Field.Kind"]</th><th scope="col" class="mat-hide-sm">@L["Kiosk.Field.Category"]</th><th scope="col" class="mat-hide-md">@L["Kiosk.For"]</th><th scope="col">@L["Common.State"]</th><th scope="col" class="mat-num mat-hide-sm">@L["Kiosk.Starts"]</th></tr></thead>
+            <tbody>
+                @foreach (var k in Model.Items)
+                {
+                    <tr>
+                        <td data-label="@L["Kiosk.Field.Name"]" class="mat-table__primary">
+                            <a href="/kiosk/edit?id=@k.Id"><span class="mh-name"><span class="mh-kiosk-icon">@Ui.Icon(k.Icon)</span>@k.Name</span></a>
+                            @if (k.Description is not null) { <span class="mh-subline">@k.Description</span> }
+                        </td>
+                        <td data-label="@L["Kiosk.Field.Kind"]"><span class="mat-pill mat-pill--plain">@L["Kiosk.Kind." + k.Kind]</span> <span class="mh-muted">@k.Target</span></td>
+                        <td data-label="@L["Kiosk.Field.Category"]" class="mat-hide-sm">@if (k.Category is not null) { <span class="mat-tag">@k.Category</span> }</td>
+                        <td data-label="@L["Kiosk.For"]" class="mat-hide-md">@(k.Groups == 0 ? L["Kiosk.ForAll"].Value : L[k.Groups == 1 ? "Kiosk.ForGroups.One" : "Kiosk.ForGroups", k.Groups].Value)</td>
+                        <td data-label="@L["Common.State"]">@if (k.IsActive) { <span class="mat-pill mat-pill--ok">@L["Kiosk.Active"]</span> } else { <span class="mat-pill mat-pill--plain">@L["Kiosk.Inactive"]</span> }</td>
+                        <td data-label="@L["Kiosk.Starts"]" class="mat-num mat-hide-sm">@k.Runs</td>
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+    <div class="mat-actions">
+        <a class="mat-btn mat-btn--primary" href="/kiosk/edit">@Ui.Icon("plus")<span>@L["Kiosk.New"]</span></a>
+    </div>
+</div>

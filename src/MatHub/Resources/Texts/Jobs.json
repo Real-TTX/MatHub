@@ -87,5 +87,11 @@
   "Runs.NoOutput": { "en": "Nothing was written.", "de": "Es wurde nichts ausgegeben." },
   "Runs.Waiting": { "en": "The agent takes the job with its next call.", "de": "Der Agent übernimmt den Auftrag beim nächsten Melden." },
   "Runs.None": { "en": "Nothing ran here yet", "de": "Hier lief noch nichts" },
-  "Runs.NoneText": { "en": "Jobs on this client show up here with their output.", "de": "Aufträge auf diesem Client erscheinen hier mit ihrer Ausgabe." }
+  "Runs.NoneText": { "en": "Jobs on this client show up here with their output.", "de": "Aufträge auf diesem Client erscheinen hier mit ihrer Ausgabe." },
+  "Jobs.OpenSequence": { "en": "Open the sequence", "de": "Ablauf öffnen" },
+  "Jobs.StepOf": { "en": "step {0} of {1}", "de": "Schritt {0} von {1}" },
+  "Jobs.Kind.Sequence": { "en": "Sequence", "de": "Ablauf" },
+  "Jobs.Kind.Sequence.Hint": { "en": "Several steps one after the other, also with restarts.", "de": "Mehrere Schritte nacheinander, auch mit Neustarts." },
+  "Jobs.Origin.kiosk": { "en": "Kiosk", "de": "Kiosk" },
+  "Jobs.Origin.test": { "en": "Test", "de": "Test" }
 }

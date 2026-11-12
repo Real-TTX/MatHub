@@ -1,0 +1,72 @@
+@using MatHub.Services.Jobs
+@model (int Index, MatHub.Pages.Sequences.EditModel.StepInput Step, List<Choice> Scripts, List<Choice> Packages, bool ReadOnly)
+@*
+    One step of a sequence: its kind (fixed for the row, the icon and title say it), what it uses and whether an error stops the rest. Native selects, so a row
+    the script adds is ready at once; the index -1 is a template (sequence.js numbers the rows before the form is sent).
+*@
+@{
+    var i = Model.Index;
+    var s = Model.Step;
+    var id = i < 0 ? "step-new-" + s.Kind : $"step-{i}";
+}
+<li class="mh-step" data-step data-kind="@s.Kind">
+    <span class="mh-step__number" data-step-number>@(i < 0 ? "" : (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture))</span>
+    <span class="mh-step__icon">@Ui.Icon(SequenceService.Icon(s.Kind))</span>
+    <div class="mh-step__body">
+        <span class="mh-step__title">@L["Sequences.Kind." + s.Kind]</span>
+        <input type="hidden" name="Steps[@i].Kind" value="@s.Kind" data-part="Kind" />
+        @switch (s.Kind)
+        {
+            case SequenceStepKind.Script:
+                <label class="mat-sr-only" for="@id-script">@L["Scripts.One"]</label>
+                <select class="mat-select mat-select--sm" id="@id-script" name="Steps[@i].ScriptId" data-part="ScriptId" disabled="@Model.ReadOnly">
+                    <option value="">@L["Jobs.ChooseScript"]</option>
+                    @foreach (var o in Model.Scripts)
+                    {
+                        <option value="@o.Value" selected="@(o.Value == s.ScriptId)">@o.Label</option>
+                    }
+                </select>
+                break;
+            case SequenceStepKind.PackageInstall:
+            case SequenceStepKind.PackageUninstall:
+                <label class="mat-sr-only" for="@id-package">@L["Packages.One"]</label>
+                <select class="mat-select mat-select--sm" id="@id-package" name="Steps[@i].PackageId" data-part="PackageId" disabled="@Model.ReadOnly">
+                    <option value="">@L["Jobs.ChoosePackage"]</option>
+                    @foreach (var o in Model.Packages)
+                    {
+                        <option value="@o.Value" selected="@(o.Value == s.PackageId)">@o.Label</option>
+                    }
+                </select>
+                break;
+            case SequenceStepKind.Wait:
+                <span class="mh-step__inline">
+                    <label class="mat-sr-only" for="@id-seconds">@L["Sequences.Seconds"]</label>
+                    <input class="mat-input mat-input--sm mh-step__seconds" type="number" min="1" max="86400" id="@id-seconds" name="Steps[@i].Seconds" data-part="Seconds" value="@(s.Seconds ?? 60)" disabled="@Model.ReadOnly" />
+                    <span class="mh-muted">@L["Sequences.Seconds"]</span>
+                </span>
+                break;
+            case SequenceStepKind.WingetUpgrade:
+                <label class="mat-sr-only" for="@id-winget">@L["Software.WingetId"]</label>
+                <input class="mat-input mat-input--sm mat-mono" id="@id-winget" name="Steps[@i].WingetId" data-part="WingetId" value="@s.WingetId" maxlength="200" placeholder="@L["Sequences.AllUpdates"]" disabled="@Model.ReadOnly" />
+                break;
+            case SequenceStepKind.Restart:
+                <span class="mh-step__note">@L["Sequences.Kind.Restart.Hint"]</span>
+                break;
+            default:
+                <span class="mh-step__note">@L["Sequences.Kind." + s.Kind + ".Hint"]</span>
+                break;
+        }
+        <label class="mat-check mh-step__goon">
+            <input type="checkbox" name="Steps[@i].ContinueOnError" value="true" data-part="ContinueOnError" checked="@s.ContinueOnError" disabled="@Model.ReadOnly" />
+            <span class="mat-check__text">@L["Sequences.ContinueOnError"]</span>
+        </label>
+    </div>
+    @if (!Model.ReadOnly)
+    {
+        <span class="mh-step__tools">
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-step-up aria-label="@L["Sequences.Up"]" data-tip="@L["Sequences.Up"]">@Ui.Icon("arrow-up")</button>
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-step-down aria-label="@L["Sequences.Down"]" data-tip="@L["Sequences.Down"]">@Ui.Icon("arrow-down")</button>
+            <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" data-step-remove aria-label="@L["Sequences.Remove"]" data-tip="@L["Sequences.Remove"]">@Ui.Icon("trash")</button>
+        </span>
+    }
+</li>

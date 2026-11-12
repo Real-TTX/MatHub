@@ -16,6 +16,7 @@ public static class Permission
     public const string ScriptsView = "scripts-view";
     public const string ScriptsEdit = "scripts-edit";
     public const string ScriptsRun = "scripts-run";
+    public const string SecretsManage = "secrets-manage";
     public const string PackagesView = "packages-view";
     public const string PackagesEdit = "packages-edit";
     public const string PackagesDeploy = "packages-deploy";
@@ -23,15 +24,17 @@ public static class Permission
     public const string JobsManage = "jobs-manage";
     public const string RolloutView = "rollout-view";
     public const string RolloutManage = "rollout-manage";
+    public const string KioskManage = "kiosk-manage";
 
     /// <summary>Every permission, in the order of the role page (grouped by area).</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         ClientsView, ClientsManage, ClientsEnroll, GroupsManage,
-        ScriptsView, ScriptsEdit, ScriptsRun,
+        ScriptsView, ScriptsEdit, ScriptsRun, SecretsManage,
         PackagesView, PackagesEdit, PackagesDeploy,
         JobsView, JobsManage,
         RolloutView, RolloutManage,
+        KioskManage,
     ];
 
     /// <summary>The area of a permission (<c>clients</c> of <c>clients-view</c>); the platform allows small letters, digits, - and _ in a key.</summary>

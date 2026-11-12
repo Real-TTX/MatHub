@@ -30,6 +30,14 @@ public sealed class CodeModel(AppDbContext db) : AppPageModel
 
     public bool CanRun => Me.Can(Permission.ScriptsRun);
 
+    /// <summary>Test from the editor: run what is in it on a computer of the person (needs both, editing and running).</summary>
+    public bool CanTest => CanRun && CanEdit;
+
+    /// <summary>The computers the person reaches, online first; the one they test on (remembered) is chosen.</summary>
+    public IReadOnlyList<(long Id, string Name, bool Online)> TestClients { get; private set; } = [];
+
+    public long? TestClientId { get; private set; }
+
     /// <summary>The kinds of blocks with their texts in the language of the page, for the visual editors (one source: <see cref="ScriptBlocks.Types"/>).</summary>
     public string CatalogJson => JsonSerializer.Serialize(ScriptBlocks.Types.Select(t => new
     {
@@ -45,13 +53,16 @@ public sealed class CodeModel(AppDbContext db) : AppPageModel
             f.Kind,
             f.Required,
             f.Placeholder,
+            f.Default,
             Label = Text.T("Blocks.Field." + f.Name),
             Options = f.Options?.Select(o => new { Value = o, Label = Text.T("Blocks.Option." + o) }),
         }),
     }), Json);
 
-    public string CategoriesJson => JsonSerializer.Serialize(
-        new[] { "software", "files", "system", "script", "check" }.ToDictionary(c => c, c => Text.T("Blocks.Category." + c)), Json);
+    public string CategoriesJson => JsonSerializer.Serialize(ScriptBlocks.Categories.ToDictionary(c => c, c => Text.T("Blocks.Category." + c)), Json);
+
+    /// <summary>The names of the secrets a step can use (their values never come into the page).</summary>
+    public string SecretsJson { get; private set; } = "[]";
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -61,6 +72,12 @@ public sealed class CodeModel(AppDbContext db) : AppPageModel
         }
 
         Code = Script.Content;
+        SecretsJson = JsonSerializer.Serialize(await SecretService.NamesAsync(db, Me.Actor, HttpContext.RequestAborted), Json);
+        if (CanTest)
+        {
+            TestClients = (await Services.Clients.ClientService.ChoicesAsync(db, Me.Actor, HttpContext.RequestAborted)).OrderByDescending(c => c.Online).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            TestClientId = await ScriptTester.TestClientAsync(db, Me.Actor, HttpContext.RequestAborted);
+        }
         ModelJson = Script.Model ?? (Script.Editor == ScriptEditor.Blocks ? "{\"blocks\":[]}" : "{}");
         if (Script.Editor != ScriptEditor.Code && Script.Model is not null)
         {

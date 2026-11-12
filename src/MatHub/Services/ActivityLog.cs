@@ -10,7 +10,7 @@ public sealed record ActivityRow(DateTime Date, string? UserName, string Area, s
 public static class ActivityLog
 {
     /// <summary>The areas of the filter.</summary>
-    public static readonly string[] Areas = ["client", "group", "enrollment", "script", "package", "job", "rollout", "role", "user"];
+    public static readonly string[] Areas = ["client", "group", "enrollment", "script", "secret", "sequence", "kiosk", "package", "job", "rollout", "role", "user"];
 
     public static void Add(AppDbContext db, Actor actor, string area, string action, string? target, string? detail = null, long? clientId = null)
         => db.Activities.Add(new Activity

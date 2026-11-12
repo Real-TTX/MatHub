@@ -6,6 +6,9 @@
 //   POST /api/agent/v1/runs/{runId}/result    RunResult          -> 204
 //   POST /api/agent/v1/inventory              InventoryReport    -> 204
 //   GET  /api/agent/v1/packages/{id}/file     the installer of a package
+//   GET  /api/agent/v1/kiosk                  -> KioskOffer            (the offers of the kiosk, asked live when it opens)
+//   POST /api/agent/v1/kiosk/{id}/start       KioskStart         -> KioskStarted
+//   GET  /api/agent/v1/runs/{runId}           -> RunState              (a run the kiosk started)
 //   GET  /agent/mathub-agent.exe              the agent itself (anonymous); /agent/install.ps1 installs it
 namespace MatHub.Protocol;
 
@@ -134,6 +137,12 @@ public sealed record AgentJob
     public string? FileName { get; init; }
 
     public int TimeoutSeconds { get; init; } = 600;
+
+    /// <summary>The secrets the script names (name -> value; NAME_USER -> its user name): environment variables MATHUB_SECRET_NAME of the run, hidden in its output.</summary>
+    public IReadOnlyDictionary<string, string>? Secrets { get; init; }
+
+    /// <summary>What the job is called (the kiosk and its progress show it).</summary>
+    public string? Title { get; init; }
 }
 
 public sealed record RunResult
@@ -211,3 +220,140 @@ public sealed record SoftwareInfo(string Name, string? Version, string? Publishe
 public sealed record WingetUpgradeInfo(string Name, string Id, string? Version, string Available);
 
 public sealed record WingetPackageInfo(string Name, string Id, string? Version);
+
+// ---- the kiosk: offers the people at a computer start themselves ------------------------------------------------------------------
+
+public sealed record KioskOffer
+{
+    public IReadOnlyList<KioskOfferItem> Items { get; init; } = [];
+}
+
+public sealed record KioskOfferItem
+{
+    public long Id { get; init; }
+
+    public string Name { get; init; } = string.Empty;
+
+    public string? Description { get; init; }
+
+    public string? Category { get; init; }
+
+    /// <summary>The icon of the tile (a name of the icon set of the kiosk: box, download, wrench, printer, network, shield, user, terminal, …).</summary>
+    public string Icon { get; init; } = "box";
+
+    /// <summary>A question to answer before it starts.</summary>
+    public string? Confirm { get; init; }
+
+    /// <summary>script, package, sequence.</summary>
+    public string Kind { get; init; } = "script";
+
+    /// <summary>The last time it ran on this computer.</summary>
+    public RunState? Last { get; init; }
+}
+
+public sealed record KioskStart
+{
+    /// <summary>Who started it (DOMAIN\user), for the activity log.</summary>
+    public string? User { get; init; }
+}
+
+public sealed record KioskStarted
+{
+    public long RunId { get; init; }
+}
+
+public static class RunStates
+{
+    public const string Queued = "queued";
+    public const string Running = "running";
+    public const string Succeeded = "succeeded";
+    public const string Failed = "failed";
+    public const string Cancelled = "cancelled";
+}
+
+public sealed record RunState
+{
+    public long RunId { get; init; }
+
+    /// <summary>queued, running, succeeded, failed, cancelled (<see cref="RunStates"/>).</summary>
+    public string Status { get; init; } = RunStates.Queued;
+
+    public int? ExitCode { get; init; }
+
+    public DateTime? Finished { get; init; }
+
+    /// <summary>A sequence: the step (1 = the first) and how many there are.</summary>
+    public int Step { get; init; }
+
+    public int Steps { get; init; }
+}
+
+// ---- dialogs: a script asks the person at the computer (the agent shows it in their session) -----------------------------------------
+
+public static class UiKinds
+{
+    /// <summary>A message with OK.</summary>
+    public const string Message = "message";
+
+    /// <summary>A question: yes or no.</summary>
+    public const string Question = "question";
+
+    /// <summary>Fields on one or more pages (a wizard): the values come back.</summary>
+    public const string Form = "form";
+
+    /// <summary>A notice in the corner; the script goes on at once.</summary>
+    public const string Notify = "notify";
+
+    /// <summary>A window "please wait" that stays until the script ends or shows the next dialog.</summary>
+    public const string Progress = "progress";
+}
+
+public sealed record UiDialog
+{
+    public string Kind { get; init; } = UiKinds.Message;
+
+    public string? Title { get; init; }
+
+    public string? Text { get; init; }
+
+    /// <summary>A message: info, warning, error.</summary>
+    public string? Level { get; init; }
+
+    public IReadOnlyList<UiPage> Pages { get; init; } = [];
+
+    /// <summary>Nobody answers in this time: the answer is "timeout".</summary>
+    public int TimeoutSeconds { get; init; } = 300;
+}
+
+public sealed record UiPage
+{
+    public string? Title { get; init; }
+
+    public string? Text { get; init; }
+
+    public IReadOnlyList<UiField> Fields { get; init; } = [];
+}
+
+public sealed record UiField
+{
+    public string Name { get; init; } = string.Empty;
+
+    public string Label { get; init; } = string.Empty;
+
+    /// <summary>text, password, choice, check, number, multiline, info (a text without an input).</summary>
+    public string Kind { get; init; } = "text";
+
+    public IReadOnlyList<string>? Options { get; init; }
+
+    public string? Default { get; init; }
+
+    public bool Required { get; init; }
+}
+
+public sealed record UiReply
+{
+    /// <summary>ok, cancel, yes, no, timeout, nobody (nobody is signed in, or the kiosk of the agent does not run).</summary>
+    public string Answer { get; init; } = "cancel";
+
+    public IReadOnlyDictionary<string, string>? Values { get; init; }
+}

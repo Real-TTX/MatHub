@@ -82,6 +82,7 @@ public static class Setup
             return 4;
         }
 
+        Kiosk(install: true);
         Console.WriteLine(enrolled.Pending
             ? $"Installed. {enrolled.ClientName} waits for an approval in MatHub."
             : $"Installed. {enrolled.ClientName} is a client of MatHub now.");
@@ -127,6 +128,7 @@ public static class Setup
         Sc("stop", $"\"{AgentInfo.ServiceName}\"");
         Thread.Sleep(2000);
         Sc("delete", $"\"{AgentInfo.ServiceName}\"");
+        Kiosk(install: false);
         foreach (var dir in new[] { AgentInfo.DataDirectory })
         {
             if (Directory.Exists(dir))
@@ -147,6 +149,56 @@ public static class Setup
 
         Console.WriteLine("The MatHub agent is removed. Remove the client in MatHub too, if it should go.");
         return 0;
+    }
+
+    private const string RunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+
+    private static string KioskShortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "MatHub Kiosk.lnk");
+
+    /// <summary>
+    /// The kiosk for the people at the computer: the tray starts at every sign-in (HKLM Run) and the start menu has "MatHub Kiosk". The uninstall removes both
+    /// and ends the trays that run.
+    /// </summary>
+    private static void Kiosk(bool install)
+    {
+        try
+        {
+            using var run = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RunKey);
+            if (install)
+            {
+                run.SetValue(AgentInfo.ServiceName, $"\"{AgentInfo.InstalledExe}\" tray");
+                var type = Type.GetTypeFromProgID("WScript.Shell") ?? throw new InvalidOperationException("WScript.Shell is missing.");
+                dynamic shell = Activator.CreateInstance(type)!;
+                dynamic link = shell.CreateShortcut(KioskShortcut);
+                link.TargetPath = AgentInfo.InstalledExe;
+                link.Arguments = "kiosk";
+                link.IconLocation = AgentInfo.InstalledExe + ",0";
+                link.Description = "MatHub Kiosk";
+                link.WorkingDirectory = AgentInfo.InstallDirectory;
+                link.Save();
+                Console.WriteLine("The kiosk is in the start menu; its symbol beside the clock comes with the next sign-in.");
+            }
+            else
+            {
+                run.DeleteValue(AgentInfo.ServiceName, throwOnMissingValue: false);
+                File.Delete(KioskShortcut);
+                foreach (var process in Process.GetProcessesByName("mathub-agent").Where(p => p.Id != Environment.ProcessId))
+                {
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                    {
+                        // gone already, or of another session that ends with it
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Console.Error.WriteLine("The kiosk could not be " + (install ? "set up" : "removed") + ": " + ex.Message);
+        }
     }
 
     private static bool IsAdministrator() => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);

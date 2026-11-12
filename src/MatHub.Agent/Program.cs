@@ -8,6 +8,9 @@ using MatHub.Agent;
 //   mathub-agent uninstall                                                remove the service, the program and its data
 //   mathub-agent run                                                      the service itself (also from a console, to watch it)
 //   mathub-agent inventory                                                write the inventory of this computer as JSON
+//   mathub-agent tray                                                     the symbol beside the clock: the kiosk, the dialogs of scripts (every sign-in)
+//   mathub-agent kiosk                                                    the kiosk window (start menu "MatHub Kiosk")
+//   mathub-agent ask --data <base64> [--no-wait]                          a dialog of a script (Invoke-MatHubDialog): prints the answer as JSON
 //   mathub-agent --version                                                the version
 //   mathub-agent apply-update --target … --staged … --to … --service …   the updater (started by the agent itself)
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
@@ -37,13 +40,18 @@ switch (args.FirstOrDefault())
     case "inventory":
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(await Inventory.CollectAsync(CancellationToken.None), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { WriteIndented = true }));
         return 0;
+    case "ask":
+        return await UiPipe.AskAsync(Option("--data"), args.Contains("--no-wait"));
+    case "tray":
+    case "kiosk":
+        return MatHub.Agent.Ui.UiApp.Run(args[0], args);
     case "apply-update":
         return Updater.Apply(Option("--target")!, Option("--staged")!, Option("--to") ?? "?", Option("--service") ?? AgentInfo.ServiceName);
     case "run":
     case null:
         break;
     default:
-        Console.Error.WriteLine("Usage: mathub-agent install --server <address> --key <key> | uninstall | run | inventory | --version");
+        Console.Error.WriteLine("Usage: mathub-agent install --server <address> --key <key> | uninstall | run | inventory | tray | kiosk | --version");
         return 64;
 }
 
@@ -72,6 +80,9 @@ builder.Services.AddSingleton(config);
 builder.Services.AddSingleton(new AgentClient(config));
 builder.Services.AddSingleton<JobRunner>();
 builder.Services.AddSingleton<Updater>();
+builder.Services.AddSingleton<AgentSignal>();
+builder.Services.AddSingleton<UiBroker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<UiBroker>());
 builder.Services.AddHostedService<AgentWorker>();
 await builder.Build().RunAsync();
 return 0;

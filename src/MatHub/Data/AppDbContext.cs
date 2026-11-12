@@ -47,6 +47,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
 
     public DbSet<RolloutTask> RolloutTasks => Set<RolloutTask>();
 
+    public DbSet<Secret> Secrets => Set<Secret>();
+
+    public DbSet<Sequence> Sequences => Set<Sequence>();
+
+    public DbSet<KioskItem> KioskItems => Set<KioskItem>();
+
     public DbSet<Activity> Activities => Set<Activity>();
 
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
@@ -213,6 +219,39 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             e.HasIndex(x => x.CreateDate);
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Origin).HasMaxLength(20);
+            e.Property(x => x.Steps).HasColumnType("jsonb");
+        });
+
+        b.Entity<Secret>(e =>
+        {
+            e.ToTable("Secret");
+            e.Property(x => x.Name).HasMaxLength(60);
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.UserName).HasMaxLength(200);
+            e.Property(x => x.ValueProtected).HasMaxLength(4000);
+            e.HasIndex(x => x.Name).IsUnique().HasFilter("\"UpdateState\" <> 0");
+            e.HasQueryFilter(x => x.UpdateState != SoftEntity.Deleted);
+        });
+
+        b.Entity<Sequence>(e =>
+        {
+            e.ToTable("Sequence");
+            e.Property(x => x.Name).HasMaxLength(120);
+            e.Property(x => x.Description).HasMaxLength(1000);
+            e.Property(x => x.Category).HasMaxLength(60);
+            e.Property(x => x.Steps).HasColumnType("jsonb");
+            e.HasQueryFilter(x => x.UpdateState != SoftEntity.Deleted);
+        });
+
+        b.Entity<KioskItem>(e =>
+        {
+            e.ToTable("KioskItem");
+            e.Property(x => x.Name).HasMaxLength(120);
+            e.Property(x => x.Description).HasMaxLength(1000);
+            e.Property(x => x.Category).HasMaxLength(60);
+            e.Property(x => x.Icon).HasMaxLength(40);
+            e.Property(x => x.Confirm).HasMaxLength(500);
+            e.HasQueryFilter(x => x.UpdateState != SoftEntity.Deleted);
         });
 
         b.Entity<JobRun>(e =>

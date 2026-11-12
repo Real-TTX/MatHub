@@ -21,7 +21,7 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
         {
             return job.Kind switch
             {
-                JobKinds.Script => await ScriptAsync(job.Language, job.Script ?? string.Empty, timeout, ct),
+                JobKinds.Script => Mask(await ScriptAsync(job.Language, job.Script ?? string.Empty, timeout, ct, job.Secrets), job.Secrets),
                 JobKinds.WingetInstall => await WingetAsync(["install", "--id", Need(job.Arguments), "--exact", "--silent", "--scope", "machine", "--accept-package-agreements"], timeout, ct, retryWithoutScope: true),
                 JobKinds.WingetUpgrade => string.IsNullOrWhiteSpace(job.Arguments)
                     ? await WingetAsync(["upgrade", "--all", "--silent", "--accept-package-agreements"], timeout, ct)
@@ -47,12 +47,46 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
 
     private static RunResult Result(ProcessResult r, int[] ok) => new() { Succeeded = r.ExitCode is { } code && ok.Contains(code), ExitCode = r.ExitCode, Output = r.Output };
 
-    private static async Task<RunResult> ScriptAsync(string language, string script, TimeSpan timeout, CancellationToken ct)
+    /// <summary>The values of the secrets never go back to the server: every place of one in the output becomes ***.</summary>
+    private static RunResult Mask(RunResult result, IReadOnlyDictionary<string, string>? secrets)
+    {
+        if (secrets is null || result.Output is null)
+        {
+            return result;
+        }
+
+        var output = result.Output;
+        foreach (var (name, value) in secrets.OrderByDescending(s => s.Value.Length))
+        {
+            if (!name.EndsWith("_USER", StringComparison.Ordinal) && value.Length >= 3)
+            {
+                output = output.Replace(value, "***", StringComparison.Ordinal);
+            }
+        }
+
+        return result with { Output = output };
+    }
+
+    private static async Task<RunResult> ScriptAsync(string language, string script, TimeSpan timeout, CancellationToken ct, IReadOnlyDictionary<string, string>? secrets = null)
     {
         var dir = Path.Combine(AgentInfo.DataDirectory, "run");
         Directory.CreateDirectory(dir);
         var name = Path.Combine(dir, Guid.NewGuid().ToString("N"));
-        var environment = new Dictionary<string, string> { ["MATHUB_WINGET"] = Winget.Locate() ?? string.Empty, ["MATHUB_AGENT"] = AgentInfo.Version };
+
+        // what a script finds: winget, the agent (its dialogs: mathub-agent ask), and the secrets it names (only in its own environment)
+        var environment = new Dictionary<string, string>
+        {
+            ["MATHUB_WINGET"] = Winget.Locate() ?? string.Empty,
+            ["MATHUB_AGENT"] = AgentInfo.Version,
+            ["MATHUB_AGENT_EXE"] = Environment.ProcessPath ?? string.Empty,
+        };
+        foreach (var (key, value) in secrets ?? new Dictionary<string, string>())
+        {
+            if (key.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c) || c == '_'))
+            {
+                environment["MATHUB_SECRET_" + key] = value;
+            }
+        }
         try
         {
             switch (language)

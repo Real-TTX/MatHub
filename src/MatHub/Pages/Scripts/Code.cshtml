@@ -35,32 +35,34 @@
             break;
 
         case ScriptEditor.Blocks:
-            <div class="mh-editor" data-block-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
+            <div class="mh-editor" data-block-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-secrets="@Model.SecretsJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
                 <input type="hidden" name="ModelJson" value="@Model.ModelJson" data-model />
                 <div class="mh-editor__main">
                     <ol class="mh-blocks" data-blocks aria-label="@L["Blocks.List"]"></ol>
                     <div class="mh-blocks__add" data-add-block hidden="@(!Model.CanEdit)"></div>
                 </div>
                 <aside class="mh-editor__side">
+                    <p class="mh-vars-hint">@Ui.Icon("tag")<span>@L["Blocks.Variables.Hint"]</span></p>
                     <div class="mat-card">
                         <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("code")@L["Scripts.Preview"]</h2></div>
-                        <div class="mat-card__body"><pre class="mat-code mh-preview" data-preview><code>@s.Content</code></pre><ul class="mh-preview__errors" data-preview-errors></ul></div>
+                        <div class="mat-card__body"><pre class="mat-code mh-preview" data-preview><code>@MatHub.Services.Scripts.ScriptBlocks.WithoutPrelude(s.Content)</code></pre><ul class="mh-preview__errors" data-preview-errors></ul></div>
                     </div>
                 </aside>
             </div>
             break;
 
         default:
-            <div class="mh-editor mh-editor--flow" data-flow-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
+            <div class="mh-editor mh-editor--flow" data-flow-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-secrets="@Model.SecretsJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
                 <input type="hidden" name="ModelJson" value="@Model.ModelJson" data-model />
                 <div class="mh-flow">
                     <div class="mh-flow__palette" data-palette aria-label="@L["Flow.Palette"]"></div>
                     <div class="mh-flow__canvas" data-canvas tabindex="0" aria-label="@L["Flow.Canvas"]"></div>
                     <div class="mh-flow__props" data-props aria-live="polite"></div>
                 </div>
+                <p class="mh-vars-hint">@Ui.Icon("tag")<span>@L["Blocks.Variables.Hint"]</span></p>
                 <details class="mat-card mh-flow__preview">
                     <summary class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("code")@L["Scripts.Preview"]</h2></summary>
-                    <div class="mat-card__body"><pre class="mat-code mh-preview" data-preview><code>@s.Content</code></pre><ul class="mh-preview__errors" data-preview-errors></ul></div>
+                    <div class="mat-card__body"><pre class="mat-code mh-preview" data-preview><code>@MatHub.Services.Scripts.ScriptBlocks.WithoutPrelude(s.Content)</code></pre><ul class="mh-preview__errors" data-preview-errors></ul></div>
                 </details>
             </div>
             break;
@@ -79,6 +81,45 @@
     </div>
 </form>
 
+@if (Model.CanTest)
+{
+    <section class="mat-card mh-test" aria-labelledby="script-test" data-script-test data-script="@s.Id" data-editor="@s.Editor.ToString().ToLowerInvariant()" data-language="@language">
+        <div class="mat-card__head">
+            <h2 class="mat-card__title" id="script-test">@Ui.Icon("play")@L["Scripts.Test.Title"]</h2>
+            <span class="mh-head-end mh-muted mh-test__hint">@L["Scripts.Test.Hint"]</span>
+        </div>
+        <div class="mat-card__body">
+            <div class="mh-test__bar">
+                <div class="mat-field mh-test__client">
+                    <label class="mat-label" for="test-client">@L["Scripts.Test.Client"]</label>
+                    <select class="mat-select" id="test-client" data-test-client>
+                        @if (Model.TestClientId is null)
+                        {
+                            <option value="">@L["Scripts.Test.ChooseClient"]</option>
+                        }
+                        @foreach (var c in Model.TestClients)
+                        {
+                            <option value="@c.Id" selected="@(c.Id == Model.TestClientId)">@c.Name · @L[c.Online ? "Clients.State.Online" : "Clients.State.Offline"]</option>
+                        }
+                    </select>
+                </div>
+                <label class="mat-switch mh-test__dry" title="@L["Scripts.Test.Dry.Hint"]">
+                    <input type="checkbox" data-test-dry checked />
+                    <span class="mat-switch__track"></span><span>@L["Scripts.Test.Dry"]</span>
+                </label>
+                <button type="button" class="mat-btn mat-btn--primary" data-test-run>@Ui.Icon("play")<span data-test-label data-dry="@L["Scripts.Test.RunDry"]" data-real="@L["Scripts.Test.Run"]">@L["Scripts.Test.RunDry"]</span></button>
+            </div>
+            <p class="mat-hint mh-test__explain" data-test-explain data-dry="@L[s.Editor == ScriptEditor.Code ? "Scripts.Test.Dry.Code" : "Scripts.Test.Dry.Visual"]" data-real="@L["Scripts.Test.Real"]">@L[s.Editor == ScriptEditor.Code ? "Scripts.Test.Dry.Code" : "Scripts.Test.Dry.Visual"]</p>
+            <div class="mh-test__result" data-test-result hidden>
+                <div class="mh-test__state"><span class="mat-pill" data-test-state></span><span class="mh-muted" data-test-wait>@L["Scripts.Test.Waiting"]</span><a class="mh-head-end mat-btn mat-btn--ghost mat-btn--sm" data-test-open href="#">@L["Scripts.Test.Open"]</a></div>
+                <pre class="mat-code mh-test__output" data-test-output></pre>
+            </div>
+            <p class="mat-error" data-test-error aria-live="polite"></p>
+        </div>
+    </section>
+}
+
 @section Scripts {
     <script type="module" src="~/js/editors.js" asp-append-version="true"></script>
+    <script type="module" src="~/js/scripttest.js" asp-append-version="true"></script>
 }

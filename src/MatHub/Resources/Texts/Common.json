@@ -40,5 +40,9 @@
   "Common.Dialog.Notice": { "en": "Notice", "de": "Hinweis" },
   "Common.Dialog.Input": { "en": "Input", "de": "Eingabe" },
   "Common.Validation.Required": { "en": "Please fill in this field.", "de": "Bitte dieses Feld ausfüllen." },
-  "Common.Validation.Code": { "en": "The code has six digits.", "de": "Der Code hat sechs Ziffern." }
+  "Common.Validation.Code": { "en": "The code has six digits.", "de": "Der Code hat sechs Ziffern." },
+  "Common.General": { "en": "General", "de": "Allgemein" },
+  "Common.State": { "en": "State", "de": "Zustand" },
+  "Common.Yes": { "en": "yes", "de": "ja" },
+  "Common.No": { "en": "no", "de": "nein" }
 }

@@ -1,0 +1,88 @@
+@page "/kiosk/edit"
+@model MatHub.Pages.Kiosk.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Kiosk.New"].Value : Model.Name;
+    ViewData["PageSub"] = L["Kiosk.Edit.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Kiosk.Title"].Value, "/kiosk"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+}
+
+<form class="mat-form" method="post" novalidate data-kiosk-form>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-cols">
+        <div class="mat-col-12 mat-col-lg-7">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("store")@L["Kiosk.Offer.What"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="Name" label="@L["Kiosk.Field.Name"]" required value="@Model.Name" maxlength="120" msg-required="@L["Common.NameRequired"]" placeholder="@L["Kiosk.Field.Name.Placeholder"]" />
+                    <mh-field name="Description" kind="textarea" label="@L["Kiosk.Field.Description"]" value="@Model.Description" maxlength="1000" rows="2" optional placeholder="@L["Kiosk.Field.Description.Placeholder"]" />
+                    <mh-field name="Kind" kind="radios" label="@L["Kiosk.Field.Kind"]" value="@Model.Kind" options="Model.Kinds" />
+                    <mh-field name="ScriptId" kind="select" label="@L["Scripts.One"]" value="@Model.ScriptId" options="Model.ScriptChoices" picker="search" show-if="Kind" show-value="Script" required placeholder="@L["Jobs.ChooseScript"]" />
+                    <mh-field name="PackageId" kind="select" label="@L["Packages.One"]" value="@Model.PackageId" options="Model.PackageChoices" picker="search" show-if="Kind" show-value="Package" required placeholder="@L["Jobs.ChoosePackage"]" hint="@L["Kiosk.Field.Package.Hint"]" />
+                    <mh-field name="SequenceId" kind="select" label="@L["Sequences.One"]" value="@Model.SequenceId" options="Model.SequenceChoices" picker="search" show-if="Kind" show-value="Sequence" required placeholder="@L["Kiosk.ChooseSequence"]" />
+                    <mh-field name="Confirm" label="@L["Kiosk.Field.Confirm"]" value="@Model.Confirm" maxlength="500" optional placeholder="@L["Kiosk.Field.Confirm.Placeholder"]" hint="@L["Kiosk.Field.Confirm.Hint"]" />
+                </div>
+            </div>
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("monitor")@L["Kiosk.Offer.Where"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="Groups" kind="select" label="@L["Groups.Title"]" value="@Model.Groups" options="Model.GroupChoices" picker="multiple search" optional hint="@L["Kiosk.Field.Groups.Hint"]" />
+                    <div class="mat-cols">
+                        <div class="mat-col-12 mat-col-md-6"><mh-field name="Category" label="@L["Kiosk.Field.Category"]" value="@Model.Category" maxlength="60" optional placeholder="@L["Kiosk.Field.Category.Placeholder"]" /></div>
+                        <div class="mat-col-12 mat-col-md-6"><mh-field name="SortOrder" kind="number" label="@L["Kiosk.Field.SortOrder"]" value="@Model.SortOrder" min="0" max="9999" hint="@L["Kiosk.Field.SortOrder.Hint"]" /></div>
+                    </div>
+                    <mh-field name="IsActive" kind="switch" label="@L["Kiosk.Field.Active"]" value="@Model.IsActive" hint="@L["Kiosk.Field.Active.Hint"]" />
+                </div>
+            </div>
+        </div>
+        <div class="mat-col-12 mat-col-lg-5">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("palette")@L["Kiosk.Field.Icon"]</h2></div>
+                <div class="mat-card__body">
+                    <fieldset class="mh-icon-pick">
+                        <legend class="mat-sr-only">@L["Kiosk.Field.Icon"]</legend>
+                        @foreach (var icon in MatHub.Services.Kiosk.KioskService.Icons)
+                        {
+                            <label class="mh-icon-pick__item" title="@icon">
+                                <input type="radio" name="Icon" value="@icon" checked="@(icon == Model.Icon)" />
+                                <span class="mh-icon-pick__tile">@Ui.Icon(icon)</span>
+                                <span class="mat-sr-only">@icon</span>
+                            </label>
+                        }
+                    </fieldset>
+                </div>
+            </div>
+            <section class="mat-card" aria-labelledby="kiosk-preview">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="kiosk-preview">@Ui.Icon("eye")@L["Kiosk.Preview"]</h2></div>
+                <div class="mat-card__body">
+                    <p class="mat-muted mh-mb">@L["Kiosk.Preview.Hint"]</p>
+                    <div class="mh-kiosk-preview" aria-hidden="true">
+                        <div class="mh-kiosk-preview__bar"><span class="mh-kiosk-preview__brand">@Ui.Icon("mathub")MatHub Kiosk</span><span class="mh-kiosk-preview__cat" data-preview-category>@(string.IsNullOrWhiteSpace(Model.Category) ? L["Kiosk.Preview.Category"].Value : Model.Category)</span></div>
+                        <div class="mh-kiosk-tile">
+                            <span class="mh-kiosk-tile__icon" data-preview-icon>@Ui.Icon(Model.Icon)</span>
+                            <span class="mh-kiosk-tile__body">
+                                <strong class="mh-kiosk-tile__name" data-preview-name>@(string.IsNullOrWhiteSpace(Model.Name) ? L["Kiosk.Field.Name.Placeholder"].Value : Model.Name)</strong>
+                                <span class="mh-kiosk-tile__text" data-preview-text>@(string.IsNullOrWhiteSpace(Model.Description) ? L["Kiosk.Field.Description.Placeholder"].Value : Model.Description)</span>
+                            </span>
+                            <span class="mh-kiosk-tile__start">@Ui.Icon("play")@L["Kiosk.Start"]</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section class="mat-card" aria-labelledby="kiosk-how">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="kiosk-how">@Ui.Icon("info")@L["Kiosk.How"]</h2></div>
+                <div class="mat-card__body">
+                    <ul class="mh-checklist">
+                        <li>@Ui.Icon("monitor")<span>@L["Kiosk.How.Open"]</span></li>
+                        <li>@Ui.Icon("refresh")<span>@L["Kiosk.How.Live"]</span></li>
+                        <li>@Ui.Icon("shield")<span>@L["Kiosk.How.Rights"]</span></li>
+                    </ul>
+                </div>
+            </section>
+        </div>
+    </div>
+    <mh-buttons save="@L["Common.Save"]" back="/kiosk" delete-handler="@(Model.IsNew ? null : "Delete")" delete-label="@L["Kiosk.Delete"]" delete-confirm="@L["Kiosk.DeleteConfirm", Model.Name]" />
+</form>
+
+@section Scripts {
+    <script src="~/js/kiosk.js" asp-append-version="true"></script>
+}

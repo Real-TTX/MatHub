@@ -1,0 +1,47 @@
+@page "/sequences"
+@model MatHub.Pages.Sequences.IndexModel
+@{
+    ViewData["Title"] = L["Sequences.Title"].Value;
+    ViewData["PageSub"] = L["Sequences.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Sequences.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("route", L[first ? "Sequences.Empty" : "Sequences.NoMatch"].Value, L[first ? "Sequences.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanEdit, "/sequences/edit", L["Sequences.New"].Value, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Sequences.Title"]">
+            <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col" class="mat-num">@L["Sequences.Steps"]</th><th scope="col" class="mat-hide-sm">@L["Scripts.Category"]</th><th scope="col" class="mat-hide-md">@L["Common.Updated"]</th><th scope="col" class="mat-num mat-hide-sm">@L["Scripts.Runs"]</th>@if (Model.CanRun) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+            <tbody>
+                @foreach (var s in Model.Items)
+                {
+                    <tr>
+                        <td data-label="@L["Common.Name"]" class="mat-table__primary">
+                            <a href="/sequences/edit?id=@s.Id"><span class="mh-name">@Ui.Icon("route")@s.Name</span></a>
+                            @if (s.Description is not null) { <span class="mh-subline">@s.Description</span> }
+                        </td>
+                        <td data-label="@L["Sequences.Steps"]" class="mat-num">@s.Steps</td>
+                        <td data-label="@L["Scripts.Category"]" class="mat-hide-sm">@if (s.Category is not null) { <span class="mat-tag">@s.Category</span> }</td>
+                        <td data-label="@L["Common.Updated"]" class="mat-hide-md mh-nowrap">@Ui.When(s.Updated, Model.Zone)</td>
+                        <td data-label="@L["Scripts.Runs"]" class="mat-num mat-hide-sm">@s.Runs</td>
+                        @if (Model.CanRun)
+                        {
+                            <td class="mat-table__cell-actions"><div class="mat-table__actions"><a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="/jobs/new?sequence=@s.Id" aria-label="@L["Scripts.RunNamed", s.Name]" data-tip="@L["Sequences.Run"]">@Ui.Icon("play")</a></div></td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+    @if (Model.CanEdit)
+    {
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" href="/sequences/edit">@Ui.Icon("plus")<span>@L["Sequences.New"]</span></a>
+        </div>
+    }
+</div>

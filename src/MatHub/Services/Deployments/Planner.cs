@@ -20,11 +20,19 @@ public static class Planner
 {
     private static readonly TimeSpan RetryAfter = TimeSpan.FromHours(6);
 
+    /// <summary>
+    /// The language of the jobs MatHub makes by itself (nobody is signed in there): that of the first administrator. The caller sets it
+    /// (<c>CultureInfo.CurrentUICulture = …</c>): a culture set inside an async method is gone again when it returns.
+    /// </summary>
+    public static async Task<System.Globalization.CultureInfo> AdminCultureAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        var language = await db.Users.AsNoTracking().Where(u => u.Role == UserRole.Admin).OrderBy(u => u.Id).Select(u => u.Language).FirstOrDefaultAsync(ct);
+        return Localization.Languages.UiCulture(string.IsNullOrEmpty(language) ? Localization.Languages.Default : language);
+    }
+
     public static async Task<PlanResult> RunOnceAsync(AppDbContext db, CancellationToken ct = default)
     {
-        // the names of the jobs it makes are in the language of the first administrator (nobody is signed in here)
-        var language = await db.Users.AsNoTracking().Where(u => u.Role == UserRole.Admin).OrderBy(u => u.Id).Select(u => u.Language).FirstOrDefaultAsync(ct);
-        System.Globalization.CultureInfo.CurrentUICulture = Localization.Languages.UiCulture(string.IsNullOrEmpty(language) ? Localization.Languages.Default : language);
+        System.Globalization.CultureInfo.CurrentUICulture = await AdminCultureAsync(db, ct);
         await GroupService.RefreshAllAsync(db, ct);
         var assignments = await db.PackageAssignments.AsNoTracking().Include(a => a.Package).Where(a => a.IsActive && a.Package!.UpdateState != SoftEntity.Deleted).ToListAsync(ct);
         var jobs = 0;

@@ -62,6 +62,40 @@ public sealed class AgentClient : IDisposable
         Check(response);
     }
 
+    /// <summary>The offers of the kiosk for this computer, as the server has them now.</summary>
+    public async Task<KioskOffer> KioskAsync(CancellationToken ct)
+    {
+        using var response = await _http.GetAsync("api/agent/v1/kiosk", ct);
+        Check(response);
+        return await response.Content.ReadFromJsonAsync<KioskOffer>(Json, ct) ?? new KioskOffer();
+    }
+
+    /// <summary>Starts an offer of the kiosk on this computer; answers the run (0: not offered here any more).</summary>
+    public async Task<long> StartKioskAsync(long id, string? user, CancellationToken ct)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/agent/v1/kiosk/{id}/start", new KioskStart { User = user }, Json, ct);
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Conflict)
+        {
+            return 0;
+        }
+
+        Check(response);
+        return (await response.Content.ReadFromJsonAsync<KioskStarted>(Json, ct))?.RunId ?? 0;
+    }
+
+    /// <summary>The state of a run of this computer (null: not known).</summary>
+    public async Task<RunState?> RunStateAsync(long runId, CancellationToken ct)
+    {
+        using var response = await _http.GetAsync($"api/agent/v1/runs/{runId}", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        Check(response);
+        return await response.Content.ReadFromJsonAsync<RunState>(Json, ct);
+    }
+
     /// <summary>Downloads a file of the server (an installer, the next agent) to <paramref name="target"/>.</summary>
     public async Task DownloadAsync(string url, string target, CancellationToken ct)
     {

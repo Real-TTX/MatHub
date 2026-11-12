@@ -5,6 +5,7 @@ using MatHub.Services.Agent;
 using MatHub.Services.Clients;
 using MatHub.Services.Deployments;
 using MatHub.Services.Jobs;
+using MatHub.Services.Kiosk;
 using MatHub.Services.Packages;
 using MatHub.Services.Scripts;
 using Microsoft.EntityFrameworkCore;
@@ -132,6 +133,147 @@ public sealed class HubTests
 
         // a dynamic group without a condition is refused
         Assert.False((await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("Empty", null, null, GroupKind.Dynamic, [new GroupCondition(GroupRuleField.Name, GroupRuleOperator.Contains, " ")]))).Ok);
+    }
+
+    private static async Task<Script> ScriptAsync(TestDatabase t, string name, string code)
+    {
+        var script = (await ScriptService.SaveAsync(t.Db, Admin, null, new ScriptForm(name, null, null, ScriptLanguage.PowerShell, ScriptEditor.Code, 60))).Value!;
+        await ScriptService.SaveContentAsync(t.Db, Admin, script.Id, code, null);
+        return script;
+    }
+
+    [DbFact]
+    public async Task A_sequence_hands_out_its_steps_one_by_one_and_waits_for_the_restart()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-SEQ", "m-seq");
+        var first = await ScriptAsync(t, "Prepare", "Write-Output 'one'");
+        var last = await ScriptAsync(t, "Finish", "Write-Output 'three'");
+        var sequence = (await SequenceService.SaveAsync(t.Db, Admin, null, new SequenceForm("Set-up", null, null,
+        [
+            new SequenceStep { Kind = SequenceStepKind.Script, ScriptId = first.Id },
+            new SequenceStep { Kind = SequenceStepKind.Restart },
+            new SequenceStep { Kind = SequenceStepKind.Script, ScriptId = last.Id },
+        ]))).Value!;
+        var job = await JobService.CreateAsync(t.Db, Admin, new JobRequest(JobKind.Sequence, null, null, null, [client.Id], [], SequenceId: sequence.Id));
+        Assert.True(job.Ok, job.Error);
+
+        // one step at a time
+        var step1 = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5));
+        Assert.Equal("Write-Output 'one'", step1.Script);
+        Assert.Empty(await JobService.TakeAsync(t.Db, client.Id, 5));
+        Assert.True(await JobService.CompleteAsync(t.Db, client.Id, step1.RunId, new RunResult { Succeeded = true, ExitCode = 0, Output = "one" }));
+
+        var step2 = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5));
+        Assert.Equal(JobKinds.Restart, step2.Kind);
+        Assert.Equal(step1.RunId, step2.RunId);
+        Assert.True(await JobService.CompleteAsync(t.Db, client.Id, step2.RunId, new RunResult { Succeeded = true, ExitCode = 0 }));
+
+        // the computer has not started again yet: nothing to do; after its new boot the last step comes
+        Assert.Empty(await JobService.TakeAsync(t.Db, client.Id, 5));
+        await t.Db.Clients.Where(c => c.Id == client.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.BootDate, DateTime.UtcNow.AddSeconds(5)));
+        var step3 = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5));
+        Assert.Equal("Write-Output 'three'", step3.Script);
+        Assert.Contains("Finish", step3.Title);
+        Assert.Equal(RunStates.Running, (await JobService.StateAsync(t.Db, client.Id, step3.RunId))!.Status);
+        Assert.Equal(3, (await JobService.StateAsync(t.Db, client.Id, step3.RunId))!.Step);
+        Assert.True(await JobService.CompleteAsync(t.Db, client.Id, step3.RunId, new RunResult { Succeeded = true, ExitCode = 0, Output = "three" }));
+
+        var run = await t.Db.JobRuns.AsNoTracking().SingleAsync();
+        Assert.Equal(RunStatus.Succeeded, run.Status);
+        Assert.Contains("=== 1/3 Prepare", run.Output);
+        Assert.Contains("=== 3/3 Finish", run.Output);
+
+        // a failed step ends the run, unless it may fail
+        var again = await JobService.CreateAsync(t.Db, Admin, new JobRequest(JobKind.Sequence, null, null, null, [client.Id], [], SequenceId: sequence.Id));
+        var failed = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5));
+        await JobService.CompleteAsync(t.Db, client.Id, failed.RunId, new RunResult { Succeeded = false, ExitCode = 1, Output = "boom" });
+        Assert.Equal(RunStatus.Failed, (await t.Db.JobRuns.AsNoTracking().SingleAsync(r => r.JobId == again.Value!.Id)).Status);
+    }
+
+    [DbFact]
+    public async Task The_kiosk_offers_to_its_groups_and_starts_on_the_computer_that_asks()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var office = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("Office", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "OF-"))).Value!;
+        var key = await KeyAsync(t);
+        var inOffice = await EnrollAsync(t, key, "OF-1", "m-of-k");
+        var elsewhere = await EnrollAsync(t, key, "LAB-1", "m-lab-k");
+        var printers = await ScriptAsync(t, "Printers", "Write-Output 'printers'");
+        var item = await KioskService.SaveAsync(t.Db, Admin, null, new KioskForm("Connect the printers", "Of your floor", "Office", "printer", KioskKind.Script, printers.Id, null, null, [office.Id], null, true, 10));
+        Assert.True(item.Ok, item.Error);
+        var hidden = await KioskService.SaveAsync(t.Db, Admin, null, new KioskForm("Hidden", null, null, "box", KioskKind.Script, printers.Id, null, null, [], null, false, 20));
+        Assert.True(hidden.Ok);
+
+        Assert.Equal("Connect the printers", Assert.Single((await KioskService.OfferAsync(t.Db, inOffice)).Items).Name);
+        Assert.Empty((await KioskService.OfferAsync(t.Db, elsewhere)).Items);
+        Assert.True((await KioskService.StartAsync(t.Db, elsewhere, item.Value!.Id, "LAB\\someone")).NotAllowed);
+
+        var started = await KioskService.StartAsync(t.Db, inOffice, item.Value.Id, "CONTOSO\\anna");
+        Assert.True(started.Ok, started.Error);
+        Assert.Equal(started.Value, (await KioskService.StartAsync(t.Db, inOffice, item.Value.Id, "CONTOSO\\anna")).Value);
+        var job = await t.Db.Jobs.AsNoTracking().SingleAsync();
+        Assert.Equal("kiosk", job.Origin);
+        Assert.Equal(item.Value.Id, job.KioskItemId);
+        Assert.Equal(RunStates.Queued, (await JobService.StateAsync(t.Db, inOffice.Id, started.Value))!.Status);
+        Assert.Null(await JobService.StateAsync(t.Db, elsewhere.Id, started.Value));
+        Assert.Equal(RunStates.Queued, Assert.Single((await KioskService.OfferAsync(t.Db, inOffice)).Items).Last!.Status);
+
+        // who may not run scripts cannot offer one either
+        var editor = new Actor(5, false, new HashSet<string> { Permission.KioskManage, Permission.ScriptsView }, true, []);
+        Assert.False((await KioskService.SaveAsync(t.Db, editor, null, new KioskForm("X", null, null, "box", KioskKind.Script, printers.Id, null, null, [], null, true, 0))).Ok);
+    }
+
+    [DbFact]
+    public async Task A_secret_reaches_only_the_run_of_a_script_that_names_it()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var protection = new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider();
+        var saved = await SecretService.SaveAsync(t.Db, Admin, protection, null, new SecretForm("domain join", "The account of the joins", "CONTOSO\\svc-join", "S3cret!"));
+        Assert.True(saved.Ok, saved.Error);
+        Assert.Equal("DOMAIN_JOIN", saved.Value!.Name);
+        Assert.DoesNotContain("S3cret", saved.Value.ValueProtected);
+        Assert.False((await SecretService.SaveAsync(t.Db, Admin, protection, null, new SecretForm("DOMAIN_JOIN", null, null, "x"))).Ok);
+
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-SEC", "m-sec");
+        var join = await ScriptAsync(t, "Join", "$c = New-MatHubCredential 'DOMAIN_JOIN' ''\nAdd-Computer -DomainName contoso.local -Credential $c");
+        var plain = await ScriptAsync(t, "Plain", "Write-Output 'no secret'");
+        await JobService.CreateAsync(t.Db, Admin, new JobRequest(JobKind.Script, join.Id, null, null, [client.Id], []));
+        await JobService.CreateAsync(t.Db, Admin, new JobRequest(JobKind.Script, plain.Id, null, null, [client.Id], []));
+        var taken = await JobService.TakeAsync(t.Db, client.Id, 5, protection: protection);
+        Assert.Equal(2, taken.Count);
+        var secrets = taken.Single(j => j.Script!.Contains("Add-Computer", StringComparison.Ordinal)).Secrets!;
+        Assert.Equal("S3cret!", secrets["DOMAIN_JOIN"]);
+        Assert.Equal("CONTOSO\\svc-join", secrets["DOMAIN_JOIN_USER"]);
+        Assert.Null(taken.Single(j => j.Script!.Contains("no secret", StringComparison.Ordinal)).Secrets);
+
+        // the job keeps no value
+        Assert.DoesNotContain(await t.Db.Jobs.AsNoTracking().Select(j => j.Payload).ToListAsync(), p => p.Contains("S3cret", StringComparison.Ordinal));
+        Assert.Equal(1, Assert.Single((await SecretService.ListAsync(t.Db, Admin, null))!).Scripts);
+    }
+
+    [DbFact]
+    public async Task A_test_from_the_editor_runs_what_is_in_it_on_one_computer()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-TEST", "m-test");
+        var script = await ScriptAsync(t, "Saved", "Write-Output 'saved'");
+        var started = await ScriptTester.StartAsync(t.Db, Admin, script.Id, new ScriptTest(client.Id, false, "Write-Output 'not saved yet'", null));
+        Assert.True(started.Ok, started.Error);
+        var job = await t.Db.Jobs.AsNoTracking().SingleAsync();
+        Assert.Equal("test", job.Origin);
+        Assert.Equal("Write-Output 'not saved yet'", Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5)).Script);
+        Assert.Equal("Write-Output 'saved'", (await t.Db.Scripts.AsNoTracking().SingleAsync()).Content);
+
+        var trial = await ScriptTester.StartAsync(t.Db, Admin, script.Id, new ScriptTest(client.Id, true, null, null));
+        Assert.True(trial.Ok);
+        Assert.Contains("ParseInput", Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5)).Script);
+        Assert.Equal(RunStatus.Running, (await ScriptTester.StateAsync(t.Db, Admin, trial.Value!.RunId))!.Status);
+
+        // running what is not saved needs the right to edit scripts
+        var runner = new Actor(7, false, new HashSet<string> { Permission.ScriptsView, Permission.ScriptsRun, Permission.JobsView }, true, []);
+        Assert.True((await ScriptTester.StartAsync(t.Db, runner, script.Id, new ScriptTest(client.Id, true, "x", null))).NotAllowed);
+        Assert.True((await ScriptTester.StartAsync(t.Db, runner, script.Id, new ScriptTest(client.Id, true, null, null))).Ok);
     }
 
     [DbFact]

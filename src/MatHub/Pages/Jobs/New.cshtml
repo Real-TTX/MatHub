@@ -15,6 +15,7 @@
             <mh-field name="Kind" kind="select" label="@L["Jobs.Kind"]" value="@Model.Kind" options="Model.Kinds" />
             <mh-field name="ScriptId" kind="select" label="@L["Scripts.One"]" value="@Model.ScriptId" options="Model.ScriptChoices" picker="search" show-if="Kind" show-value="Script" required placeholder="@L["Jobs.ChooseScript"]" />
             <mh-field name="PackageId" kind="select" label="@L["Packages.One"]" value="@Model.PackageId" options="Model.PackageChoices" picker="search" show-if="Kind" show-value="PackageInstall,PackageUninstall" required placeholder="@L["Jobs.ChoosePackage"]" />
+            <mh-field name="SequenceId" kind="select" label="@L["Sequences.One"]" value="@Model.SequenceId" options="Model.SequenceChoices" picker="search" show-if="Kind" show-value="Sequence" required placeholder="@L["Kiosk.ChooseSequence"]" />
             <mh-field name="WingetId" label="@L["Software.WingetId"]" value="@Model.WingetId" show-if="Kind" show-value="WingetUpgrade" optional mono placeholder="Mozilla.Firefox" hint="@L["Jobs.WingetId.Hint"]" />
         </div>
     </div>

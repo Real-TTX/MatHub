@@ -23,7 +23,7 @@
             {
                 <tr>
                     <td data-label="@L["Clients.One"]" class="mat-table__primary"><a href="/jobs/runs/@r.Id"><span class="mh-name">@Ui.Icon("monitor")@r.ClientName</span></a></td>
-                    <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.Tone(r.Status)">@L[JobUi.StatusKey(r.Status)]</span></td>
+                    <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.Tone(r.Status)">@L[JobUi.StatusKey(r.Status)]</span>@if (Model.Detail.Steps.Count > 0 && r.Status is RunStatus.Queued or RunStatus.Running) { <span class="mh-muted"> · @L["Jobs.StepOf", Math.Min(r.Step + 1, Model.Detail.Steps.Count), Model.Detail.Steps.Count]</span> }</td>
                     <td data-label="@L["Runs.Started"]" class="mat-hide-sm mh-nowrap">@Ui.When(r.Started, Model.Zone)</td>
                     <td data-label="@L["Runs.Finished"]" class="mat-hide-md mh-nowrap">@Ui.When(r.Finished, Model.Zone)</td>
                     <td data-label="@L["Runs.ExitCode"]" class="mat-num mat-mono mat-hide-sm">@r.ExitCode</td>
@@ -36,6 +36,20 @@
 
 <div class="mat-cols mh-mt">
     <div class="mat-col-12 mat-col-lg-8">
+        @if (Model.Detail.Steps.Count > 0)
+        {
+            <section class="mat-card" aria-labelledby="job-steps">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="job-steps">@Ui.Icon("route")@L["Sequences.Steps"]</h2>@if (job.SequenceId is { } sid) { <a class="mh-head-end mat-btn mat-btn--ghost mat-btn--sm" href="/sequences/edit?id=@sid">@L["Jobs.OpenSequence"]</a> }</div>
+                <div class="mat-card__body">
+                    <ol class="mh-run-steps">
+                        @foreach (var step in Model.Detail.Steps)
+                        {
+                            <li>@Ui.Icon(MatHub.Services.Jobs.SequenceService.Icon(step.Kind))<span>@step.Name</span>@if (step.ContinueOnError) { <span class="mh-muted">@L["Sequences.ContinueOnError"]</span> }</li>
+                        }
+                    </ol>
+                </div>
+            </section>
+        }
         @if (Model.Detail.ScriptText is { Length: > 0 } text)
         {
             <details class="mat-card">

@@ -34,6 +34,8 @@ public sealed class EditModel(AppDbContext db) : AppPageModel
 
     public bool CanRun => Me.Can(Permission.ScriptsRun);
 
+    public bool CanKiosk => Me.Can(Permission.KioskManage) && Me.Can(Permission.ScriptsRun);
+
     public List<Choice> Editors { get; } = Enum.GetValues<ScriptEditor>().Select(e => new Choice(e.ToString(), Text.T("Scripts.Editor." + e), Text.T("Scripts.Editor." + e + ".Hint"))).ToList();
 
     public List<Choice> Languages { get; } = Enum.GetValues<ScriptLanguage>().Select(l => new Choice(l.ToString(), Text.T("Scripts.Language." + l))).ToList();
@@ -76,6 +78,39 @@ public sealed class EditModel(AppDbContext db) : AppPageModel
 
         Flash(Text.T("Common.SavedNamed", outcome.Value!.Name));
         return LocalRedirect(Id is null ? $"/scripts/{outcome.Value.Id}/code" : $"/scripts/edit?id={outcome.Value.Id}");
+    }
+
+    /// <summary>The templates a new script can begin with.</summary>
+    public IReadOnlyList<ScriptTemplate> Templates => ScriptTemplates.All;
+
+    public async Task<IActionResult> OnPostTemplateAsync(string key)
+    {
+        var outcome = await ScriptService.CreateFromTemplateAsync(db, Me.Actor, key, HttpContext.RequestAborted);
+        if (outcome.NotAllowed)
+        {
+            return NotFound();
+        }
+
+        if (!outcome.Ok)
+        {
+            FlashError(outcome.Error!);
+            return LocalRedirect("/scripts/edit");
+        }
+
+        Flash(Text.T("Common.CreatedNamed", outcome.Value!.Name));
+        return LocalRedirect($"/scripts/{outcome.Value.Id}/code");
+    }
+
+    public async Task<IActionResult> OnPostFlowAsync()
+    {
+        var outcome = await ScriptService.CopyAsFlowAsync(db, Me.Actor, Id ?? 0, HttpContext.RequestAborted);
+        if (outcome.NotAllowed)
+        {
+            return NotFound();
+        }
+
+        Flash(Text.T("Common.CreatedNamed", outcome.Value!.Name));
+        return LocalRedirect($"/scripts/{outcome.Value.Id}/code");
     }
 
     public async Task<IActionResult> OnPostDuplicateAsync()

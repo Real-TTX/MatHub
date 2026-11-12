@@ -99,6 +99,9 @@
   "Activity.Area.group": { "en": "Group", "de": "Gruppe" },
   "Activity.Area.enrollment": { "en": "Enrollment", "de": "Aufnahme" },
   "Activity.Area.script": { "en": "Script", "de": "Skript" },
+  "Activity.Area.secret": { "en": "Secret", "de": "Geheimnis" },
+  "Activity.Area.sequence": { "en": "Sequence", "de": "Ablauf" },
+  "Activity.Area.kiosk": { "en": "Kiosk", "de": "Kiosk" },
   "Activity.Area.package": { "en": "Package", "de": "Paket" },
   "Activity.Area.job": { "en": "Job", "de": "Auftrag" },
   "Activity.Area.rollout": { "en": "Rollout", "de": "Rollout" },
@@ -121,6 +124,7 @@
   "Activity.Action.unassign": { "en": "assignment removed", "de": "Zuweisung entfernt" },
   "Activity.Action.boot": { "en": "booted the installer", "de": "Installation gebootet" },
   "Activity.Action.restart": { "en": "waits again", "de": "wartet erneut" },
+  "Activity.Action.convert": { "en": "copied as a flow", "de": "als Flow kopiert" },
 
   "System.Agents": { "en": "Agents", "de": "Agenten" },
   "System.AgentPollSeconds": { "en": "Agents call every (seconds)", "de": "Agenten melden sich alle (Sekunden)" },
@@ -143,5 +147,7 @@
   "Users.NoRole": { "en": "No role (only the overview)", "de": "Keine Rolle (nur die Übersicht)" },
   "Users.AllPermissions": { "en": "Everything", "de": "Alles" },
   "Users.IdentityPermissions": { "en": "Permissions from MatIdentity", "de": "Berechtigungen aus MatIdentity" },
-  "Users.IdentityPermissions.Hint": { "en": "Granted in MatIdentity on top of the role; they change there.", "de": "In MatIdentity zusätzlich zur Rolle vergeben; sie werden dort geändert." }
+  "Users.IdentityPermissions.Hint": { "en": "Granted in MatIdentity on top of the role; they change there.", "de": "In MatIdentity zusätzlich zur Rolle vergeben; sie werden dort geändert." },
+  "Activity.Action.test": { "en": "tested", "de": "getestet" },
+  "Activity.Action.trial": { "en": "trial run", "de": "im Probelauf getestet" }
 }

@@ -7,7 +7,7 @@ namespace MatHub.Agent;
 /// and report each one, and install a newer (or older) agent when the server offers one. A server that cannot be reached is asked again later; an agent the
 /// server refuses (removed, switched off) waits five minutes between its calls.
 /// </summary>
-public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunner runner, Updater updater, ILogger<AgentWorker> logger) : BackgroundService
+public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunner runner, Updater updater, AgentSignal signal, UiBroker broker, ILogger<AgentWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -18,7 +18,8 @@ public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunne
         {
             try
             {
-                await Task.Delay(wait, stoppingToken);
+                // the time the server asks for, or less: the kiosk started something
+                await signal.WaitAsync(wait, stoppingToken);
                 var poll = await client.PollAsync(new PollRequest
                 {
                     AgentVersion = AgentInfo.Version,
@@ -43,6 +44,7 @@ public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunne
                 {
                     var result = await runner.RunAsync(job, stoppingToken);
                     await client.ReportAsync(job.RunId, result, stoppingToken);
+                    broker.JobEnded();
                 }
 
                 // jobs first: an update restarts the agent

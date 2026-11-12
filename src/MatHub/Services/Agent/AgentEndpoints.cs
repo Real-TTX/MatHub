@@ -2,6 +2,8 @@ using MatHub.Data;
 using MatHub.Protocol;
 using MatHub.Services.Clients;
 using MatHub.Services.Jobs;
+using MatHub.Services.Kiosk;
+using Microsoft.AspNetCore.DataProtection;
 using MatHub.Services.Packages;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,7 +32,7 @@ public static class AgentEndpoints
             return Results.Ok(outcome.Response);
         }).RequireRateLimiting("enroll");
 
-        api.MapPost("/poll", async (PollRequest request, HttpContext http, AppDbContext db, AgentFiles files, CancellationToken ct) =>
+        api.MapPost("/poll", async (PollRequest request, HttpContext http, AppDbContext db, AgentFiles files, IDataProtectionProvider protection, CancellationToken ct) =>
         {
             var (client, denied) = await AuthenticateAsync(http, db, ct);
             if (client is null)
@@ -52,11 +54,14 @@ public static class AgentEndpoints
             }
 
             var inventoryDue = client.InventoryRequested || client.LastInventoryDate is null || client.LastInventoryDate < now.AddHours(-settings.InventoryHours);
-            var jobs = await JobService.TakeAsync(db, client.Id, 5, ct);
+            var jobs = await JobService.TakeAsync(db, client.Id, 5, ct, protection);
             return Results.Ok(new PollResponse
             {
                 Status = "active",
-                PollSeconds = settings.AgentPollSeconds,
+                // somebody tests a script on this computer: it asks every few seconds for a while
+                PollSeconds = await db.Jobs.AnyAsync(j => j.Origin == "test" && j.CreateDate > now.AddMinutes(-15) && j.Runs.Any(r => r.ClientId == client.Id), ct)
+                    ? Math.Min(5, settings.AgentPollSeconds)
+                    : settings.AgentPollSeconds,
                 InventoryDue = inventoryDue,
                 Jobs = jobs,
                 Agent = files.Release(),
@@ -95,7 +100,7 @@ public static class AgentEndpoints
                 return denied!;
             }
 
-            var allowed = await db.JobRuns.AnyAsync(r => r.ClientId == client.Id && r.Job!.PackageId == id && r.Status == RunStatus.Running, ct);
+            var allowed = await JobService.PackageAllowedAsync(db, client.Id, id, ct);
             var package = allowed ? await db.Packages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct) : null;
             if (package?.FileName is null || store.Find(package.Id, package.FileName) is not { } path)
             {
@@ -103,6 +108,41 @@ public static class AgentEndpoints
             }
 
             return Results.File(path, "application/octet-stream", package.FileName, enableRangeProcessing: true);
+        });
+
+        // the kiosk: the offers for this client (asked when the kiosk opens, so always the current ones), a start, the state of what it started
+        api.MapGet("/kiosk", async (HttpContext http, AppDbContext db, CancellationToken ct) =>
+        {
+            var (client, denied) = await AuthenticateAsync(http, db, ct);
+            if (client is null)
+            {
+                return denied!;
+            }
+
+            return client.Status == ClientStatus.Active ? Results.Ok(await KioskService.OfferAsync(db, client, ct)) : Results.Ok(new KioskOffer());
+        });
+
+        api.MapPost("/kiosk/{id:long}/start", async (long id, KioskStart request, HttpContext http, AppDbContext db, CancellationToken ct) =>
+        {
+            var (client, denied) = await AuthenticateAsync(http, db, ct);
+            if (client is null)
+            {
+                return denied!;
+            }
+
+            var started = await KioskService.StartAsync(db, client, id, request.User, ct);
+            return started.Ok ? Results.Ok(new KioskStarted { RunId = started.Value }) : started.NotAllowed ? Results.NotFound() : Results.Problem(started.Error, statusCode: 409);
+        });
+
+        api.MapGet("/runs/{runId:long}", async (long runId, HttpContext http, AppDbContext db, CancellationToken ct) =>
+        {
+            var (client, denied) = await AuthenticateAsync(http, db, ct);
+            if (client is null)
+            {
+                return denied!;
+            }
+
+            return await JobService.StateAsync(db, client.Id, runId, ct) is { } state ? Results.Ok(state) : Results.NotFound();
         });
 
         // the agent itself and its install script (anonymous: the agent is no secret, the enrollment key is)

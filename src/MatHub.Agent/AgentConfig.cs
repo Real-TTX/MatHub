@@ -30,6 +30,14 @@ public static class AgentInfo
     public static string InstallDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "MatHub Agent");
 
     public static string InstalledExe => Path.Combine(InstallDirectory, "mathub-agent.exe");
+
+    /// <summary>
+    /// The pipe of the service for its kiosk and the dialogs of scripts. A test with its own data folder has a pipe of its own (named by a hash of the folder),
+    /// so it never meets an installed agent.
+    /// </summary>
+    public static string PipeName => OwnDataDirectory
+        ? "MatHubAgent-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(DataDirectory.ToLowerInvariant())))[..12]
+        : "MatHubAgent";
 }
 
 /// <summary>

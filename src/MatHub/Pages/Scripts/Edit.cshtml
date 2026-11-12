@@ -36,6 +36,32 @@
             }
         </form>
     </div>
+    @if (Model.IsNew && Model.CanEdit)
+    {
+        <div class="mat-col-12 mat-col-lg-5">
+            <section class="mat-card mat-card--flush" aria-labelledby="script-templates">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="script-templates">@Ui.Icon("template")@L["Scripts.Templates"]</h2></div>
+                <div class="mat-card__body">
+                    <p class="mat-muted mh-card-intro">@L["Scripts.Templates.Hint"]</p>
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
+                        @foreach (var t in Model.Templates)
+                        {
+                            <li class="mat-item">
+                                <form method="post" asp-page-handler="Template" class="mat-item__row">
+                                    <input type="hidden" name="key" value="@t.Key" />
+                                    <button type="submit" class="mat-item__main">
+                                        <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon(t.Icon)</span></span>
+                                        <span class="mat-item__body"><span class="mat-item__title">@L["Templates." + t.Key + ".Name"]</span><span class="mat-item__text">@L["Templates." + t.Key + ".Hint"]</span></span>
+                                        <span class="mat-pill mat-pill--plain">@L["Scripts.Editor." + t.Editor]</span>
+                                    </button>
+                                </form>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </section>
+        </div>
+    }
     @if (!Model.IsNew)
     {
         <div class="mat-col-12 mat-col-lg-5">
@@ -55,6 +81,25 @@
                                 <span class="mat-item__body"><span class="mat-item__title">@L["Scripts.Run"]</span><span class="mat-item__text">@L["Scripts.Run.Hint"]</span></span>
                                 <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
                             </a></li>
+                        }
+                        @if (Model.CanKiosk)
+                        {
+                            <li class="mat-item"><a class="mat-item__main" href="/kiosk/edit?script=@Model.Id">
+                                <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("store")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@L["Kiosk.Offer"]</span><span class="mat-item__text">@L["Kiosk.Offer.Hint"]</span></span>
+                                <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                            </a></li>
+                        }
+                        @if (Model.CanEdit && Model.Editor == ScriptEditor.Blocks)
+                        {
+                            <li class="mat-item">
+                                <form method="post" asp-page-handler="Flow" asp-route-id="@Model.Id" class="mat-item__row">
+                                    <button type="submit" class="mat-item__main">
+                                        <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--info">@Ui.Icon("flow")</span></span>
+                                        <span class="mat-item__body"><span class="mat-item__title">@L["Scripts.CopyAsFlow"]</span><span class="mat-item__text">@L["Scripts.CopyAsFlow.Hint"]</span></span>
+                                    </button>
+                                </form>
+                            </li>
                         }
                         @if (Model.CanEdit)
                         {

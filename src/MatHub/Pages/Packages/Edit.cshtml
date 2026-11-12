@@ -62,6 +62,20 @@
                     <mh-field name="DetectionValue" label="@L["Packages.DetectionValue"]" value="@Model.DetectionValue" show-if="Detection" show-value="DisplayName,WingetId" optional hint="@L["Packages.DetectionValue.Hint"]" disabled="@ro" />
                 </div>
             </div>
+            @if (!Model.IsNew && Me.Can(MatHub.Services.Access.Permission.KioskManage) && Me.Can(MatHub.Services.Access.Permission.PackagesDeploy))
+            {
+                <div class="mat-card mat-card--flush">
+                    <div class="mat-card__body">
+                        <ul class="mat-itemlist">
+                            <li class="mat-item"><a class="mat-item__main" href="/kiosk/edit?package=@Model.Id">
+                                <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("store")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@L["Kiosk.Offer"]</span><span class="mat-item__text">@L["Kiosk.Offer.Package.Hint"]</span></span>
+                                <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+            }
         </div>
     </div>
     @if (Model.CanEdit)

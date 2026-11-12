@@ -2,12 +2,17 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace MatHub.Services.Scripts;
 
 /// <summary>A field of a block: what the editor shows and what the compiler reads (<c>values[Name]</c>).</summary>
-/// <param name="Kind">text, number, select, textarea.</param>
-public sealed record BlockField(string Name, string Kind = "text", bool Required = true, IReadOnlyList<string>? Options = null, string? Placeholder = null);
+/// <param name="Kind">
+/// text, number, select, textarea, bool ("true" or empty), secret (the name of a <see cref="MatHub.Data.Secret"/>), variable (the name of a variable the step fills),
+/// fields (the fields and pages of a dialog, as JSON).
+/// </param>
+/// <param name="Default">What a new block has in the field.</param>
+public sealed record BlockField(string Name, string Kind = "text", bool Required = true, IReadOnlyList<string>? Options = null, string? Placeholder = null, string? Default = null);
 
 /// <summary>A kind of block: a step (<see cref="IsCondition"/> false) or a check that an "If" asks (true).</summary>
 public sealed record BlockType(string Id, string Category, string Icon, IReadOnlyList<BlockField> Fields, bool IsCondition = false);
@@ -77,16 +82,21 @@ public sealed record CompileResult(string Code, IReadOnlyList<string> Errors)
 }
 
 /// <summary>
-/// The building blocks of the visual editors and the compiler that turns blocks and flows into PowerShell (Windows PowerShell 5.1 and later). Every value
-/// goes into the script as a single-quoted string (quotes doubled) or as a checked number, so what a person types is data, never code; the one exception is
-/// the block "PowerShell", which is code by intent.
+/// The actions of the visual editors and the compiler that turns blocks and flows into PowerShell (Windows PowerShell 5.1 and later). The block editor and the
+/// flow editor share it: one catalog (<see cref="Types"/>), one compiler of a step (<see cref="Step"/>) and of a check; they differ only in how the steps follow
+/// each other (a list, or a graph with branches). Every value goes into the script as a single-quoted string (quotes doubled) or as a checked number, so what a
+/// person types is data, never code; <c>{{name}}</c> in a value is a variable (a dialog fills it, "Set a variable" too). The exceptions are the block
+/// "PowerShell" and the check "PowerShell is true", which are code by intent.
 /// </summary>
-public static class ScriptBlocks
+public static partial class ScriptBlocks
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
+
+    /// <summary>The areas of the catalog, in the order of the palettes.</summary>
+    public static IReadOnlyList<string> Categories { get; } = ["software", "files", "system", "network", "users", "windows", "dialog", "script", "check"];
 
     public static IReadOnlyList<BlockType> Types { get; } =
     [
@@ -94,37 +104,106 @@ public static class ScriptBlocks
         new("winget-install", "software", "download", [new("id", Placeholder: "Mozilla.Firefox")]),
         new("winget-uninstall", "software", "trash", [new("id", Placeholder: "Mozilla.Firefox")]),
         new("winget-upgrade", "software", "refresh", [new("id", Required: false, Placeholder: "Mozilla.Firefox")]),
+        new("msi", "software", "archive", [new("path", Placeholder: @"\\server\software\app.msi"), new("arguments", Required: false, Placeholder: "ALLUSERS=1")]),
         new("program", "software", "play", [new("path", Placeholder: @"C:\Tools\setup.exe"), new("arguments", Required: false, Placeholder: "/S")]),
+        new("uninstall-program", "software", "trash", [new("name", Placeholder: "Adobe Acrobat Reader")]),
 
         // files
         new("download", "files", "download", [new("url", Placeholder: "https://example.com/file.zip"), new("path", Placeholder: @"C:\Temp\file.zip")]),
         new("folder", "files", "folder", [new("path", Placeholder: @"C:\Company")]),
-        new("copy", "files", "copy", [new("source", Placeholder: @"C:\Temp\a.txt"), new("target", Placeholder: @"C:\Company\a.txt")]),
+        new("copy", "files", "copy", [new("source", Placeholder: @"\\server\share\template"), new("target", Placeholder: @"C:\Company\template")]),
         new("delete", "files", "trash", [new("path", Placeholder: @"C:\Temp\old")]),
         new("write-file", "files", "file", [new("path", Placeholder: @"C:\Company\info.txt"), new("content", "textarea", Required: false)]),
+        new("unzip", "files", "archive", [new("source", Placeholder: @"C:\Temp\tool.zip"), new("target", Placeholder: @"C:\Tools\tool")]),
+        new("replace-text", "files", "file-text", [new("path", Placeholder: @"C:\App\app.ini"), new("find", Placeholder: "Server=old"), new("replace", Required: false, Placeholder: "Server=new")]),
+        new("shortcut", "files", "link", [
+            new("path", Placeholder: @"C:\Users\Public\Desktop\Intranet.lnk"), new("target", Placeholder: @"C:\Program Files\App\app.exe"),
+            new("arguments", Required: false), new("icon", Required: false, Placeholder: @"C:\Program Files\App\app.exe,0"),
+        ]),
+        new("permissions", "files", "lock", [
+            new("path", Placeholder: @"C:\Company"), new("account", Placeholder: "BUILTIN\\Users"),
+            new("rights", "select", Options: ["Read", "Modify", "FullControl"]),
+        ]),
 
         // system
-        new("registry", "system", "database", [
+        new("registry", "system", "registry", [
             new("path", Placeholder: @"HKLM:\SOFTWARE\Company"), new("name", Placeholder: "Setting"),
             new("type", "select", Options: ["String", "DWord", "QWord", "ExpandString", "MultiString"]), new("value", Required: false),
         ]),
-        new("registry-delete", "system", "database", [new("path", Placeholder: @"HKLM:\SOFTWARE\Company"), new("name", Required: false, Placeholder: "Setting")]),
+        new("registry-delete", "system", "registry", [new("path", Placeholder: @"HKLM:\SOFTWARE\Company"), new("name", Required: false, Placeholder: "Setting")]),
         new("service", "system", "settings", [new("name", Placeholder: "Spooler"), new("action", "select", Options: ["start", "stop", "restart", "automatic", "manual", "disabled"])]),
         new("env", "system", "terminal", [new("name", Placeholder: "COMPANY_HOME"), new("value", Required: false)]),
+        new("rename-computer", "system", "monitor", [new("name", Placeholder: "BER-PC-{{serial}}")]),
+        new("timezone", "system", "clock", [new("zone", Placeholder: "W. Europe Standard Time")]),
+        new("power-plan", "system", "power", [new("plan", "select", Options: ["balanced", "high", "saver"])]),
+        new("scheduled-task", "system", "calendar", [
+            new("name", Placeholder: "Company cleanup"), new("path", Placeholder: @"C:\Company\cleanup.cmd"), new("arguments", Required: false),
+            new("trigger", "select", Options: ["startup", "logon", "daily"]), new("time", Required: false, Placeholder: "03:00"),
+        ]),
+        new("hosts", "system", "globe", [new("address", Placeholder: "10.0.0.20"), new("host", Placeholder: "intranet.contoso.local")]),
         new("restart", "system", "refresh", [new("delay", "number", Required: false, Placeholder: "60")]),
+        new("shutdown", "system", "power", [new("delay", "number", Required: false, Placeholder: "60")]),
 
-        // flow
+        // network and domain
+        new("domain-join", "network", "server", [
+            new("domain", Placeholder: "contoso.local"), new("credential", "secret"), new("ou", Required: false, Placeholder: "OU=Clients,DC=contoso,DC=local"),
+            new("name", Required: false, Placeholder: "BER-PC-{{serial}}"), new("reboot", "bool", Required: false, Default: "true"),
+        ]),
+        new("domain-leave", "network", "logout", [new("credential", "secret", Required: false), new("workgroup", Required: false, Placeholder: "WORKGROUP"), new("reboot", "bool", Required: false, Default: "true")]),
+        new("gpupdate", "network", "refresh", []),
+        new("dns", "network", "network", [new("servers", Placeholder: "10.0.0.10, 10.0.0.11"), new("adapter", Required: false, Placeholder: "Ethernet")]),
+        new("wifi", "network", "wifi", [new("ssid", Placeholder: "Contoso"), new("key", "secret"), new("hidden", "bool", Required: false)]),
+        new("firewall", "network", "shield", [
+            new("name", Placeholder: "Company app"), new("direction", "select", Options: ["in", "out"]), new("protocol", "select", Options: ["TCP", "UDP", "Any"]),
+            new("port", Required: false, Placeholder: "8080"), new("program", Required: false, Placeholder: @"C:\Program Files\App\app.exe"), new("rule", "select", Options: ["allow", "block"]),
+        ]),
+        new("printer", "network", "printer", [new("name", Placeholder: "Office 2nd floor"), new("address", Placeholder: "10.0.0.50"), new("driver", Placeholder: "Microsoft IPP Class Driver")]),
+        new("printer-shared", "network", "printer", [new("path", Placeholder: @"\\printserver\Office")]),
+
+        // users and rights
+        new("local-user", "users", "user", [new("name", Placeholder: "support"), new("password", "secret"), new("fullname", Required: false, Placeholder: "Support"), new("admin", "bool", Required: false)]),
+        new("local-user-remove", "users", "user", [new("name", Placeholder: "olduser")]),
+        new("local-group", "users", "users", [
+            new("group", "select", Options: ["administrators", "users", "remote-desktop", "power-users"]), new("member", Placeholder: @"CONTOSO\Helpdesk"),
+            new("membership", "select", Options: ["add", "remove"]),
+        ]),
+
+        // Windows and security
+        new("windows-update", "windows", "refresh", [new("updates", "select", Options: ["software", "security", "drivers"])]),
+        new("windows-feature", "windows", "layers", [new("name", Placeholder: "NetFx3"), new("feature", "select", Options: ["enable", "disable"])]),
+        new("windows-capability", "windows", "layers", [new("name", Placeholder: "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0"), new("capability", "select", Options: ["add", "remove"])]),
+        new("appx-remove", "windows", "trash", [new("name", Placeholder: "Microsoft.BingNews")]),
+        new("bitlocker", "windows", "lock", [new("drive", Required: false, Placeholder: "C:", Default: "C:"), new("backup", "bool", Required: false)]),
+        new("defender", "windows", "shield", [new("scan", "select", Options: ["quick", "full", "signatures"])]),
+        new("cleanup", "windows", "broom", []),
+
+        // dialogs: the person at the computer sees them (the kiosk of the agent shows them)
+        new("ui-message", "dialog", "message-square", [new("title", Placeholder: "IT"), new("text", "textarea"), new("level", "select", Options: ["info", "warning", "error"]), new("timeout", "number", Required: false, Placeholder: "300")]),
+        new("ui-question", "dialog", "help-circle", [new("title", Placeholder: "IT"), new("text", "textarea", Placeholder: "Restart now?"), new("variable", "variable", Default: "answer"), new("timeout", "number", Required: false, Placeholder: "300")]),
+        new("ui-form", "dialog", "list-checks", [new("title", Placeholder: "Set up this computer"), new("text", "textarea", Required: false), new("fields", "fields"), new("timeout", "number", Required: false, Placeholder: "600")]),
+        new("ui-notify", "dialog", "bell", [new("title", Placeholder: "IT"), new("text")]),
+        new("ui-progress", "dialog", "progress-play", [new("title", Placeholder: "Setting up"), new("text", Required: false, Placeholder: "Programs are being installed …")]),
+
+        // the script itself
+        new("set-variable", "script", "tag", [new("variable", "variable"), new("value", Required: false)]),
         new("powershell", "script", "terminal", [new("code", "textarea", Placeholder: "Get-Service | Where-Object Status -eq 'Running'")]),
         new("message", "script", "message-square", [new("text")]),
         new("wait", "script", "clock", [new("seconds", "number", Placeholder: "10")]),
+        new("fail", "script", "x-circle", [new("text", Placeholder: "This computer is not supported.")]),
         new("exit", "script", "stop", [new("code", "number", Required: false, Placeholder: "0")]),
 
         // checks (for "if" and "only if")
         new("file-exists", "check", "file", [new("path", Placeholder: @"C:\Program Files\App\app.exe")], IsCondition: true),
-        new("registry-exists", "check", "database", [new("path", Placeholder: @"HKLM:\SOFTWARE\Company"), new("name", Required: false)], IsCondition: true),
+        new("registry-exists", "check", "registry", [new("path", Placeholder: @"HKLM:\SOFTWARE\Company"), new("name", Required: false)], IsCondition: true),
         new("service-running", "check", "settings", [new("name", Placeholder: "Spooler")], IsCondition: true),
         new("program-installed", "check", "box", [new("name", Placeholder: "Firefox")], IsCondition: true),
         new("os-build", "check", "monitor", [new("build", "number", Placeholder: "22631")], IsCondition: true),
+        new("variable", "check", "tag", [new("variable", "variable", Default: "answer"), new("compare", "select", Options: ["equals", "contains", "empty", "greater"]), new("value", Required: false, Placeholder: "yes")], IsCondition: true),
+        new("domain-member", "check", "server", [new("domain", Required: false, Placeholder: "contoso.local")], IsCondition: true),
+        new("computer-name", "check", "monitor", [new("pattern", Placeholder: "BER-*")], IsCondition: true),
+        new("user-logged-on", "check", "user", [], IsCondition: true),
+        new("free-space", "check", "hard-drive", [new("drive", Placeholder: "C:", Default: "C:"), new("gigabytes", "number", Placeholder: "20")], IsCondition: true),
+        new("reachable", "check", "network", [new("host", Placeholder: "intranet.contoso.local")], IsCondition: true),
         new("expression", "check", "terminal", [new("code", Placeholder: "(Get-Date).DayOfWeek -eq 'Monday'")], IsCondition: true),
     ];
 
@@ -168,10 +247,90 @@ public static class ScriptBlocks
         return sb.Append('\'').ToString();
     }
 
+    /// <summary>
+    /// A value as a PowerShell expression: a quoted string, or, when it names variables (<c>{{name}}</c>), the quoted parts joined with the variables
+    /// (<c>('BER-' + [string]$MatHubVars['serial'])</c>). A name is letters, digits and _ only, so nothing else of the text becomes code.
+    /// </summary>
+    public static string Expression(string? value)
+    {
+        value ??= string.Empty;
+        var matches = VariableRegex().Matches(value);
+        if (matches.Count == 0)
+        {
+            return Quote(value);
+        }
+
+        var parts = new List<string>();
+        var at = 0;
+        foreach (Match m in matches)
+        {
+            if (m.Index > at)
+            {
+                parts.Add(Quote(value[at..m.Index]));
+            }
+
+            parts.Add($"[string]$MatHubVars['{m.Groups[1].Value}']");
+            at = m.Index + m.Length;
+        }
+
+        if (at < value.Length)
+        {
+            parts.Add(Quote(value[at..]));
+        }
+
+        return "(" + string.Join(" + ", parts) + ")";
+    }
+
+    /// <summary>A name of a variable: a letter, then letters, digits and _ (at most 40).</summary>
+    public static bool IsVariableName(string? name) => name is not null && VariableNameRegex().IsMatch(name);
+
+    /// <summary>A name of a secret: capitals, digits and _ (it is part of an environment variable).</summary>
+    public static bool IsSecretName(string? name) => name is not null && SecretNameRegex().IsMatch(name);
+
+    /// <summary>The environment variable a secret reaches the script in.</summary>
+    public static string SecretVariable(string name) => "MATHUB_SECRET_" + name;
+
+    /// <summary>
+    /// The secrets a script may name (<c>$env:MATHUB_SECRET_NAME</c>, <c>Get-MatHubSecret 'NAME'</c>): the server hands those that exist to the agent with the
+    /// run, nothing else. <c>…_USER</c> is the user name of a secret, so the name without it counts too.
+    /// </summary>
+    public static IReadOnlySet<string> SecretsIn(string? script)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in SecretUseRegex().Matches(script ?? string.Empty))
+        {
+            var name = m.Groups[1].Value;
+            names.Add(name);
+            if (name.EndsWith("_USER", StringComparison.Ordinal) && name.Length > 5)
+            {
+                names.Add(name[..^5]);
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>The code without the helpers every visual script begins with (the preview shows what the steps do).</summary>
+    public static string WithoutPrelude(string code)
+        => code.StartsWith(Prelude, StringComparison.Ordinal)
+            ? "# … MatHub: variables ($MatHubVars), winget, dialogs, secrets (in the saved script)\n\n" + code[Prelude.Length..]
+            : code;
+
     private const string Prelude = """
         # Made with the visual editor of MatHub. Edit it there: changes here are overwritten.
         $ErrorActionPreference = 'Stop'
         $ProgressPreference = 'SilentlyContinue'
+
+        # the variables of the script ({{name}} in a value); a dialog and "Set a variable" fill them
+        $MatHubVars = @{}
+        $MatHubVars['computer'] = $env:COMPUTERNAME
+        $MatHubVars['date'] = (Get-Date).ToString('yyyy-MM-dd')
+        try {
+            $cs = Get-CimInstance -ClassName Win32_ComputerSystem
+            $MatHubVars['user'] = [string]$cs.UserName
+            $MatHubVars['domain'] = [string]$cs.Domain
+            $MatHubVars['serial'] = [string](Get-CimInstance -ClassName Win32_BIOS).SerialNumber
+        } catch { }
 
         function Invoke-MatHubWinget {
             if (-not $env:MATHUB_WINGET) { throw 'winget is not available on this computer.' }
@@ -180,14 +339,49 @@ public static class ScriptBlocks
             if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne -1978335189 -and $LASTEXITCODE -ne -1978335212) { throw "winget ended with $LASTEXITCODE." }
         }
 
+        # a dialog for the person at the computer: the agent shows it in their session and gives back the answer (and the values of the fields)
+        function Invoke-MatHubDialog([string]$Json, [switch]$NoWait) {
+            $Json = [regex]::Replace($Json, '\{\{\s*([A-Za-z][A-Za-z0-9_]{0,39})\s*\}\}', [Text.RegularExpressions.MatchEvaluator]{
+                param($m) $v = [string]$MatHubVars[$m.Groups[1].Value]; (ConvertTo-Json -InputObject $v -Compress).Trim('"')
+            })
+            $reply = $null
+            if ($env:MATHUB_AGENT_EXE -and (Test-Path -LiteralPath $env:MATHUB_AGENT_EXE)) {
+                $data = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Json))
+                $arguments = @('ask', '--data', $data)
+                if ($NoWait) { $arguments += '--no-wait' }
+                $out = & $env:MATHUB_AGENT_EXE @arguments
+                try { $reply = ($out | Out-String) | ConvertFrom-Json } catch { $reply = $null }
+            }
+            if ($null -eq $reply) { $reply = [pscustomobject]@{ answer = 'nobody'; values = $null } }
+            $MatHubVars['answer'] = [string]$reply.answer
+            if ($null -ne $reply.values) {
+                foreach ($p in $reply.values.PSObject.Properties) { $MatHubVars[$p.Name] = [string]$p.Value }
+            }
+            if (-not $NoWait) { Write-Output ("Dialog: " + $reply.answer) }
+            return
+        }
+
+        function Get-MatHubSecret([string]$Name) {
+            $value = [Environment]::GetEnvironmentVariable('MATHUB_SECRET_' + $Name)
+            if (-not $value) { throw "The secret $Name did not reach this computer (is it still there in MatHub?)." }
+            return $value
+        }
+
+        function New-MatHubCredential([string]$Name, [string]$User) {
+            if (-not $User) { $User = [Environment]::GetEnvironmentVariable('MATHUB_SECRET_' + $Name + '_USER') }
+            if (-not $User) { throw "The secret $Name has no user name." }
+            New-Object System.Management.Automation.PSCredential($User, (ConvertTo-SecureString (Get-MatHubSecret $Name) -AsPlainText -Force))
+        }
+
         """;
 
     // ---- the block editor ----------------------------------------------------------------------------------------------------
 
-    public static CompileResult CompileBlocks(ScriptModel model)
+    /// <param name="dryRun">A trial run: what would change the computer only says so (see <see cref="DryRunSafe"/>).</param>
+    public static CompileResult CompileBlocks(ScriptModel model, bool dryRun = false)
     {
         var errors = new List<string>();
-        var sb = new StringBuilder(Prelude);
+        var sb = new StringBuilder(Prelude).Append(dryRun ? DryRunHeader() : string.Empty);
         if (model.Blocks.Count == 0)
         {
             errors.Add(Localization.Text.T("Blocks.Error.Empty"));
@@ -204,8 +398,8 @@ public static class ScriptBlocks
                 continue;
             }
 
-            var code = Step(type, block.Values, step, errors);
-            sb.Append("# ").Append(step.ToString(CultureInfo.InvariantCulture)).Append(". ").AppendLine(Localization.Text.T("Blocks.Type." + type.Id));
+            var code = Step(type, block.Values, step, errors, dryRun);
+            sb.Append("# ").Append(step.ToString(CultureInfo.InvariantCulture)).Append(". ").AppendLine(Escape(Localization.Text.T("Blocks.Type." + type.Id)));
             if (block.When is { } when)
             {
                 var test = Condition(when, step, errors);
@@ -229,10 +423,10 @@ public static class ScriptBlocks
     /// A flow becomes a small state machine: <c>$step</c> names the node that runs next, each node sets the next one by its arrows (an "if" by its result, a step
     /// with an error arrow by its outcome), and a node without an arrow ends the script. Loops are allowed; 10,000 steps end a script that never stops.
     /// </summary>
-    public static CompileResult CompileFlow(ScriptModel model)
+    public static CompileResult CompileFlow(ScriptModel model, bool dryRun = false)
     {
         var errors = new List<string>();
-        var sb = new StringBuilder(Prelude);
+        var sb = new StringBuilder(Prelude).Append(dryRun ? DryRunHeader() : string.Empty);
         var nodes = model.Nodes.Where(n => !string.IsNullOrWhiteSpace(n.Id)).GroupBy(n => n.Id).Select(g => g.First()).ToList();
         var starts = nodes.Where(n => n.Type == "start").ToList();
         if (starts.Count != 1)
@@ -291,7 +485,7 @@ public static class ScriptBlocks
                     continue;
                 }
 
-                var code = Step(type, node.Values, number, errors);
+                var code = Step(type, node.Values, number, errors, dryRun);
                 var onError = Next(node.Id, "error");
                 body = onError is null
                     ? $"{code}\n$step = {Target(Next(node.Id, "next"))}"
@@ -310,138 +504,50 @@ public static class ScriptBlocks
         return new CompileResult(sb.ToString(), errors);
     }
 
-    // ---- one step, one check ---------------------------------------------------------------------------------------------------
-
-    private static string Step(BlockType type, IReadOnlyDictionary<string, string> values, int step, List<string> errors)
+    /// <summary>
+    /// The blocks as a flow (one base, two views): every step a node under the one before, a step with "only if" an "If" whose "no" goes on to the next step,
+    /// a step that goes on after an error an error arrow to the next one.
+    /// </summary>
+    public static ScriptModel BlocksToFlow(ScriptModel blocks)
     {
-        string V(string name) => values.TryGetValue(name, out var v) ? v.Trim() : string.Empty;
-        string Q(string name) => Quote(V(name));
-        foreach (var f in type.Fields.Where(f => f.Required && V(f.Name).Length == 0))
+        var nodes = new List<FlowNode> { new() { Id = "start", Type = "start", X = 60, Y = 40 } };
+        var edges = new List<FlowEdge>();
+        var y = 40.0;
+        var pending = new List<(string From, string Port)> { ("start", "next") };
+        var i = 0;
+        foreach (var block in blocks.Blocks)
         {
-            errors.Add(Localization.Text.T("Blocks.Error.Missing", step, Localization.Text.T("Blocks.Field." + f.Name)));
-        }
-
-        int Number(string name, int fallback, int min, int max)
-        {
-            var text = V(name);
-            if (text.Length == 0)
+            i++;
+            y += 114;
+            var ifId = $"if{i}";
+            var stepId = $"s{i}";
+            if (block.When is { } when)
             {
-                return fallback;
+                nodes.Add(new FlowNode { Id = ifId, Type = "if", Condition = when, X = 60, Y = y });
+                edges.AddRange(pending.Select(p => new FlowEdge { From = p.From, To = ifId, Port = p.Port }));
+                pending = [(ifId, "false")];
+                y += 114;
+                nodes.Add(new FlowNode { Id = stepId, Type = block.Type, Values = new(block.Values), X = 60, Y = y });
+                edges.Add(new FlowEdge { From = ifId, To = stepId, Port = "true" });
+            }
+            else
+            {
+                nodes.Add(new FlowNode { Id = stepId, Type = block.Type, Values = new(block.Values), X = 60, Y = y });
+                edges.AddRange(pending.Select(p => new FlowEdge { From = p.From, To = stepId, Port = p.Port }));
+                pending = [];
             }
 
-            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n >= min && n <= max)
+            pending.Add((stepId, "next"));
+            if (block.ContinueOnError)
             {
-                return n;
+                pending.Add((stepId, "error"));
             }
-
-            errors.Add(Localization.Text.T("Blocks.Error.Number", step, Localization.Text.T("Blocks.Field." + name)));
-            return fallback;
         }
 
-        switch (type.Id)
-        {
-            case "winget-install":
-                return $"Invoke-MatHubWinget install --id {Q("id")} --exact --silent --scope machine --accept-package-agreements";
-            case "winget-uninstall":
-                return $"Invoke-MatHubWinget uninstall --id {Q("id")} --exact --silent";
-            case "winget-upgrade":
-                return V("id").Length == 0
-                    ? "Invoke-MatHubWinget upgrade --all --silent --accept-package-agreements"
-                    : $"Invoke-MatHubWinget upgrade --id {Q("id")} --exact --silent --accept-package-agreements";
-            case "program":
-                var args = V("arguments").Length == 0 ? string.Empty : $" -ArgumentList {Q("arguments")}";
-                return $"$p = Start-Process -FilePath {Q("path")}{args} -Wait -PassThru -NoNewWindow\nif ($p.ExitCode -ne 0) {{ throw \"The program ended with $($p.ExitCode).\" }}";
-            case "download":
-                return $"Invoke-WebRequest -UseBasicParsing -Uri {Q("url")} -OutFile {Q("path")}";
-            case "folder":
-                return $"New-Item -ItemType Directory -Force -Path {Q("path")} | Out-Null";
-            case "copy":
-                return $"Copy-Item -Path {Q("source")} -Destination {Q("target")} -Recurse -Force";
-            case "delete":
-                return $"if (Test-Path -LiteralPath {Q("path")}) {{ Remove-Item -LiteralPath {Q("path")} -Recurse -Force }}";
-            case "write-file":
-                return $"Set-Content -LiteralPath {Q("path")} -Value {Quote(values.GetValueOrDefault("content") ?? string.Empty)} -Encoding UTF8";
-            case "registry":
-                var kind = V("type") is "DWord" or "QWord" or "ExpandString" or "MultiString" ? V("type") : "String";
-                var value = kind switch
-                {
-                    "DWord" or "QWord" => long.TryParse(V("value"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
-                        ? n.ToString(CultureInfo.InvariantCulture)
-                        : Fail(errors, Localization.Text.T("Blocks.Error.Number", step, Localization.Text.T("Blocks.Field.value"))),
-                    "MultiString" => "@(" + string.Join(", ", V("value").Split(';').Select(Quote)) + ")",
-                    _ => Q("value"),
-                };
-                return $"if (-not (Test-Path -Path {Q("path")})) {{ New-Item -Path {Q("path")} -Force | Out-Null }}\nNew-ItemProperty -Path {Q("path")} -Name {Q("name")} -PropertyType {kind} -Value {value} -Force | Out-Null";
-            case "registry-delete":
-                return V("name").Length == 0
-                    ? $"if (Test-Path -Path {Q("path")}) {{ Remove-Item -Path {Q("path")} -Recurse -Force }}"
-                    : $"Remove-ItemProperty -Path {Q("path")} -Name {Q("name")} -Force -ErrorAction SilentlyContinue";
-            case "service":
-                return V("action") switch
-                {
-                    "stop" => $"Stop-Service -Name {Q("name")} -Force",
-                    "restart" => $"Restart-Service -Name {Q("name")} -Force",
-                    "automatic" => $"Set-Service -Name {Q("name")} -StartupType Automatic",
-                    "manual" => $"Set-Service -Name {Q("name")} -StartupType Manual",
-                    "disabled" => $"Set-Service -Name {Q("name")} -StartupType Disabled",
-                    _ => $"Start-Service -Name {Q("name")}",
-                };
-            case "env":
-                return $"[Environment]::SetEnvironmentVariable({Q("name")}, {Q("value")}, 'Machine')";
-            case "restart":
-                var delay = Number("delay", 60, 0, 86400);
-                return $"shutdown.exe /r /t {delay} /c 'MatHub restarts this computer.'";
-            case "powershell":
-                return (values.GetValueOrDefault("code") ?? string.Empty).Trim();
-            case "message":
-                return $"Write-Output {Q("text")}";
-            case "wait":
-                return $"Start-Sleep -Seconds {Number("seconds", 10, 0, 86400)}";
-            case "exit":
-                return $"exit {Number("code", 0, int.MinValue, int.MaxValue)}";
-            default:
-                errors.Add(Localization.Text.T("Blocks.Error.Unknown", step));
-                return string.Empty;
-        }
-    }
-
-    private static string Condition(BlockCondition condition, int step, List<string> errors)
-    {
-        var type = Find(condition.Type);
-        if (type is null || !type.IsCondition)
-        {
-            errors.Add(Localization.Text.T("Blocks.Error.Unknown", step));
-            return "$false";
-        }
-
-        string V(string name) => condition.Values.TryGetValue(name, out var v) ? v.Trim() : string.Empty;
-        string Q(string name) => Quote(V(name));
-        foreach (var f in type.Fields.Where(f => f.Required && V(f.Name).Length == 0))
-        {
-            errors.Add(Localization.Text.T("Blocks.Error.Missing", step, Localization.Text.T("Blocks.Field." + f.Name)));
-        }
-
-        return type.Id switch
-        {
-            "file-exists" => $"Test-Path -LiteralPath {Q("path")}",
-            "registry-exists" => V("name").Length == 0
-                ? $"Test-Path -Path {Q("path")}"
-                : $"$null -ne (Get-ItemProperty -Path {Q("path")} -Name {Q("name")} -ErrorAction SilentlyContinue)",
-            "service-running" => $"(Get-Service -Name {Q("name")} -ErrorAction SilentlyContinue).Status -eq 'Running'",
-            "program-installed" => "@(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | "
-                                   + $"Where-Object {{ $_.DisplayName -like ('*' + {Q("name")} + '*') }}).Count -gt 0",
-            "os-build" => int.TryParse(V("build"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var build)
-                ? $"[Environment]::OSVersion.Version.Build -ge {build}"
-                : Fail(errors, Localization.Text.T("Blocks.Error.Number", step, Localization.Text.T("Blocks.Field.build"))),
-            "expression" => V("code"),
-            _ => "$false",
-        };
-    }
-
-    private static string Fail(List<string> errors, string message)
-    {
-        errors.Add(message);
-        return "0";
+        y += 114;
+        nodes.Add(new FlowNode { Id = "end", Type = "end", X = 60, Y = y });
+        edges.AddRange(pending.Select(p => new FlowEdge { From = p.From, To = "end", Port = p.Port }));
+        return new ScriptModel { Nodes = nodes, Edges = edges };
     }
 
     private static string Indent(string code, int spaces = 4)
@@ -452,4 +558,16 @@ public static class ScriptBlocks
 
     /// <summary>A text inside a double-quoted PowerShell string and a comment: no quote, no $, no backtick, one line.</summary>
     private static string Escape(string text) => new(text.Where(c => c is not ('"' or '$' or '`' or '\n' or '\r')).ToArray());
+
+    [GeneratedRegex(@"\{\{\s*([A-Za-z][A-Za-z0-9_]{0,39})\s*\}\}")]
+    private static partial Regex VariableRegex();
+
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9_]{0,39}$")]
+    private static partial Regex VariableNameRegex();
+
+    [GeneratedRegex(@"^[A-Z][A-Z0-9_]{0,59}$")]
+    private static partial Regex SecretNameRegex();
+
+    [GeneratedRegex(@"(?:MATHUB_SECRET_|Get-MatHubSecret\s+'|New-MatHubCredential\s+')([A-Z][A-Z0-9_]{0,59})")]
+    private static partial Regex SecretUseRegex();
 }

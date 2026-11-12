@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Renders the PNG icons of MatHub from its SVG logo with the installed Edge (Playwright): the favicon (32), the Apple touch icon (180), the PWA icons (192, 512),
-// the maskable icon (512) and the mark for the README (512).
+// the maskable icon (512), the mark for the README (512) and the icon of the agent (mathub-agent.ico: 16 to 256 px, PNG inside).
 //   node tools/logo-png.js            (needs playwright-core: set PLAYWRIGHT_CORE to its folder, or run it from a folder that has it)
 const fs = require('fs');
 const path = require('path');
@@ -32,6 +32,34 @@ const jobs = [
     await page.locator('svg').first().screenshot({ path: path.join(root, target), omitBackground: !square });
     console.log(`${target} (${size} px)`);
   }
+
+  // the icon of the agent's program, its kiosk and its symbol beside the clock: an ICO with a PNG per size (the small sizes from the favicon, drawn for them)
+  const sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
+  const images = [];
+  for (const size of sizes) {
+    const svg = logo(size <= 32 ? 'mathub-favicon.svg' : 'mathub-mark.svg').replace('<svg ', `<svg width="${size}" height="${size}" `);
+    await page.setViewportSize({ width: size, height: size });
+    await page.setContent(`<!DOCTYPE html><html><body style="margin:0;background:transparent">${svg}</body></html>`);
+    images.push(await page.locator('svg').first().screenshot({ omitBackground: true }));
+  }
+
+  const header = Buffer.alloc(6 + 16 * sizes.length);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(sizes.length, 4);
+  let offset = header.length;
+  sizes.forEach((size, i) => {
+    const at = 6 + 16 * i;
+    header.writeUInt8(size >= 256 ? 0 : size, at);
+    header.writeUInt8(size >= 256 ? 0 : size, at + 1);
+    header.writeUInt16LE(1, at + 4);
+    header.writeUInt16LE(32, at + 6);
+    header.writeUInt32LE(images[i].length, at + 8);
+    header.writeUInt32LE(offset, at + 12);
+    offset += images[i].length;
+  });
+  fs.writeFileSync(path.join(root, 'src', 'MatHub.Agent', 'mathub-agent.ico'), Buffer.concat([header, ...images]));
+  console.log('src/MatHub.Agent/mathub-agent.ico (' + sizes.join(', ') + ' px)');
 
   await browser.close();
 })().catch(e => { console.error(e); process.exit(1); });

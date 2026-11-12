@@ -3,7 +3,7 @@
 @using MatHub.Services.Access
 @*
     The menus (SHELL-01 .. SHELL-19): one panel per menu of the switcher at the foot (SHELL-15), the one of the page shown.
-    - hub:      Run (the main action), overview, clients, groups, enrollment; software (packages, updates); automation (scripts, jobs); rollout
+    - hub:      Run (the main action), overview, clients, groups, enrollment; software (packages, updates, kiosk); automation (scripts, sequences, secrets, jobs); rollout
     - settings: profile, password, my data
     - admin:    users, roles, connections, activity, system (administrators only)
     Every item is shown only with its permission: the business layer checks again.
@@ -60,12 +60,26 @@
             }
         }
 
-        @if (Me.Can(Permission.ScriptsView) || Me.Can(Permission.JobsView))
+        @if (Me.Can(Permission.KioskManage))
+        {
+            @if (!Me.Can(Permission.PackagesView))
+            {
+                <li class="mat-nav__group" role="presentation">@L["Shell.Group.Software"]</li>
+            }
+            <li><a class="@Cls(Under("/kiosk"))" href="/kiosk" aria-current="@Cur(Under("/kiosk"))">@Ui.Icon("store")<span>@L["Kiosk.Title"]</span></a></li>
+        }
+
+        @if (Me.Can(Permission.ScriptsView) || Me.Can(Permission.JobsView) || Me.Can(Permission.SecretsManage))
         {
             <li class="mat-nav__group" role="presentation">@L["Shell.Group.Automation"]</li>
             @if (Me.Can(Permission.ScriptsView))
             {
                 <li><a class="@Cls(Under("/scripts"))" href="/scripts" aria-current="@Cur(Under("/scripts"))">@Ui.Icon("terminal")<span>@L["Scripts.Title"]</span></a></li>
+                <li><a class="@Cls(Under("/sequences"))" href="/sequences" aria-current="@Cur(Under("/sequences"))">@Ui.Icon("route")<span>@L["Sequences.Title"]</span></a></li>
+            }
+            @if (Me.Can(Permission.SecretsManage))
+            {
+                <li><a class="@Cls(Under("/secrets"))" href="/secrets" aria-current="@Cur(Under("/secrets"))">@Ui.Icon("key")<span>@L["Secrets.Title"]</span></a></li>
             }
             @if (Me.Can(Permission.JobsView))
             {

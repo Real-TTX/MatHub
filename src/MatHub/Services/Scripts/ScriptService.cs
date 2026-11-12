@@ -173,6 +173,65 @@ public static class ScriptService
     public static CompileResult Compile(ScriptEditor editor, ScriptModel model)
         => editor == ScriptEditor.Flow ? ScriptBlocks.CompileFlow(model) : ScriptBlocks.CompileBlocks(model);
 
+    /// <summary>A new script from a template (<see cref="ScriptTemplates"/>): its editor and model, compiled; it is a start, the person changes it.</summary>
+    public static async Task<Outcome<Script>> CreateFromTemplateAsync(AppDbContext db, Actor actor, string key, CancellationToken ct = default)
+    {
+        if (!actor.Can(Permission.ScriptsEdit))
+        {
+            return Outcome<Script>.Denied();
+        }
+
+        if (ScriptTemplates.Find(key) is not { } template)
+        {
+            return Outcome<Script>.Fail(Localization.Text.T("Scripts.Template.Unknown"));
+        }
+
+        var model = template.Model();
+        var compiled = Compile(template.Editor, model);
+        var script = new Script
+        {
+            Name = Localization.Text.T("Templates." + template.Key + ".Name"),
+            Description = Localization.Text.T("Templates." + template.Key + ".Hint"),
+            Editor = template.Editor,
+            Language = ScriptLanguage.PowerShell,
+            Model = ScriptBlocks.Serialize(model),
+            Content = compiled.Code,
+            TimeoutSeconds = 3600,
+        };
+        db.Scripts.Add(script);
+        ActivityLog.Add(db, actor, "script", "create", script.Name);
+        await db.SaveChangesAsync(ct);
+        return Outcome<Script>.Success(script);
+    }
+
+    /// <summary>A script of blocks as a new flow ("Name (flow)"): the same steps, one base; the blocks stay as they are.</summary>
+    public static async Task<Outcome<Script>> CopyAsFlowAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
+    {
+        if (!actor.Can(Permission.ScriptsEdit))
+        {
+            return Outcome<Script>.Denied();
+        }
+
+        var source = await db.Scripts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (source is null || source.Editor != ScriptEditor.Blocks)
+        {
+            return Outcome<Script>.Denied();
+        }
+
+        var flow = ScriptBlocks.BlocksToFlow(ScriptBlocks.Parse(source.Model));
+        var compiled = ScriptBlocks.CompileFlow(flow);
+        var name = Localization.Text.T("Scripts.FlowOf", source.Name);
+        var copy = new Script
+        {
+            Name = name.Length > 120 ? name[..120] : name, Description = source.Description, Category = source.Category, Language = ScriptLanguage.PowerShell,
+            Editor = ScriptEditor.Flow, Model = ScriptBlocks.Serialize(flow), Content = compiled.Ok ? compiled.Code : source.Content, TimeoutSeconds = source.TimeoutSeconds,
+        };
+        db.Scripts.Add(copy);
+        ActivityLog.Add(db, actor, "script", "convert", copy.Name);
+        await db.SaveChangesAsync(ct);
+        return Outcome<Script>.Success(copy);
+    }
+
     /// <summary>A copy of a script ("Name (copy)").</summary>
     public static async Task<Outcome<Script>> DuplicateAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
     {

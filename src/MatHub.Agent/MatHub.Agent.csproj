@@ -13,6 +13,9 @@
     <AssemblyName>mathub-agent</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- the kiosk and the dialogs of scripts in the session of the person signed in -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>mathub-agent.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- one file with .NET inside, for a computer that has no .NET -->
@@ -27,13 +30,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.*" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.*" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- the protocol: one file for the server and the agent -->
     <Compile Include="..\MatHub.Shared\AgentProtocol.cs" Link="Protocol\AgentProtocol.cs" />
     <InternalsVisibleTo Include="MatHub.Tests" />
+    <EmbeddedResource Include="mathub-agent.ico" LogicalName="MatHub.Agent.mathub-agent.ico" />
   </ItemGroup>
 
 </Project>

@@ -13,6 +13,7 @@ public static class JobUi
         JobKind.WingetUpgrade => "refresh",
         JobKind.Inventory => "list-checks",
         JobKind.Restart => "power",
+        JobKind.Sequence => "route",
         _ => "play",
     };
 

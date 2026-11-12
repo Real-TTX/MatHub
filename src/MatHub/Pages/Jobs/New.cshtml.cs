@@ -25,6 +25,8 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
 
     [BindProperty] public string PackageId { get; set; } = string.Empty;
 
+    [BindProperty] public string SequenceId { get; set; } = string.Empty;
+
     [BindProperty] public string WingetId { get; set; } = string.Empty;
 
     [BindProperty] public string Clients { get; set; } = string.Empty;
@@ -45,6 +47,8 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
     public List<Choice> ScriptChoices { get; private set; } = [];
 
     public List<Choice> PackageChoices { get; private set; } = [];
+
+    public List<Choice> SequenceChoices { get; private set; } = [];
 
     public List<Choice> ClientChoices { get; private set; } = [];
 
@@ -70,6 +74,11 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
         {
             Kind = q["action"] == "uninstall" ? JobKind.PackageUninstall : JobKind.PackageInstall;
             PackageId = package.ToString(CultureInfo.InvariantCulture);
+        }
+        else if (long.TryParse(q["sequence"], out var sequence))
+        {
+            Kind = JobKind.Sequence;
+            SequenceId = sequence.ToString(CultureInfo.InvariantCulture);
         }
         else if (Enum.TryParse<JobKind>(q["kind"], true, out var kind))
         {
@@ -119,7 +128,8 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
             Kind == JobKind.WingetUpgrade ? WingetId : null,
             Ids(Clients),
             Ids(Groups),
-            notBefore);
+            notBefore,
+            long.TryParse(SequenceId, out var q) ? q : null);
         var outcome = await JobService.CreateAsync(db, Me.Actor, request, ct: HttpContext.RequestAborted);
         if (!outcome.Ok)
         {
@@ -145,6 +155,7 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
             .ToList();
         ScriptChoices = (await ScriptService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name)).ToList();
         PackageChoices = (await PackageService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name, Text.T("Packages.Kind." + x.Kind))).ToList();
+        SequenceChoices = (await SequenceService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name)).ToList();
         ClientChoices = (await ClientService.ChoicesAsync(db, actor, ct))
             .Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name, Text.T(x.Online ? "Clients.State.Online" : "Clients.State.Offline"))).ToList();
         GroupChoices = (await GroupService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name, null, x.Colour)).ToList();

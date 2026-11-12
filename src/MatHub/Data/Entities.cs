@@ -47,6 +47,9 @@ public sealed class User : SoftEntity
     /// <summary>The permission set of a user (not of an administrator); null = no permission at all (the person sees only the start page).</summary>
     public long? AccessRoleId { get; set; }
 
+    /// <summary>The client the person tests scripts on ("my computer"), chosen in the script editor.</summary>
+    public long? TestClientId { get; set; }
+
     public AccessRole? AccessRole { get; set; }
 
     /// <summary>
@@ -492,6 +495,9 @@ public enum JobKind
 
     Inventory = 5,
     Restart = 6,
+
+    /// <summary>A sequence: several steps one after the other (scripts, packages, restarts), each handed to the agent when the one before is done.</summary>
+    Sequence = 7,
 }
 
 /// <summary>Work for clients: a script, an install, an update. Every client gets a <see cref="JobRun"/>; the job keeps what ran (a copy, so a later edit changes nothing).</summary>
@@ -517,8 +523,15 @@ public sealed class Job : Entity
     /// <summary>Not before this time (UTC); null = at once.</summary>
     public DateTime? NotBeforeDate { get; set; }
 
-    /// <summary>Who or what started it: a person (CreateUserId), the planner of the assignments, the updates.</summary>
+    /// <summary>Who or what started it: a person (CreateUserId), the planner of the assignments, the updates, the kiosk of a client.</summary>
     public string Origin { get; set; } = "manual";
+
+    public long? SequenceId { get; set; }
+
+    public long? KioskItemId { get; set; }
+
+    /// <summary>A sequence: its steps as JSON (<c>Services/Jobs/JobStep</c>), each with what the agent runs; a copy taken when the job was made.</summary>
+    public string? Steps { get; set; }
 
     public ICollection<JobRun> Runs { get; set; } = [];
 }
@@ -556,6 +569,102 @@ public sealed class JobRun : Entity
 
     /// <summary>What the script wrote (stdout and stderr), the end of it when it is long.</summary>
     public string? Output { get; set; }
+
+    /// <summary>A sequence: the step that runs or comes next (0 = the first).</summary>
+    public int Step { get; set; }
+
+    /// <summary>When the agent took the current step (a sequence; else the start).</summary>
+    public DateTime? StepDate { get; set; }
+
+    /// <summary>A sequence after a restart: the next step waits until the client started again after this moment (or half an hour went by).</summary>
+    public DateTime? WaitBootDate { get; set; }
+}
+
+// ==== Secrets, sequences, kiosk =======================================================================================================
+
+/// <summary>
+/// A value scripts need and nobody should read: the password of a domain join, a Wi-Fi key. Encrypted with DataProtection; the value is never shown again and
+/// goes only to the agent, with the run whose script names it (<c>$env:MATHUB_SECRET_NAME</c>); the agent hides it in the output.
+/// </summary>
+public sealed class Secret : SoftEntity
+{
+    /// <summary>Capitals, digits and _ (it becomes the name of an environment variable).</summary>
+    public string Name { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    /// <summary>A user name that belongs to it (the account of a domain join), shown and handed out as it is.</summary>
+    public string? UserName { get; set; }
+
+    public string ValueProtected { get; set; } = string.Empty;
+}
+
+public enum SequenceStepKind
+{
+    Script = 1,
+    PackageInstall = 2,
+    PackageUninstall = 3,
+
+    /// <summary>Restarts the computer; the next step waits until it is back.</summary>
+    Restart = 4,
+
+    Inventory = 5,
+    Wait = 6,
+    WingetUpgrade = 7,
+}
+
+/// <summary>Scripts, packages and restarts one after the other, as one job (a "task sequence"): a computer set up in one go, a migration in steps.</summary>
+public sealed class Sequence : SoftEntity
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? Category { get; set; }
+
+    /// <summary>The steps as JSON (<c>Services/Jobs/SequenceStep</c>).</summary>
+    public string Steps { get; set; } = "[]";
+}
+
+public enum KioskKind
+{
+    Script = 1,
+    Package = 2,
+    Sequence = 3,
+}
+
+/// <summary>
+/// An offer in the kiosk of the clients: the people at a computer start it themselves (install a program, repair Outlook, map the drives). The agent asks the
+/// server for the offers when its kiosk opens, so the list is always the current one.
+/// </summary>
+public sealed class KioskItem : SoftEntity
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? Category { get; set; }
+
+    /// <summary>The icon of the tile (one of <c>Services/Kiosk/KioskService.Icons</c>).</summary>
+    public string Icon { get; set; } = "box";
+
+    public KioskKind Kind { get; set; } = KioskKind.Script;
+
+    public long? ScriptId { get; set; }
+
+    public long? PackageId { get; set; }
+
+    public long? SequenceId { get; set; }
+
+    /// <summary>The groups whose clients see it; empty = every client.</summary>
+    public List<long> GroupIds { get; set; } = [];
+
+    /// <summary>A question the person answers before it starts ("Outlook closes. Go on?"); empty = it starts at once.</summary>
+    public string? Confirm { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public int SortOrder { get; set; }
 }
 
 // ==== Rollout (network boot) ==========================================================================================================

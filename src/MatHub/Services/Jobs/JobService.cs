@@ -3,12 +3,14 @@ using System.Text.Json;
 using MatHub.Data;
 using MatHub.Protocol;
 using MatHub.Services.Access;
+using MatHub.Services.Scripts;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 namespace MatHub.Services.Jobs;
 
 /// <summary>What a person asks for: run something on clients and on the members of groups.</summary>
-public sealed record JobRequest(JobKind Kind, long? ScriptId, long? PackageId, string? WingetId, IReadOnlyList<long> ClientIds, IReadOnlyList<long> GroupIds, DateTime? NotBefore = null);
+public sealed record JobRequest(JobKind Kind, long? ScriptId, long? PackageId, string? WingetId, IReadOnlyList<long> ClientIds, IReadOnlyList<long> GroupIds, DateTime? NotBefore = null, long? SequenceId = null);
 
 /// <summary>A job in a list; <paramref name="NotBefore"/>: it starts then (planned), null: at once.</summary>
 public sealed record JobRow(long Id, string Name, JobKind Kind, string Origin, DateTime Created, string? CreatedBy, int Total, int Queued, int Running, int Succeeded, int Failed, int Cancelled, DateTime? NotBefore = null)
@@ -21,9 +23,11 @@ public sealed record JobCriteria(string? Search, string? State, string? Kind, lo
 
 public sealed record JobList(IReadOnlyList<JobRow> Items, int Total, int Matching);
 
-public sealed record RunRow(long Id, long ClientId, string ClientName, RunStatus Status, DateTime? Started, DateTime? Finished, int? ExitCode, string? Output);
+/// <param name="Step">A sequence: the step that runs or comes next (0 = the first).</param>
+public sealed record RunRow(long Id, long ClientId, string ClientName, RunStatus Status, DateTime? Started, DateTime? Finished, int? ExitCode, string? Output, int Step = 0);
 
-public sealed record JobDetail(Job Job, string? CreatedBy, IReadOnlyList<RunRow> Runs, string? ScriptText);
+/// <param name="Steps">A sequence: its steps (else empty).</param>
+public sealed record JobDetail(Job Job, string? CreatedBy, IReadOnlyList<RunRow> Runs, string? ScriptText, IReadOnlyList<JobStep> Steps);
 
 public sealed record ClientRunRow(long Id, long JobId, string JobName, JobKind Kind, RunStatus Status, DateTime Created, DateTime? Started, DateTime? Finished, int? ExitCode);
 
@@ -40,7 +44,7 @@ public static class JobService
     /// <summary>The permission a kind of job needs.</summary>
     public static string PermissionFor(JobKind kind) => kind switch
     {
-        JobKind.Script => Permission.ScriptsRun,
+        JobKind.Script or JobKind.Sequence => Permission.ScriptsRun,
         JobKind.PackageInstall or JobKind.PackageUninstall or JobKind.WingetUpgrade => Permission.PackagesDeploy,
         _ => Permission.ClientsManage,
     };
@@ -82,14 +86,14 @@ public static class JobService
     }
 
     /// <summary>Makes a job for the clients and groups of the request that the actor reaches. Fails when nothing can run or no client is left.</summary>
-    public static async Task<Outcome<Job>> CreateAsync(AppDbContext db, Actor actor, JobRequest request, string origin = "manual", long? assignmentId = null, CancellationToken ct = default)
+    public static async Task<Outcome<Job>> CreateAsync(AppDbContext db, Actor actor, JobRequest request, string origin = "manual", long? assignmentId = null, CancellationToken ct = default, long? kioskItemId = null)
     {
         if (!actor.Can(PermissionFor(request.Kind)))
         {
             return Outcome<Job>.Denied();
         }
 
-        var job = new Job { Kind = request.Kind, Origin = origin, PackageAssignmentId = assignmentId, NotBeforeDate = request.NotBefore };
+        var job = new Job { Kind = request.Kind, Origin = origin, PackageAssignmentId = assignmentId, NotBeforeDate = request.NotBefore, KioskItemId = kioskItemId };
         AgentJob template;
         switch (request.Kind)
         {
@@ -143,6 +147,25 @@ public static class JobService
             case JobKind.Restart:
                 job.Name = Localization.Text.T("Jobs.Name.Restart");
                 template = new AgentJob { Kind = JobKinds.Restart, TimeoutSeconds = 120 };
+                break;
+            case JobKind.Sequence:
+                var sequence = request.SequenceId is { } qid ? await db.Sequences.AsNoTracking().FirstOrDefaultAsync(q => q.Id == qid, ct) : null;
+                if (sequence is null || !actor.Can(Permission.ScriptsView))
+                {
+                    return Outcome<Job>.Denied();
+                }
+
+                var built = await SequenceService.BuildAsync(db, actor, sequence, ct);
+                if (!built.Ok)
+                {
+                    return built.NotAllowed ? Outcome<Job>.Denied() : Outcome<Job>.Fail(built.Error!);
+                }
+
+                job.Name = sequence.Name;
+                job.SequenceId = sequence.Id;
+                job.Steps = SequenceService.Serialize(built.Value!);
+                job.TimeoutSeconds = built.Value!.Max(x => x.Template.TimeoutSeconds);
+                template = built.Value![0].Template;
                 break;
             default:
                 return Outcome<Job>.Denied();
@@ -230,7 +253,7 @@ public static class JobService
         };
         q = c.Kind switch
         {
-            "script" => q.Where(j => j.Kind == JobKind.Script),
+            "script" => q.Where(j => j.Kind == JobKind.Script || j.Kind == JobKind.Sequence),
             "package" => q.Where(j => j.Kind == JobKind.PackageInstall || j.Kind == JobKind.PackageUninstall || j.Kind == JobKind.WingetUpgrade),
             "system" => q.Where(j => j.Kind == JobKind.Inventory || j.Kind == JobKind.Restart),
             _ => q,
@@ -268,7 +291,7 @@ public static class JobService
 
         var runs = await db.JobRuns.AsNoTracking().Where(r => r.JobId == id && reachable.Contains(r.ClientId))
             .OrderBy(r => r.Client!.Name)
-            .Select(r => new RunRow(r.Id, r.ClientId, r.Client!.Name, r.Status, r.StartedDate, r.FinishedDate, r.ExitCode, r.Output))
+            .Select(r => new RunRow(r.Id, r.ClientId, r.Client!.Name, r.Status, r.StartedDate, r.FinishedDate, r.ExitCode, r.Output, r.Step))
             .ToListAsync(ct);
         if (runs.Count == 0)
         {
@@ -277,8 +300,9 @@ public static class JobService
 
         var by = job.CreateUserId is { } uid ? await db.Users.IgnoreQueryFilters().Where(u => u.Id == uid).Select(u => u.DisplayName).FirstOrDefaultAsync(ct) : null;
         var template = Template(job);
-        var text = template?.Script ?? template?.Arguments;
-        return new JobDetail(job, by, runs, text);
+        var steps = job.Kind == JobKind.Sequence ? SequenceService.StepsOf(job) : [];
+        var text = job.Kind == JobKind.Sequence ? null : template?.Script ?? template?.Arguments;
+        return new JobDetail(job, by, runs, text, steps);
     }
 
     /// <summary>The runs of one client, newest first (the tab of the client).</summary>
@@ -362,7 +386,7 @@ public static class JobService
         var job = new Job
         {
             Name = old.Name, Kind = old.Kind, ScriptId = old.ScriptId, PackageId = old.PackageId, Payload = old.Payload, Language = old.Language,
-            TimeoutSeconds = old.TimeoutSeconds, Origin = "manual",
+            TimeoutSeconds = old.TimeoutSeconds, Origin = "manual", SequenceId = old.SequenceId, Steps = old.Steps,
         };
         foreach (var c in clients)
         {
@@ -377,31 +401,108 @@ public static class JobService
 
     // ---- the agent ---------------------------------------------------------------------------------------------------------------
 
-    /// <summary>The queued runs of a client that are due, at most <paramref name="max"/>: they are running from now on.</summary>
-    public static async Task<IReadOnlyList<AgentJob>> TakeAsync(AppDbContext db, long clientId, int max, CancellationToken ct = default)
+    /// <summary>A sequence waits after a restart until the computer started again, at most this long.</summary>
+    public static readonly TimeSpan RestartWait = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// The queued runs of a client that are due, at most <paramref name="max"/>: they are running from now on. A sequence hands out its current step (after a
+    /// restart only when the client started again). The secrets the script names go with it (<see cref="SecretService.ResolveAsync"/>).
+    /// </summary>
+    public static async Task<IReadOnlyList<AgentJob>> TakeAsync(AppDbContext db, long clientId, int max, CancellationToken ct = default, IDataProtectionProvider? protection = null)
     {
         var now = DateTime.UtcNow;
         var runs = await db.JobRuns.Include(r => r.Job)
             .Where(r => r.ClientId == clientId && r.Status == RunStatus.Queued && (r.Job!.NotBeforeDate == null || r.Job.NotBeforeDate <= now))
             .OrderBy(r => r.Id).Take(max).ToListAsync(ct);
+        DateTime? boot = null;
+        if (runs.Any(r => r.WaitBootDate is not null))
+        {
+            boot = await db.Clients.Where(c => c.Id == clientId).Select(c => c.BootDate).FirstOrDefaultAsync(ct);
+        }
+
         var jobs = new List<AgentJob>();
         foreach (var run in runs)
         {
-            if (Template(run.Job!) is not { } template)
+            AgentJob? template;
+            if (run.Job!.Kind == JobKind.Sequence)
+            {
+                // after a restart: the computer has to be back first (a newer boot), or half an hour has gone by
+                if (run.WaitBootDate is { } since && (boot is null || boot <= since) && now - since < RestartWait)
+                {
+                    continue;
+                }
+
+                var steps = SequenceService.StepsOf(run.Job);
+                template = run.Step < steps.Count ? steps[run.Step].Template with { Title = run.Job.Name + " · " + steps[run.Step].Name } : null;
+                run.WaitBootDate = null;
+            }
+            else
+            {
+                template = Template(run.Job) is { } t ? t with { Title = run.Job.Name } : null;
+            }
+
+            if (template is null)
             {
                 run.Status = RunStatus.Failed;
                 run.FinishedDate = now;
-                run.Output = "MatHub could not read the job.";
+                run.Output = (run.Output ?? string.Empty) + "MatHub could not read the job.";
                 continue;
             }
 
+            if (protection is not null && template.Script is { } script && await SecretService.ResolveAsync(db, protection, script, ct) is { } secrets)
+            {
+                template = template with { Secrets = secrets };
+            }
+
             run.Status = RunStatus.Running;
-            run.StartedDate = now;
+            run.StartedDate ??= now;
+            run.StepDate = now;
             jobs.Add(template with { RunId = run.Id });
         }
 
         await db.SaveChangesAsync(ct);
         return jobs;
+    }
+
+    /// <summary>Whether the client may download the installer of the package now: a run of it is running (also as the current step of a sequence).</summary>
+    public static async Task<bool> PackageAllowedAsync(AppDbContext db, long clientId, long packageId, CancellationToken ct = default)
+    {
+        if (await db.JobRuns.AnyAsync(r => r.ClientId == clientId && r.Job!.PackageId == packageId && r.Status == RunStatus.Running, ct))
+        {
+            return true;
+        }
+
+        var sequences = await db.JobRuns.AsNoTracking().Where(r => r.ClientId == clientId && r.Status == RunStatus.Running && r.Job!.Kind == JobKind.Sequence)
+            .Select(r => new { r.Step, r.Job }).ToListAsync(ct);
+        return sequences.Any(r => SequenceService.StepsOf(r.Job!) is var steps && r.Step < steps.Count && steps[r.Step].PackageId == packageId);
+    }
+
+    /// <summary>The state of a run of this client (the kiosk follows what it started).</summary>
+    public static async Task<RunState?> StateAsync(AppDbContext db, long clientId, long runId, CancellationToken ct = default)
+    {
+        var run = await db.JobRuns.AsNoTracking().Include(r => r.Job).FirstOrDefaultAsync(r => r.Id == runId && r.ClientId == clientId, ct);
+        return run is null ? null : State(run);
+    }
+
+    public static RunState State(JobRun run)
+    {
+        var steps = run.Job?.Kind == JobKind.Sequence ? SequenceService.StepsOf(run.Job).Count : 0;
+        return new RunState
+        {
+            RunId = run.Id,
+            Status = run.Status switch
+            {
+                RunStatus.Running => RunStates.Running,
+                RunStatus.Succeeded => RunStates.Succeeded,
+                RunStatus.Failed => RunStates.Failed,
+                RunStatus.Cancelled => RunStates.Cancelled,
+                _ => RunStates.Queued,
+            },
+            ExitCode = run.ExitCode,
+            Finished = run.FinishedDate,
+            Step = steps == 0 ? 0 : Math.Min(run.Step + 1, steps),
+            Steps = steps,
+        };
     }
 
     /// <summary>The result of a run as the agent reports it (only a running run of that client).</summary>
@@ -413,14 +514,44 @@ public static class JobService
             return false;
         }
 
-        run.Status = result.Succeeded ? RunStatus.Succeeded : RunStatus.Failed;
+        var now = DateTime.UtcNow;
         run.ExitCode = result.ExitCode;
-        run.FinishedDate = DateTime.UtcNow;
-        run.Output = Tail(result.Output);
+        if (run.Job!.Kind == JobKind.Sequence)
+        {
+            // a sequence: the output of every step under its heading; the next step is queued, or the run ends
+            var steps = SequenceService.StepsOf(run.Job);
+            var step = run.Step < steps.Count ? steps[run.Step] : null;
+            var outcome = result.Succeeded ? "done" : step?.ContinueOnError == true ? "failed, going on" : "failed";
+            var heading = $"=== {run.Step + 1}/{steps.Count} {step?.Name} – {outcome}{(result.ExitCode is { } code ? $" (exit {code})" : string.Empty)}";
+            run.Output = Tail(string.Join('\n', new[] { run.Output, heading, result.Output?.TrimEnd() }.Where(x => !string.IsNullOrEmpty(x))));
+            if (step is null || (!result.Succeeded && !step.ContinueOnError))
+            {
+                run.Status = RunStatus.Failed;
+                run.FinishedDate = now;
+            }
+            else if (run.Step + 1 < steps.Count)
+            {
+                run.Step++;
+                run.Status = RunStatus.Queued;
+                run.WaitBootDate = step.Kind == SequenceStepKind.Restart ? now : null;
+            }
+            else
+            {
+                run.Status = RunStatus.Succeeded;
+                run.FinishedDate = now;
+            }
+        }
+        else
+        {
+            run.Status = result.Succeeded ? RunStatus.Succeeded : RunStatus.Failed;
+            run.FinishedDate = now;
+            run.Output = Tail(result.Output);
+        }
+
         await db.SaveChangesAsync(ct);
 
         // what is installed changed: the next call of the agent brings an inventory (the planner waits for it)
-        if (run.Job!.Kind is JobKind.PackageInstall or JobKind.PackageUninstall or JobKind.WingetUpgrade or JobKind.Script)
+        if (run.Job!.Kind is JobKind.PackageInstall or JobKind.PackageUninstall or JobKind.WingetUpgrade or JobKind.Script or JobKind.Sequence)
         {
             await db.Clients.Where(c => c.Id == clientId).ExecuteUpdateAsync(s => s.SetProperty(c => c.InventoryRequested, true), ct);
         }
@@ -432,10 +563,10 @@ public static class JobService
     {
         var now = DateTime.UtcNow;
         var lost = await db.JobRuns.Include(r => r.Job)
-            .Where(r => r.Status == RunStatus.Running && r.StartedDate != null && r.StartedDate < now.AddMinutes(-15))
+            .Where(r => r.Status == RunStatus.Running && (r.StepDate ?? r.StartedDate) != null && (r.StepDate ?? r.StartedDate) < now.AddMinutes(-15))
             .ToListAsync(ct);
         var count = 0;
-        foreach (var run in lost.Where(r => r.StartedDate!.Value.AddSeconds(r.Job!.TimeoutSeconds).AddMinutes(15) < now))
+        foreach (var run in lost.Where(r => (r.StepDate ?? r.StartedDate)!.Value.AddSeconds(r.Job!.TimeoutSeconds).AddMinutes(15) < now))
         {
             run.Status = RunStatus.Failed;
             run.FinishedDate = now;

@@ -26,7 +26,11 @@ and install new computers over the network. A small agent on every computer, one
 | **Packages** | winget packages, uploaded MSI and EXE installers, scripted installs; MatHub sees by the inventory whether a package is installed; a program a client has becomes a package with one click |
 | **Assignments** | "The laptops have Firefox": MatHub makes the jobs that are missing every minute, checks the result in the next inventory and installs updates by itself |
 | **Updates** | What winget offers, program by program and on which clients – one click updates a program everywhere, another updates everything |
-| **Scripts** | PowerShell, cmd or bash in a code editor (highlighting, snippets, search, comment and duplicate lines, pairs that close themselves, full screen); steps one after the other in the block editor (each with an "only if" and "go on after an error"); a flow with branches on a canvas that zooms – the visual editors write PowerShell |
+| **Scripts** | PowerShell, cmd or bash in a code editor (highlighting, snippets, search, comment and duplicate lines, pairs that close themselves, full screen); steps one after the other in the block editor (each with an "only if" and "go on after an error"); a flow with branches on a canvas that zooms. Both visual editors share **one catalog of about 60 actions** and one compiler to PowerShell: programs (winget, MSI, uninstall by name), files (copy, unzip, shortcuts, rights), system (registry, services, scheduled tasks, time zone, rename), network and domain (**domain join and leave**, DNS, Wi-Fi, firewall, printers), users (local accounts and groups), Windows (updates, features, Store apps, BitLocker, Defender) and **dialogs**; values take variables (`{{serial}}`, the answers of a dialog); templates to begin with; blocks become a flow with one click. **Test from the editor**: what is in it (saved or not) runs on your computer (MatHub remembers it) – as a **trial run** that changes nothing and only says what each action would do, or for real – with its output live under the editor |
+| **Dialogs and wizards** | A script asks the person at the computer: a message, yes or no, a form with fields (text, password, choice, check, number) on one or more pages – a wizard with Back and Next – a notice, "please wait". The answers fill variables, an "If" branches on them; the agent shows the dialogs in the session of the person and answers "nobody" when nobody is signed in |
+| **Secrets** | Passwords the scripts need (the account of a domain join, a Wi-Fi key): encrypted, never shown again, handed only to the agent of a run whose script names them, and hidden in its output |
+| **Sequences** | Scripts, packages, restarts, waits, updates and an inventory one after the other, as one job: MatHub hands the agent one step at a time, waits after a restart until the computer is back, and stops at an error unless a step may fail |
+| **Kiosk** | Offers the people at the computers start themselves (a script, a program, a sequence; for all clients or some groups, with a question before it starts): the window of the agent asks MatHub for them when it opens, so the list is always the current one, and shows each run until it is done |
 | **Jobs** | Now or at a time to come; every run on every client with its state, its exit code and everything it wrote; cancel what has not started, run the failed ones again |
 | **Rollout** | PXE with iPXE and a TFTP server built in: a task names a MAC address, a computer name and a profile, and at its next network boot the computer installs Windows unattended (Windows PE through wimboot, an answer file MatHub writes), enrolls its agent and joins its group; Linux and iPXE scripts of your own too |
 | **Permissions** | Roles with permissions per area, for all clients or only the members of some groups – checked in the business layer, not only on the page; MatIdentity can give roles and permissions |
@@ -40,6 +44,9 @@ English and German, light and dark, a phone layout, and an installable app (PWA)
 | ![The updates winget offers, program by program](docs/images/updates.png) | ![A client: its software with the updates](docs/images/software.png) |
 | ![A job and its runs, one failed](docs/images/job.png) | ![Rollout: computers that are installed at their next network boot](docs/images/rollout.png) |
 | ![The inventory of a client: hardware, system, disks, network](docs/images/inventory.png) | ![A group by rules: a tag or a notebook name](docs/images/group.png) |
+| ![The kiosk on a computer: offers by category, the state of the last run](docs/images/agent-kiosk.png) | ![A wizard of a script, shown by the agent to the person at the computer](docs/images/agent-wizard.png) |
+| ![A flow with a wizard, a domain join and a restart (template)](docs/images/flow-wizard.png) | ![A sequence: domain, restart, programs, printers, updates](docs/images/sequence.png) |
+| ![The offers of the kiosk in MatHub](docs/images/kiosk.png) | ![An offer of the kiosk with its preview](docs/images/kiosk-offer.png) |
 
 <p align="center"><img src="docs/images/phone-client.png" width="300" alt="The software of a client on a phone in dark mode" /></p>
 
@@ -76,6 +83,11 @@ to `%ProgramFiles%\MatHub Agent` and runs as the service **MatHub Agent** (Local
   reports each one. There is no open port on the client.
 - It updates itself to the version its server offers (the image builds both), checks the download and puts the old one back when the new one does not start.
 - `mathub-agent uninstall` removes it; `mathub-agent inventory` shows what it would send.
+- **The kiosk**: the install puts **MatHub Kiosk** into the start menu and starts `mathub-agent tray` at every sign-in (a symbol beside the clock). The tray
+  opens the kiosk and shows the dialogs of scripts; both talk to the service through a local named pipe, so the person's process never sees the secret of
+  the agent, and the service asks the server. A script shows a dialog with `mathub-agent ask` (the visual editors write that for you).
+- The secrets a script names reach it as environment variables of its own process (`MATHUB_SECRET_NAME`, in PowerShell `Get-MatHubSecret 'NAME'`), and
+  every place of their values in the output becomes `***`.
 
 The protocol is one source file for both sides: [`src/MatHub.Shared/AgentProtocol.cs`](src/MatHub.Shared/AgentProtocol.cs).
 

@@ -139,6 +139,7 @@ public sealed class MatHubPlatform(InstanceService instance, AgentFiles agent, I
         o.Permission(Permission.ScriptsView, T("Skripte ansehen", "View scripts"), null, view);
         o.Permission(Permission.ScriptsEdit, T("Skripte bearbeiten", "Edit scripts"), null, all);
         o.Permission(Permission.ScriptsRun, T("Skripte ausführen", "Run scripts"), null, operate);
+        o.Permission(Permission.SecretsManage, T("Geheimnisse verwalten", "Manage secrets"), T("Kennwörter für Skripte, z. B. für den Domänenbeitritt.", "Passwords for scripts, e.g. for a domain join."), all);
         o.Permission(Permission.PackagesView, T("Pakete ansehen", "View packages"), null, view);
         o.Permission(Permission.PackagesEdit, T("Pakete bearbeiten", "Edit packages"), null, all);
         o.Permission(Permission.PackagesDeploy, T("Software verteilen", "Deploy software"), T("Zuweisungen und Updates.", "Assignments and updates."), operate);
@@ -146,6 +147,7 @@ public sealed class MatHubPlatform(InstanceService instance, AgentFiles agent, I
         o.Permission(Permission.JobsManage, T("Aufträge abbrechen", "Cancel jobs"), null, operate);
         o.Permission(Permission.RolloutView, T("Rollout ansehen", "View rollout"), null, view);
         o.Permission(Permission.RolloutManage, T("Rollout verwalten", "Manage rollout"), null, all);
+        o.Permission(Permission.KioskManage, T("Kiosk verwalten", "Manage the kiosk"), T("Was die Benutzer an ihren Computern selbst starten.", "What people start at their computers themselves."), all);
     }
 
     public async Task<IReadOnlyList<MatHealthCheck>> CheckHealthAsync(MatPlatformCall call, CancellationToken ct)
