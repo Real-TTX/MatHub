@@ -41,13 +41,6 @@
                         <td data-label="@L["Software.Update"]" class="mat-table__keep-label">@if (s.AvailableVersion is not null) { <span class="mat-pill mat-pill--accent">@s.AvailableVersion</span> }</td>
                         <td class="mat-table__cell-actions">
                             <div class="mat-table__actions">
-                                @if (Model.CanUpdate && s.AvailableVersion is not null && s.WingetId is not null)
-                                {
-                                    <form method="post" asp-page-handler="Update">
-                                        <input type="hidden" name="wingetId" value="@s.WingetId" />
-                                        <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["Software.UpdateNamed", s.Name]" data-tip="@L["Software.UpdateOne"]">@Ui.Icon("refresh")</button>
-                                    </form>
-                                }
                                 @if (Model.CanMakePackage && s.WingetId is not null && !Model.Packages.ContainsKey(s.WingetId))
                                 {
                                     <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="@PackageService.NewFromWingetUrl(s.WingetId, s.Name, s.Publisher)" aria-label="@L["Software.MakePackageNamed", s.Name]" data-tip="@L["Software.MakePackage"]">@Ui.Icon("plus")</a>
@@ -60,12 +53,8 @@
         </mh-table>
     }
 
-    @if (Model.CanUpdate && Model.UpdateCount > 0)
+    @if (Model.UpdateCount > 0)
     {
-        <div class="mat-actions">
-            <form method="post" asp-page-handler="Update">
-                <button type="submit" class="mat-btn mat-btn--primary" data-confirm="@L["Software.UpdateAllConfirm", Model.UpdateCount, c.Name]" data-confirm-ok="@L["Software.UpdateAll"]">@Ui.Icon("refresh")<span>@L["Software.UpdateAllCount", Model.UpdateCount]</span></button>
-            </form>
-        </div>
+        <p class="mat-hint mh-mt">@Ui.Icon("info") @L["Software.UpdatesThroughVersions"] <a href="/updates">@L["Updates.Title"]</a></p>
     }
 </div>

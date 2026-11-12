@@ -1,0 +1,129 @@
+@page "/packages/{id:long}/versions"
+@model MatHub.Pages.Packages.VersionsModel
+@{
+    var p = Model.Package;
+    ViewData["Title"] = p.Name;
+    ViewData["PageSub"] = L["Versions.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Packages.Title"].Value, "/packages"), (p.Name, $"/packages/edit?id={p.Id}"), (L["Versions.Title"].Value, null) };
+    ViewData["Tab"] = "versions";
+    var adding = Model.Add == "version" || Model.AddTo is not null;
+}
+
+<partial name="_PackageTabs" model="p.Id" />
+
+<div class="mh-versions">
+    <div class="mh-versions__bar">
+        <p class="mh-muted">@(p.PilotGroupId is null ? L["Versions.NoPilot"].Value : L["Versions.PilotIs", p.PilotGroup?.Name ?? string.Empty].Value)</p>
+        @if (Model.CanEdit && Model.Newer is not null)
+        {
+            <form method="post" asp-page-handler="Catalog" asp-route-id="@p.Id"><button type="submit" class="mat-btn mat-btn--secondary" data-busy="@L["Store.Caching"]">@Ui.Icon("sparkles")<span>@L["Versions.TakeCatalog", Model.Newer]</span></button></form>
+        }
+        @if (Model.CanEdit && !adding)
+        {
+            <a class="mat-btn mat-btn--primary" href="/packages/@p.Id/versions?add=version">@Ui.Icon("upload")<span>@L["Versions.New"]</span></a>
+        }
+    </div>
+
+    @if (adding && Model.CanEdit)
+    {
+        <form class="mat-card mat-form mh-versions__form" method="post" asp-page-handler="Save" asp-route-id="@p.Id" enctype="multipart/form-data" novalidate>
+            <input type="hidden" name="Add" value="@Model.Add" />
+            <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("upload")@(Model.AddTo is { } to ? L["Versions.AddInstaller", to.Version].Value : L["Versions.New"].Value)</h2></div>
+            <div class="mat-card__body mat-form">
+                <partial name="_FormSummary" model="ViewData.ModelState" />
+                <partial name="_InstallerFields" model="(Model.Input, Model.AddTo is null)" />
+                <p class="mat-hint">@L["Versions.New.Hint"]</p>
+            </div>
+            <div class="mat-card__body mat-btn-row">
+                <button type="submit" class="mat-btn mat-btn--primary" data-busy="@L["Store.Caching"]">@Ui.Icon("save")<span>@L["Common.Save"]</span></button>
+                <a class="mat-btn mat-btn--secondary" href="/packages/@p.Id/versions">@L["Common.Cancel"]</a>
+            </div>
+        </form>
+    }
+
+    @if (Model.Versions.Count == 0)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("layers", L["Versions.Empty"].Value, L["Versions.EmptyText"].Value, Model.CanEdit, $"/packages/{p.Id}/versions?add=version", L["Versions.New"].Value, null))" />
+    }
+
+    @foreach (var v in Model.Versions)
+    {
+        var s = v.Version.Status;
+        <section class="mat-card mh-version mh-version--@s.ToString().ToLowerInvariant()" aria-labelledby="v-@v.Version.Id">
+            <div class="mat-card__head">
+                <h2 class="mat-card__title" id="v-@v.Version.Id">@Ui.Icon("layers")@L["Store.Version", MatHub.Services.Packages.PackageVersions.Show(v.Version.Version)]</h2>
+                <span class="mat-pill mat-pill--@(s switch { VersionStatus.Approved => "ok", VersionStatus.Testing => "info", VersionStatus.New => "warn", _ => "plain" })">@L["Versions.Status." + s]</span>
+                <span class="mh-head-end mh-muted mh-version__meta">@L["Versions.Source." + v.Version.Source] · @Ui.When(v.Version.CreateDate, Model.Zone)@if (v.Version.ApprovedDate is { } ad && s != VersionStatus.New) { <span> · @L["Versions.ApprovedBy", v.ApprovedBy ?? "MatHub"] @Ui.When(ad, Model.Zone)</span> } · @L["Versions.ClientsHave", v.Clients]</span>
+            </div>
+            <div class="mat-card__body">
+                <ul class="mh-installers">
+                    @foreach (var i in v.Installers)
+                    {
+                        <li class="mh-installer">
+                            <span class="mat-pill mat-pill--plain mh-installer__platform">@L["Versions.Platform." + MatHub.Services.Packages.PackageVersions.Code(i.Architecture)]</span>
+                            <span class="mh-installer__what">
+                                @Ui.Icon(JobUi.PackageIcon(i.Kind))
+                                @switch (i.Kind)
+                                {
+                                    case PackageKind.Winget:
+                                        <span>winget <code class="mh-code-name">@i.WingetId</code> @(i.WingetVersion is null ? L["Versions.Latest"].Value : "= " + i.WingetVersion)</span>
+                                        break;
+                                    case PackageKind.Script:
+                                        <span>@L["Packages.Kind.Script"]</span>
+                                        break;
+                                    default:
+                                        <span>@i.FileName <span class="mh-muted">@(i.FileSize is { } size ? Ui.Bytes(size) : string.Empty)</span></span>
+                                        break;
+                                }
+                            </span>
+                            @if (!string.IsNullOrWhiteSpace(i.Arguments))
+                            {
+                                <code class="mh-code-name mh-installer__args">@i.Arguments</code>
+                            }
+                            @if (Model.CanEdit && s is VersionStatus.New or VersionStatus.Testing)
+                            {
+                                <form method="post" asp-page-handler="RemoveInstaller" asp-route-id="@p.Id" asp-route-installer="@i.Id" class="mh-installer__remove">
+                                    <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["Versions.RemoveInstaller"]" data-tip="@L["Versions.RemoveInstaller"]">@Ui.Icon("trash")</button>
+                                </form>
+                            }
+                        </li>
+                    }
+                </ul>
+                @if (v.Installers.Count == 0)
+                {
+                    <p class="mh-muted">@L["Versions.NoInstallers"]</p>
+                }
+            </div>
+            <div class="mat-card__body mh-version__actions">
+                @if (Model.CanDeploy)
+                {
+                    @if (s == VersionStatus.New && p.PilotGroupId is not null)
+                    {
+                        <form method="post" asp-page-handler="Status" asp-route-id="@p.Id" asp-route-version="@v.Version.Id" asp-route-status="Testing"><button type="submit" class="mat-btn mat-btn--secondary">@Ui.Icon("activity")<span>@L["Versions.Test"]</span></button></form>
+                    }
+                    @if (s is VersionStatus.New or VersionStatus.Testing or VersionStatus.Retired)
+                    {
+                        <form method="post" asp-page-handler="Status" asp-route-id="@p.Id" asp-route-version="@v.Version.Id" asp-route-status="Approved"><button type="submit" class="mat-btn mat-btn--primary" data-confirm="@L["Versions.Approve.Confirm", v.Version.Version]" data-confirm-ok="@L["Versions.Approve"]">@Ui.Icon("check")<span>@L[s == VersionStatus.Retired ? "Versions.ApproveAgain" : "Versions.Approve"]</span></button></form>
+                    }
+                    @if (s is VersionStatus.Approved or VersionStatus.Testing)
+                    {
+                        <form method="post" asp-page-handler="Status" asp-route-id="@p.Id" asp-route-version="@v.Version.Id" asp-route-status="Retired"><button type="submit" class="mat-btn mat-btn--ghost" data-confirm="@L["Versions.Retire.Confirm", v.Version.Version]" data-confirm-ok="@L["Versions.Retire"]">@Ui.Icon("x-circle")<span>@L["Versions.Retire"]</span></button></form>
+                    }
+                }
+                @if (Model.CanEdit && s is VersionStatus.New or VersionStatus.Testing)
+                {
+                    <a class="mat-btn mat-btn--ghost" href="/packages/@p.Id/versions?add=@v.Version.Id">@Ui.Icon("plus")<span>@L["Versions.AddPlatform"]</span></a>
+                }
+                @if (Model.CanEdit && s is VersionStatus.New or VersionStatus.Retired)
+                {
+                    <span class="mat-btn-row__spacer"></span>
+                    <form method="post" asp-page-handler="Delete" asp-route-id="@p.Id" asp-route-version="@v.Version.Id"><button type="submit" class="mat-btn mat-btn--ghost mat-btn--danger-text" data-confirm="@L["Versions.Delete.Confirm", v.Version.Version]" data-confirm-ok="@L["Common.Delete"]">@Ui.Icon("trash")<span>@L["Common.Delete"]</span></button></form>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/busy.js" asp-append-version="true"></script>
+}

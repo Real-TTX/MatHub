@@ -320,14 +320,15 @@ public static class SequenceService
 
                     var package = await db.Packages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == step.PackageId, ct);
                     var uninstall = step.Kind == SequenceStepKind.PackageUninstall;
-                    if (package is null || JobService.PackageTemplate(package, uninstall) is not { } template)
+                    var version = package is null ? null : await JobService.VersionForAsync(db, package.Id, null, ct);
+                    if (package is null || version is null || Packages.PackageVersions.Template(version, uninstall) is not { } template)
                     {
                         return Outcome<List<JobStep>>.Fail(Localization.Text.T("Sequences.Error.PackageEmpty", number));
                     }
 
                     result.Add(new JobStep
                     {
-                        Name = Localization.Text.T(uninstall ? "Jobs.Name.Uninstall" : "Jobs.Name.Install", package.Name), Kind = step.Kind,
+                        Name = Localization.Text.T(uninstall ? "Jobs.Name.UninstallVersion" : "Jobs.Name.InstallVersion", package.Name, version.Version), Kind = step.Kind,
                         ContinueOnError = step.ContinueOnError, Template = template, PackageId = package.Id,
                     });
                     break;

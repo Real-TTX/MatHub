@@ -35,6 +35,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
 
     public DbSet<PackageAssignment> PackageAssignments => Set<PackageAssignment>();
 
+    public DbSet<PackageVersion> PackageVersions => Set<PackageVersion>();
+
+    public DbSet<PackageInstaller> PackageInstallers => Set<PackageInstaller>();
+
     public DbSet<Job> Jobs => Set<Job>();
 
     public DbSet<JobRun> JobRuns => Set<JobRun>();
@@ -201,12 +205,33 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             e.Property(x => x.Description).HasMaxLength(1000);
             e.Property(x => x.Version).HasMaxLength(60);
             e.Property(x => x.WingetId).HasMaxLength(200);
+            e.Property(x => x.DetectionValue).HasMaxLength(300);
+            e.HasOne(x => x.PilotGroup).WithMany().HasForeignKey(x => x.PilotGroupId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.UpdateState != SoftEntity.Deleted);
+        });
+
+        b.Entity<PackageVersion>(e =>
+        {
+            e.ToTable("PackageVersion");
+            e.Property(x => x.Version).HasMaxLength(100);
+            e.Property(x => x.Source).HasMaxLength(20);
+            e.Property(x => x.Notes).HasMaxLength(2000);
+            e.HasIndex(x => new { x.PackageId, x.Status });
+            e.HasOne(x => x.Package).WithMany(x => x.Versions).HasForeignKey(x => x.PackageId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<PackageInstaller>(e =>
+        {
+            e.ToTable("PackageInstaller");
             e.Property(x => x.FileName).HasMaxLength(255);
             e.Property(x => x.FileSha256).HasMaxLength(64);
-            e.Property(x => x.InstallArguments).HasMaxLength(1000);
+            e.Property(x => x.Arguments).HasMaxLength(1000);
             e.Property(x => x.UninstallCommand).HasMaxLength(4000);
-            e.Property(x => x.DetectionValue).HasMaxLength(300);
-            e.HasQueryFilter(x => x.UpdateState != SoftEntity.Deleted);
+            e.Property(x => x.WingetId).HasMaxLength(200);
+            e.Property(x => x.WingetVersion).HasMaxLength(100);
+            e.Property(x => x.ProductCode).HasMaxLength(60);
+            e.Property(x => x.SourceUrl).HasMaxLength(1000);
+            e.HasOne(x => x.PackageVersion).WithMany(x => x.Installers).HasForeignKey(x => x.PackageVersionId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<PackageAssignment>(e =>

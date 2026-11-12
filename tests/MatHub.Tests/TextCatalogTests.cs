@@ -125,7 +125,7 @@ public sealed partial class TextCatalogTests
         => string.Join(',', PlaceholderRegex().Matches(text).Select(m => m.Value).Distinct().Order(StringComparer.Ordinal));
 
     // L["Key"], L["Key", ...], Text.T("Key"), t('Js.Key'), and the keys written as plain strings in a ternary (L[x ? "A.B" : "C.D"]): every quoted Area.Thing of the catalog's areas
-    [GeneratedRegex("""["'](?<key>(Common|Shell|Settings|Password|Admin|Account|About|Users|System|Lists|Landing|Errors|Connections|Activity|Data|Dashboard|Clients|Groups|Enrollment|Scripts|Blocks|Flow|Jobs|Runs|Packages|Assignments|Software|Updates|Inventory|Rollout|Devices|Profiles|Images|NetbootSetup|Roles|Search|Sequences|Secrets|Kiosk|Templates|Store|ScriptFiles|Js)\.[A-Za-z0-9.-]+)["']""")]
+    [GeneratedRegex("""["'](?<key>(Common|Shell|Settings|Password|Admin|Account|About|Users|System|Lists|Landing|Errors|Connections|Activity|Data|Dashboard|Clients|Groups|Enrollment|Scripts|Blocks|Flow|Jobs|Runs|Packages|Assignments|Software|Updates|Inventory|Rollout|Devices|Profiles|Images|NetbootSetup|Roles|Search|Sequences|Secrets|Kiosk|Templates|Store|ScriptFiles|Versions|Js)\.[A-Za-z0-9.-]+)["']""")]
     private static partial Regex KeyRegex();
 
     // the keys of the scripts: t('Editors.AddStep'); a key built at run time (t('Editors.Port.' + port)) ends with a dot and is left to the theory above

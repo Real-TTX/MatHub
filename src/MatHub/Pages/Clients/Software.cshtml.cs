@@ -22,7 +22,6 @@ public sealed class SoftwareModel(AppDbContext db) : ClientPageModel(db)
 
     public bool CanMakePackage => Me.Can(Permission.PackagesEdit);
 
-    public bool CanUpdate => Client.Status == ClientStatus.Active && Me.Can(Permission.PackagesDeploy);
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -55,24 +54,5 @@ public sealed class SoftwareModel(AppDbContext db) : ClientPageModel(db)
             NounOne = Text.T("Software.One"),
         };
         return Page();
-    }
-
-    /// <summary>Installs one update (<paramref name="wingetId"/>) or all of them on this client.</summary>
-    public async Task<IActionResult> OnPostUpdateAsync(string? wingetId)
-    {
-        var outcome = await UpdateService.UpdateAsync(Db, Me.Actor, string.IsNullOrWhiteSpace(wingetId) ? null : wingetId, null, [Id], HttpContext.RequestAborted);
-        if (outcome.NotAllowed)
-        {
-            return NotFound();
-        }
-
-        if (!outcome.Ok)
-        {
-            FlashError(outcome.Error!);
-            return LocalRedirect($"/clients/{Id}/software");
-        }
-
-        Flash(Text.T("Jobs.Started", outcome.Value!.Name));
-        return LocalRedirect($"/jobs/{outcome.Value.Id}");
     }
 }

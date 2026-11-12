@@ -1,86 +1,86 @@
 @page "/packages/edit"
 @model MatHub.Pages.Packages.EditModel
 @{
-    ViewData["Title"] = Model.IsNew ? L["Packages.New"].Value : Model.Name;
-    ViewData["Crumbs"] = new List<(string, string?)> { (L["Packages.Title"].Value, "/packages"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+    ViewData["Title"] = Model.Name;
+    ViewData["PageSub"] = Model.Publisher;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Packages.Title"].Value, "/packages"), (Model.Name, null) };
     ViewData["Tab"] = "general";
     var ro = !Model.CanEdit;
+    var approved = Model.Versions.FirstOrDefault(v => v.Version.Status == VersionStatus.Approved);
+    var testing = Model.Versions.FirstOrDefault(v => v.Version.Status == VersionStatus.Testing);
+    var waiting = Model.Versions.Count(v => v.Version.Status == VersionStatus.New);
 }
 
-@if (!Model.IsNew)
-{
-    <partial name="_PackageTabs" model="Model.Id!.Value" />
-}
+<partial name="_PackageTabs" model="Model.Id!.Value" />
 
-<form class="mat-form" method="post" enctype="multipart/form-data" novalidate>
+<form class="mat-form" method="post" novalidate>
     <partial name="_FormSummary" model="ViewData.ModelState" />
     <div class="mat-cols">
-        <div class="mat-col-12 mat-col-lg-6">
+        <div class="mat-col-12 mat-col-lg-7">
             <div class="mat-card">
                 <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("box")@L["Packages.Tab.General"]</h2></div>
                 <div class="mat-card__body mat-form">
                     <mh-field name="Name" label="@L["Common.Name"]" required value="@Model.Name" maxlength="120" msg-required="@L["Common.NameRequired"]" disabled="@ro" />
                     <mh-field name="Publisher" label="@L["Software.Publisher"]" value="@Model.Publisher" maxlength="120" optional disabled="@ro" />
                     <mh-field name="Description" kind="textarea" label="@L["Common.Description"]" value="@Model.Description" maxlength="1000" rows="2" optional disabled="@ro" />
-                    <mh-field name="Kind" kind="radios" label="@L["Packages.Kind"]" value="@Model.Kind" options="Model.Kinds" disabled="@ro" />
-                </div>
-            </div>
-        </div>
-        <div class="mat-col-12 mat-col-lg-6">
-            <div class="mat-card">
-                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("download")@L["Packages.Install"]</h2></div>
-                <div class="mat-card__body mat-form">
-                    @* winget *@
-                    <mh-field name="WingetId" label="@L["Software.WingetId"]" value="@Model.WingetId" mono placeholder="Mozilla.Firefox" show-if="Kind" show-value="Winget" required hint="@L["Packages.WingetId.Hint"]" disabled="@ro" />
-                    <mh-field name="AutoUpdate" kind="switch" label="@L["Packages.AutoUpdate"]" value="@Model.AutoUpdate.ToString()" show-if="Kind" show-value="Winget" hint="@L["Packages.AutoUpdate.Hint"]" disabled="@ro" />
-
-                    @* an installer of MatHub *@
-                    <div class="mat-field" data-show-if="Kind" data-show-value="Msi,Exe">
-                        <label class="mat-label" for="Installer">@L["Packages.File"]</label>
-                        @if (Model.FileName is not null)
-                        {
-                            <p class="mh-file"><span class="mh-name">@Ui.Icon("file")@Model.FileName</span> <span class="mh-muted">@Ui.Bytes(Model.FileSize ?? 0)</span><br /><small class="mat-mono mh-muted mh-wrap">SHA-256 @Model.FileSha256</small></p>
-                        }
-                        <div class="mat-upload mat-upload--compact" data-upload>
-                            <input class="mat-upload__input" type="file" id="Installer" name="Installer" accept=".msi,.exe" disabled="@ro" />
-                        </div>
-                        <span class="mat-hint">@L[Model.FileName is null ? "Packages.File.Hint" : "Packages.File.Replace"]</span>
-                    </div>
-                    <mh-field name="Version" label="@L["Software.Version"]" value="@Model.Version" maxlength="60" show-if="Kind" show-value="Msi,Exe,Script" optional disabled="@ro" />
-                    <mh-field name="InstallArguments" label="@L["Packages.Arguments"]" value="@Model.InstallArguments" mono show-if="Kind" show-value="Msi,Exe" optional placeholder="/S" hint="@L["Packages.Arguments.Hint"]" disabled="@ro" />
-                    <mh-field name="UninstallCommand" label="@L["Packages.UninstallCommand"]" value="@Model.UninstallCommand" mono show-if="Kind" show-value="Exe" optional placeholder="&quot;C:\Program Files\App\uninstall.exe&quot; /S" disabled="@ro" />
-
-                    @* a scripted install *@
-                    <mh-field name="InstallScript" kind="textarea" label="@L["Packages.InstallScript"]" value="@Model.InstallScript" mono rows="6" show-if="Kind" show-value="Script" required disabled="@ro" />
-                    <mh-field id="UninstallScript" name="UninstallCommand" kind="textarea" label="@L["Packages.UninstallScript"]" value="@Model.UninstallCommand" mono rows="4" show-if="Kind" show-value="Script" optional disabled="@ro" />
                 </div>
             </div>
             <div class="mat-card">
                 <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("search")@L["Packages.Detection"]</h2></div>
                 <div class="mat-card__body mat-form">
-                    <mh-field name="Detection" kind="radios" label="@L["Packages.Detection.How"]" value="@Model.Detection" options="Model.Detections" disabled="@ro" />
+                    <mh-field name="Detection" kind="radios" label="@L["Packages.Detection.How"]" value="@Model.Detection" options="Model.Detections" disabled="@ro" hint="@L["Packages.Detection.Version"]" />
                     <mh-field name="DetectionValue" label="@L["Packages.DetectionValue"]" value="@Model.DetectionValue" show-if="Detection" show-value="DisplayName,WingetId" optional hint="@L["Packages.DetectionValue.Hint"]" disabled="@ro" />
                 </div>
             </div>
-            @if (!Model.IsNew && Me.Can(MatHub.Services.Access.Permission.KioskManage) && Me.Can(MatHub.Services.Access.Permission.PackagesDeploy))
-            {
-                <div class="mat-card mat-card--flush">
-                    <div class="mat-card__body">
-                        <ul class="mat-itemlist">
-                            <li class="mat-item"><a class="mat-item__main" href="/kiosk/edit?package=@Model.Id">
-                                <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("store")</span></span>
-                                <span class="mat-item__body"><span class="mat-item__title">@L["Kiosk.Offer"]</span><span class="mat-item__text">@L["Kiosk.Offer.Package.Hint"]</span></span>
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("refresh")@L["Packages.NewVersions"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="WingetId" label="@L["Software.WingetId"]" value="@Model.WingetId" mono optional placeholder="Mozilla.Firefox" hint="@L["Packages.WingetId.Catalog"]" disabled="@ro" />
+                    <mh-field name="AutoUpdate" kind="switch" label="@L["Packages.AutoUpdate"]" value="@Model.AutoUpdate.ToString()" hint="@L["Packages.AutoUpdate.Hint"]" disabled="@ro" />
+                    <mh-field name="PilotGroup" kind="select" label="@L["Packages.Pilot"]" value="@Model.PilotGroup" options="Model.GroupChoices" picker="search" optional hint="@L["Packages.Pilot.Hint"]" disabled="@ro" />
+                </div>
+            </div>
+        </div>
+        <div class="mat-col-12 mat-col-lg-5">
+            <section class="mat-card mat-card--flush" aria-labelledby="package-versions">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="package-versions">@Ui.Icon("layers")@L["Versions.Title"]</h2></div>
+                <div class="mat-card__body">
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
+                        <li class="mat-item"><a class="mat-item__main" href="/packages/@Model.Id/versions">
+                            <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--ok">@Ui.Icon("check")</span></span>
+                            <span class="mat-item__body"><span class="mat-item__title">@(approved is null ? L["Versions.NoneApproved"].Value : L["Versions.ApprovedIs", MatHub.Services.Packages.PackageVersions.Show(approved.Version.Version)].Value)</span>
+                                <span class="mat-item__text">@(approved is null ? L["Versions.NoneApproved.Hint"].Value : L["Versions.ClientsHave", approved.Clients].Value)</span></span>
+                            <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                        </a></li>
+                        @if (testing is not null)
+                        {
+                            <li class="mat-item"><a class="mat-item__main" href="/packages/@Model.Id/versions">
+                                <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--info">@Ui.Icon("activity")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@L["Versions.TestingIs", testing.Version.Version]</span><span class="mat-item__text">@L["Versions.ClientsHave", testing.Clients]</span></span>
                                 <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
                             </a></li>
-                        </ul>
-                    </div>
+                        }
+                        @if (waiting > 0 || Model.Newer is not null)
+                        {
+                            <li class="mat-item"><a class="mat-item__main" href="/packages/@Model.Id/versions">
+                                <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("sparkles")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@(waiting > 0 ? L["Versions.Waiting", waiting].Value : L["Versions.InCatalog", Model.Newer!].Value)</span><span class="mat-item__text">@L["Versions.Waiting.Hint"]</span></span>
+                                <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                            </a></li>
+                        }
+                        <li class="mat-item"><a class="mat-item__main" href="/packages/@Model.Id/assignments">
+                            <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("folder")</span></span>
+                            <span class="mat-item__body"><span class="mat-item__title">@L["Packages.Tab.Assignments"]</span><span class="mat-item__text">@L["Packages.Assignments.Hint"]</span></span>
+                            <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                        </a></li>
+                    </ul>
                 </div>
-            }
+            </section>
         </div>
     </div>
     @if (Model.CanEdit)
     {
-        <mh-buttons save="@L[Model.IsNew ? "Common.Create" : "Common.Save"]" back="/packages" delete-handler="@(Model.IsNew ? null : "Delete")" delete-label="@L["Packages.Delete"]" delete-confirm="@L["Packages.DeleteConfirm", Model.Name]" />
+        <mh-buttons save="@L["Common.Save"]" back="/packages" delete-handler="Delete" delete-label="@L["Packages.Delete"]" delete-confirm="@L["Packages.DeleteConfirm", Model.Name]" />
     }
     else
     {

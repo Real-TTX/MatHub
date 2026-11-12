@@ -30,7 +30,7 @@ public static class InventoryService
         client.DiskFreeBytes = r.Disks.Count == 0 ? null : r.Disks.Sum(d => d.FreeBytes);
         client.IpAddresses = Trim(string.Join(", ", r.Network.SelectMany(n => n.Addresses).Distinct()), 1000);
         client.MacAddresses = Trim(string.Join(", ", r.Network.Select(n => NormalizeMac(n.MacAddress)).Where(m => m is not null).Distinct()), 1000);
-        client.Inventory = JsonSerializer.Serialize(new { r.Disks, r.Network, r.BiosVersion, r.BiosDate, r.ProcessorCores, r.ProcessorThreads, r.Graphics, r.OsInstallDate, r.SecureBoot }, Json);
+        client.Inventory = JsonSerializer.Serialize(new { r.Disks, r.Network, r.BiosVersion, r.BiosDate, r.ProcessorCores, r.ProcessorThreads, r.Graphics, r.OsInstallDate, r.SecureBoot, r.Platform }, Json);
         client.LastInventoryDate = DateTime.UtcNow;
         client.InventoryRequested = false;
 

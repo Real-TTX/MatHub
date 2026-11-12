@@ -13,7 +13,7 @@
         <mh-stat icon="monitor" label="@L["Dashboard.Clients"]" value="@cl.Total.ToString()" hint="@L["Dashboard.OnlineOf", cl.Online]" href="/clients" tone="@(cl.Online > 0 ? "ok" : null)" />
         @if (Model.Actor.Can(Permission.PackagesView))
         {
-            <mh-stat icon="refresh" label="@L["Dashboard.Updates"]" value="@cl.WithUpdates.ToString()" hint="@L["Dashboard.UpdatePrograms", Model.UpdatePrograms]" href="/updates" tone="@(cl.WithUpdates > 0 ? "warn" : "ok")" />
+            <mh-stat icon="sparkles" label="@L["Dashboard.Versions"]" value="@Model.PendingVersions.Count.ToString()" hint="@L["Dashboard.Outdated", Model.Outdated]" href="/updates" tone="@(Model.PendingVersions.Count > 0 ? "warn" : "ok")" />
         }
         @if (Model.Actor.Can(Permission.ClientsEnroll))
         {
@@ -136,19 +136,19 @@
                 </div>
             </section>
         }
-        @if (Model.TopUpdates.Count > 0)
+        @if (Model.PendingVersions.Count > 0)
         {
-            <section class="mat-card mat-card--flush" aria-labelledby="updates-title">
-                <div class="mat-card__head"><h2 class="mat-card__title" id="updates-title">@Ui.Icon("refresh")@L["Dashboard.TopUpdates"]</h2><a class="mat-btn mat-btn--ghost mat-btn--sm mh-head-end" href="/updates"><span>@L["Dashboard.AllUpdates"]</span>@Ui.Icon("chevron-right")</a></div>
+            <section class="mat-card mat-card--flush" aria-labelledby="versions-title">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="versions-title">@Ui.Icon("sparkles")@L["Dashboard.PendingVersions"]</h2><a class="mat-btn mat-btn--ghost mat-btn--sm mh-head-end" href="/updates"><span>@L["Dashboard.AllUpdates"]</span>@Ui.Icon("chevron-right")</a></div>
                 <div class="mat-card__body">
                     <ul class="mat-itemlist mat-itemlist--lines-inset">
-                        @foreach (var u in Model.TopUpdates)
+                        @foreach (var v in Model.PendingVersions)
                         {
                             <li class="mat-item">
-                                <a class="mat-item__main" href="/updates?q=@Uri.EscapeDataString(u.WingetId)">
-                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--warn">@Ui.Icon("box")</span></span>
-                                    <span class="mat-item__body"><span class="mat-item__title">@u.Name</span><span class="mat-item__text mat-mono">@u.Installed → @u.Available</span></span>
-                                    <span class="mat-item__end"><span class="mat-item__note">@Ui.ClientCount(u.Clients)</span></span>
+                                <a class="mat-item__main" href="/packages/@v.PackageId/versions">
+                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--@(v.Status == VersionStatus.Testing ? "info" : "warn")">@Ui.Icon("box")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@v.Package</span><span class="mat-item__text mat-mono">@(v.Approved ?? "–") → @v.Version</span></span>
+                                    <span class="mat-item__end"><span class="mat-pill mat-pill--@(v.Status == VersionStatus.Testing ? "info" : "warn")">@L["Versions.Status." + v.Status]</span></span>
                                 </a>
                             </li>
                         }

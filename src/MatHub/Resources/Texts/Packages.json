@@ -10,7 +10,7 @@
   "Packages.New": { "en": "New package", "de": "Neues Paket" },
   "Packages.Kind": { "en": "Kind", "de": "Art" },
   "Packages.Kind.Winget": { "en": "winget", "de": "winget" },
-  "Packages.Kind.Winget.Hint": { "en": "From the Windows Package Manager by its id; always the newest version.", "de": "Aus dem Windows-Paketmanager über seine ID; immer die neueste Version." },
+  "Packages.Kind.Winget.Hint": { "en": "Through the Windows Package Manager by its id, exactly the version of this version (pinned).", "de": "Über den Windows-Paketmanager per ID, genau die Version dieser Version (fest)." },
   "Packages.Kind.Msi": { "en": "MSI", "de": "MSI" },
   "Packages.Kind.Msi.Hint": { "en": "An MSI file you upload; installed quietly.", "de": "Eine hochgeladene MSI-Datei; still installiert." },
   "Packages.Kind.Exe": { "en": "EXE", "de": "EXE" },
@@ -70,7 +70,7 @@
 
   "Updates.ShowClients": { "en": "Show the clients with the update of {0}", "de": "Die Clients mit dem Update von {0} zeigen" },
   "Updates.Title": { "en": "Updates", "de": "Updates" },
-  "Updates.Sub": { "en": "What winget offers on your clients – update one program everywhere, or everything", "de": "Was winget auf deinen Clients anbietet – ein Programm überall aktualisieren, oder alles" },
+  "Updates.Sub": { "en": "New versions are approved by you: what waits, what the catalog has, which clients are behind.", "de": "Neue Versionen gibst du frei: was wartet, was der Katalog hat, welche Clients zurückliegen." },
   "Updates.One": { "en": "program", "de": "Programm" },
   "Updates.Many": { "en": "programs", "de": "Programme" },
   "Updates.Search": { "en": "Program or winget id", "de": "Programm oder winget-ID" },

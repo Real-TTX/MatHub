@@ -7,6 +7,7 @@ using MatHub.Services.Access;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using YamlDotNet.RepresentationModel;
+using PackageVersion = MatHub.Data.PackageVersion;
 
 namespace MatHub.Services.Packages;
 
@@ -62,7 +63,10 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
     {
         if (State().Loaded is not { } loaded || DateTime.UtcNow - loaded > TimeSpan.FromHours(24))
         {
-            await RefreshAsync(db, ct);
+            if ((await RefreshAsync(db, ct)).Error is null)
+            {
+                await PrepareNewerAsync(db, ct);
+            }
         }
     }
 
@@ -383,7 +387,7 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         return new[] { "png", "ico" }.Select(e => Path.Combine(Root, "icons", sha + "." + e)).FirstOrDefault(File.Exists);
     }
 
-    // ---- a program becomes a package ------------------------------------------------------------------------------------------------
+    // ---- a program becomes a package, a new version of the catalog a version of it ------------------------------------------------------
 
     /// <summary>The kind of package an installer type of winget becomes when it is kept in MatHub (null: only through winget).</summary>
     public static PackageKind? PackageKindOf(string type) => type switch
@@ -404,8 +408,40 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         _ => null,
     };
 
-    /// <summary>A winget package of the program: the client installs (and updates) it from the internet; MatHub sees it by its winget id.</summary>
-    public async Task<Outcome<Package>> AddWingetAsync(AppDbContext db, Actor actor, string wingetId, CancellationToken ct = default)
+    /// <summary>The platform of an installer of the manifest (null: one MatHub does not distribute, e.g. arm32).</summary>
+    public static InstallerArchitecture? ArchitectureOf(string? architecture) => architecture?.ToLowerInvariant() switch
+    {
+        "x64" => InstallerArchitecture.X64,
+        "x86" => InstallerArchitecture.X86,
+        "arm64" => InstallerArchitecture.Arm64,
+        "neutral" or null => InstallerArchitecture.Neutral,
+        _ => null,
+    };
+
+    /// <summary>
+    /// The installer of each platform MatHub takes from a manifest: for the computer (not one user) first, a language-neutral or English or German one, and one
+    /// that can be kept in MatHub (MSI before EXE).
+    /// </summary>
+    public static IReadOnlyList<(InstallerArchitecture Architecture, CatalogInstaller Installer)> Choose(IReadOnlyList<CatalogInstaller> installers)
+    {
+        static int Rank(CatalogInstaller i) =>
+            (i.Scope == "user" ? 100 : 0)
+            + (i.Locale is null or "en-US" or "de-DE" ? 0 : 10)
+            + (PackageKindOf(i.Type) switch { PackageKind.Msi => 0, PackageKind.Exe => 1, _ => 5 });
+        return installers.Select(i => (Architecture: ArchitectureOf(i.Architecture), Installer: i))
+            .Where(x => x.Architecture is not null)
+            .GroupBy(x => x.Architecture!.Value)
+            .Select(g => (g.Key, g.OrderBy(x => Rank(x.Installer)).First().Installer))
+            .OrderBy(x => x.Key)
+            .ToList();
+    }
+
+    /// <summary>
+    /// A program of the catalog as a package of MatHub: the package (its detection by the winget id, new versions prepared by themselves) and its current
+    /// version, approved, with an installer for every platform – kept in MatHub, or (<paramref name="viaWinget"/>, or when there is no file) winget with this
+    /// version pinned. A program that is a package already gets the version of the catalog as a new one (not approved).
+    /// </summary>
+    public async Task<Outcome<Package>> AddAsync(AppDbContext db, Actor actor, string wingetId, bool viaWinget, CancellationToken ct = default)
     {
         if (!actor.Can(Permission.PackagesEdit))
         {
@@ -417,41 +453,101 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
             return Outcome<Package>.Denied();
         }
 
-        if (d.PackageId is { } existing && await db.Packages.FirstOrDefaultAsync(p => p.Id == existing, ct) is { } package)
+        Package package;
+        var status = VersionStatus.Approved;
+        if (d.PackageId is { } existing && await db.Packages.FirstOrDefaultAsync(p => p.Id == existing, ct) is { } found)
         {
-            return Outcome<Package>.Success(package);
+            package = found;
+            status = VersionStatus.New;
+            if (await db.PackageVersions.AnyAsync(v => v.PackageId == package.Id && v.Version == d.Version, ct))
+            {
+                return Outcome<Package>.Success(package);
+            }
+        }
+        else
+        {
+            var saved = await PackageService.SaveAsync(db, actor, null, new PackageForm(d.Name, d.Publisher, d.ShortDescription ?? d.Description, d.WingetId, DetectionKind.WingetId, d.WingetId, true), ct);
+            if (!saved.Ok)
+            {
+                return saved;
+            }
+
+            package = saved.Value!;
         }
 
-        return await PackageService.SaveAsync(db, actor, null, new PackageForm(
-            d.Name, d.Publisher, d.ShortDescription ?? d.Description, PackageKind.Winget, null, d.WingetId, null, null, null, DetectionKind.WingetId, d.WingetId, true), ct);
+        var version = await PrepareAsync(db, actor, package, d, status, "store", viaWinget, ct);
+        return version.Ok ? Outcome<Package>.Success(package) : Outcome<Package>.Fail(version.Error!);
     }
 
-    /// <summary>
-    /// A package with the installer kept in MatHub: downloaded from the publisher, checked by the SHA-256 of the manifest, stored like an upload; the silent
-    /// switches and the detection (the name in "Apps") come from the manifest.
-    /// </summary>
-    public async Task<Outcome<Package>> CacheAsync(AppDbContext db, Actor actor, string wingetId, int installer, CancellationToken ct = default)
+    /// <summary>A version of a package from the manifest of the catalog, with its installers (downloaded and checked, or winget pinned).</summary>
+    private async Task<Outcome<PackageVersion>> PrepareAsync(AppDbContext db, Actor actor, Package package, CatalogDetail d, VersionStatus status, string source, bool viaWinget, CancellationToken ct)
     {
-        if (!actor.Can(Permission.PackagesEdit))
+        var created = await PackageVersions.CreateAsync(db, actor, package.Id, d.Version, source, null, ct);
+        if (!created.Ok)
         {
-            return Outcome<Package>.Denied();
+            return created;
         }
 
-        if (await DetailAsync(db, actor, wingetId, ct) is not { } d || d.Installers.FirstOrDefault(i => i.Index == installer) is not { } chosen)
+        var version = created.Value!;
+        var chosen = Choose(d.Installers);
+        foreach (var (architecture, installer) in chosen)
         {
-            return Outcome<Package>.Denied();
+            var kind = viaWinget ? null : PackageKindOf(installer.Type);
+            if (kind is null)
+            {
+                await PackageVersions.AddInstallerAsync(db, actor, packageFiles, version.Id, new InstallerForm(architecture, PackageKind.Winget,
+                    WingetId: d.WingetId, WingetVersion: d.Version, SourceUrl: installer.Url), null, null, ct);
+                continue;
+            }
+
+            var temp = await DownloadAsync(installer, ct);
+            if (temp.Error is not null)
+            {
+                return Outcome<PackageVersion>.Fail(temp.Error);
+            }
+
+            try
+            {
+                var fileName = Path.GetFileName(new Uri(installer.Url).LocalPath);
+                if (string.IsNullOrWhiteSpace(Path.GetExtension(fileName)) || Path.GetExtension(fileName).ToLowerInvariant() is not (".msi" or ".exe"))
+                {
+                    fileName = d.WingetId + (kind == PackageKind.Msi ? ".msi" : ".exe");
+                }
+
+                await using var content = File.OpenRead(temp.Path!);
+                var added = await PackageVersions.AddInstallerAsync(db, actor, packageFiles, version.Id, new InstallerForm(architecture, kind.Value,
+                    Arguments: SilentArguments(installer), ProductCode: installer.ProductCode, SourceUrl: installer.Url), fileName, content, ct);
+                if (!added.Ok)
+                {
+                    return Outcome<PackageVersion>.Fail(added.Error!);
+                }
+            }
+            finally
+            {
+                File.Delete(temp.Path!);
+            }
         }
 
-        if (PackageKindOf(chosen.Type) is not { } kind)
+        if (status != VersionStatus.New && chosen.Count > 0)
         {
-            return Outcome<Package>.Fail(Localization.Text.T("Store.Error.NotCacheable"));
+            var set = await PackageVersions.SetStatusAsync(db, actor, version.Id, status, ct);
+            if (!set.Ok)
+            {
+                return set;
+            }
         }
 
+        return Outcome<PackageVersion>.Success(version);
+    }
+
+    /// <summary>Downloads an installer of a manifest to a temporary file and checks it against the SHA-256 of the manifest.</summary>
+    private async Task<(string? Path, string? Error)> DownloadAsync(CatalogInstaller installer, CancellationToken ct)
+    {
         var temp = Path.Combine(Path.GetTempPath(), "mathub-store-" + Guid.NewGuid().ToString("N"));
         try
         {
             using (var client = http.CreateClient("winget"))
-            using (var response = await client.GetAsync(chosen.Url, HttpCompletionOption.ResponseHeadersRead, ct))
+            using (var response = await client.GetAsync(installer.Url, HttpCompletionOption.ResponseHeadersRead, ct))
             {
                 response.EnsureSuccessStatusCode();
                 await using var source = await response.Content.ReadAsStreamAsync(ct);
@@ -462,40 +558,98 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
             await using (var check = File.OpenRead(temp))
             {
                 var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(check, ct));
-                if (chosen.Sha256 is { } expected && hash != expected)
+                if (installer.Sha256 is { } expected && hash != expected)
                 {
-                    return Outcome<Package>.Fail(Localization.Text.T("Store.Error.Hash", hash[..12], expected[..12]));
+                    File.Delete(temp);
+                    return (null, Localization.Text.T("Store.Error.Hash", hash[..12], expected[..12]));
                 }
             }
 
-            var fileName = Path.GetFileName(new Uri(chosen.Url).LocalPath);
-            if (string.IsNullOrWhiteSpace(Path.GetExtension(fileName)))
-            {
-                fileName = d.WingetId + (kind == PackageKind.Msi ? ".msi" : ".exe");
-            }
-
-            var name = $"{d.Name}{(chosen.Architecture is { } arch ? " (" + arch + ")" : string.Empty)}";
-            var saved = await PackageService.SaveAsync(db, actor, null, new PackageForm(
-                name, d.Publisher, d.ShortDescription ?? d.Description, kind, d.Version, null, SilentArguments(chosen), null, null, DetectionKind.DisplayName, d.DisplayName ?? d.Name, false), ct);
-            if (!saved.Ok)
-            {
-                return saved;
-            }
-
-            await using var content = File.OpenRead(temp);
-            return await PackageService.UploadAsync(db, actor, packageFiles, saved.Value!.Id, fileName, content, ct);
+            return (temp, null);
         }
         catch (HttpRequestException ex)
-        {
-            return Outcome<Package>.Fail(Localization.Text.T("Store.Error.Download", ex.Message));
-        }
-        finally
         {
             if (File.Exists(temp))
             {
                 File.Delete(temp);
             }
+
+            return (null, Localization.Text.T("Store.Error.Download", ex.Message));
         }
+    }
+
+    /// <summary>The newest version the catalog has of a package, when it is newer than every version of the package (null: nothing new).</summary>
+    public static async Task<string?> NewerAsync(AppDbContext db, Package package, CancellationToken ct = default)
+    {
+        if (package.WingetId is null)
+        {
+            return null;
+        }
+
+        var id = package.WingetId.ToLower();
+        var latest = await db.CatalogPackages.AsNoTracking().Where(c => c.WingetId.ToLower() == id).Select(c => c.Version).FirstOrDefaultAsync(ct);
+        if (latest is null)
+        {
+            return null;
+        }
+
+        var known = await db.PackageVersions.AsNoTracking().Where(v => v.PackageId == package.Id).Select(v => v.Version).ToListAsync(ct);
+        return known.Where(PackageVersions.Comparable).All(k => CompareVersions(latest, k) > 0) ? latest : null;
+    }
+
+    /// <summary>Takes the newest version of the catalog into a package as a new version (a person asks for it, or the daily check does).</summary>
+    public async Task<Outcome<PackageVersion>> TakeNewerAsync(AppDbContext db, Actor actor, long packageId, CancellationToken ct = default)
+    {
+        if (!actor.Can(Permission.PackagesEdit))
+        {
+            return Outcome<PackageVersion>.Denied();
+        }
+
+        var package = await db.Packages.FirstOrDefaultAsync(p => p.Id == packageId, ct);
+        if (package?.WingetId is null || await NewerAsync(db, package, ct) is null || await DetailAsync(db, actor, package.WingetId, ct) is not { } d)
+        {
+            return Outcome<PackageVersion>.Fail(Localization.Text.T("Versions.Error.NothingNewer"));
+        }
+
+        // as the version before: kept in MatHub, or through winget
+        var viaWinget = await db.PackageVersions.Where(v => v.PackageId == package.Id && v.Status == VersionStatus.Approved)
+            .SelectMany(v => v.Installers).AnyAsync(i => i.Kind == PackageKind.Winget, ct);
+        return await PrepareAsync(db, actor, package, d, VersionStatus.New, "catalog", viaWinget, ct);
+    }
+
+    /// <summary>The daily check: every package that prepares its new versions by itself gets the newest one of the catalog, as a new version (never approved).</summary>
+    public async Task<int> PrepareNewerAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        var packages = await db.Packages.AsNoTracking().Where(p => p.AutoUpdate && p.WingetId != null).Select(p => p.Id).ToListAsync(ct);
+        var prepared = 0;
+        foreach (var id in packages)
+        {
+            var package = await db.Packages.AsNoTracking().FirstAsync(p => p.Id == id, ct);
+            if (await NewerAsync(db, package, ct) is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var outcome = await TakeNewerAsync(db, Actor.System, id, ct);
+                if (outcome.Ok)
+                {
+                    prepared++;
+                    logger.LogInformation("A new version of {Package} is prepared: {Version}.", package.Name, outcome.Value!.Version);
+                }
+                else
+                {
+                    logger.LogWarning("The new version of {Package} could not be prepared: {Error}", package.Name, outcome.Error);
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or YamlDotNet.Core.YamlException)
+            {
+                logger.LogWarning("The new version of {Package} could not be prepared: {Message}", package.Name, ex.Message);
+            }
+        }
+
+        return prepared;
     }
 
     private static string? Cut(string? text, int max) => text is null ? null : text.Length > max ? text[..max] : text;

@@ -1,0 +1,42 @@
+@model (MatHub.Pages.Packages.InstallerInput Input, bool WithVersion)
+@*
+    The fields of an installer: a file (MSI, EXE) is checked first ("Check the file"): MatHub reads it and fills the fields; a script or winget with a pinned
+    version has no file. Shared by the assistant (/packages/new) and the tab Versions.
+*@
+@{
+    var i = Model.Input;
+}
+<input type="hidden" name="Input.Token" value="@i.Token" />
+@if (Model.WithVersion)
+{
+    <mh-field name="Input.Version" label="@L["Versions.Version"]" value="@i.Version" maxlength="100" required mono placeholder="24.08" hint="@L["Versions.Version.Hint"]" />
+}
+<mh-field name="Input.Kind" kind="radios" label="@L["Packages.Kind"]" value="@i.Kind" options="MatHub.Pages.Packages.InstallerInput.Kinds" />
+<div class="mh-file-step" data-show-if="Input.Kind" data-show-value="Msi,Exe">
+    @if (i.Found is not null)
+    {
+        <div class="mat-alert mat-alert--info" role="status">
+            @Ui.Icon("check")
+            <div class="mat-alert__body"><strong class="mat-alert__title">@L["Versions.Found"]</strong><span>@i.Found</span></div>
+        </div>
+    }
+    else
+    {
+        <div class="mat-field">
+            <label class="mat-label" for="Upload">@L["Packages.File"]</label>
+            <div class="mh-upload__row">
+                <input class="mat-input" type="file" id="Upload" name="Upload" accept=".msi,.exe" />
+                <button type="submit" class="mat-btn mat-btn--secondary" formaction="?handler=Check" formnovalidate data-busy="@L["Versions.Checking"]">@Ui.Icon("search")<span>@L["Versions.Check"]</span></button>
+            </div>
+            <p class="mat-hint">@L["Versions.Check.Hint"]</p>
+        </div>
+    }
+</div>
+<mh-field name="Input.Architecture" kind="select" label="@L["Versions.Platform"]" value="@i.Architecture" options="MatHub.Pages.Packages.InstallerInput.Platforms" hint="@L["Versions.Platform.Hint"]" />
+<mh-field name="Input.Arguments" label="@L["Packages.Arguments"]" value="@i.Arguments" maxlength="1000" mono optional show-if="Input.Kind" show-value="Msi,Exe" hint="@L["Versions.Arguments.Hint"]" />
+<mh-field name="Input.ProductCode" label="@L["Versions.ProductCode"]" value="@i.ProductCode" maxlength="60" mono optional show-if="Input.Kind" show-value="Msi" hint="@L["Versions.ProductCode.Hint"]" />
+<mh-field name="Input.UninstallCommand" label="@L["Packages.UninstallCommand"]" value="@i.UninstallCommand" maxlength="4000" mono optional show-if="Input.Kind" show-value="Exe" hint="@L["Packages.UninstallCommand.Hint"]" />
+<mh-field name="Input.WingetId" label="@L["Software.WingetId"]" value="@i.WingetId" maxlength="200" mono show-if="Input.Kind" show-value="Winget" required placeholder="Mozilla.Firefox" />
+<mh-field name="Input.WingetVersion" label="@L["Versions.WingetVersion"]" value="@i.WingetVersion" maxlength="100" mono optional show-if="Input.Kind" show-value="Winget" hint="@L["Versions.WingetVersion.Hint"]" />
+<mh-field name="Input.InstallScript" kind="textarea" label="@L["Packages.InstallScript"]" value="@i.InstallScript" rows="5" mono show-if="Input.Kind" show-value="Script" required />
+<mh-field name="Input.UninstallScript" kind="textarea" label="@L["Packages.UninstallScript"]" value="@i.UninstallScript" rows="3" mono optional show-if="Input.Kind" show-value="Script" />

@@ -76,13 +76,13 @@
                         <div class="mh-steps__add">
                             <span class="mh-steps__add-title">@L["Sequences.AddStep"]</span>
                             <div class="mh-steps__add-buttons">
-                                @foreach (var kind in Enum.GetValues<MatHub.Data.SequenceStepKind>())
+                                @foreach (var kind in Enum.GetValues<MatHub.Data.SequenceStepKind>().Where(k => k != MatHub.Data.SequenceStepKind.WingetUpgrade))
                                 {
                                     <button type="button" class="mat-btn mat-btn--secondary mat-btn--sm" data-step-add="@kind" data-tip="@L["Sequences.Kind." + kind + ".Hint"]">@Ui.Icon(SequenceService.Icon(kind))<span>@L["Sequences.Kind." + kind]</span></button>
                                 }
                             </div>
                         </div>
-                        @foreach (var kind in Enum.GetValues<MatHub.Data.SequenceStepKind>())
+                        @foreach (var kind in Enum.GetValues<MatHub.Data.SequenceStepKind>().Where(k => k != MatHub.Data.SequenceStepKind.WingetUpgrade))
                         {
                             <template data-step-template="@kind"><partial name="_Step" model="(-1, new MatHub.Pages.Sequences.EditModel.StepInput { Kind = kind }, Model.ScriptChoices, Model.PackageChoices, false)" /></template>
                         }

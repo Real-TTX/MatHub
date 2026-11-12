@@ -25,9 +25,11 @@ public sealed class IndexModel(AccountService accounts, CurrentUser me, AppDbCon
 
     public IReadOnlyList<ClientRow> Pending { get; private set; } = [];
 
-    public IReadOnlyList<UpdateRow> TopUpdates { get; private set; } = [];
+    /// <summary>Versions that wait for a test or an approval.</summary>
+    public IReadOnlyList<PendingRow> PendingVersions { get; private set; } = [];
 
-    public int UpdatePrograms { get; private set; }
+    /// <summary>Clients with an older version of a package than the approved one.</summary>
+    public int Outdated { get; private set; }
 
     public string Zone => me.TimeZone;
 
@@ -55,10 +57,10 @@ public sealed class IndexModel(AccountService accounts, CurrentUser me, AppDbCon
             Pending = (await ClientService.ListAsync(db, me.Actor, new ClientCriteria(null, "pending", null, null, "created", true, 1, 5), ct))?.Items ?? [];
         }
 
-        if (await UpdateService.ListAsync(db, me.Actor, null, null, ct) is { } updates)
+        if (await UpdateService.OverviewAsync(db, me.Actor, ct) is { } updates)
         {
-            TopUpdates = updates.Items.Take(5).ToList();
-            UpdatePrograms = updates.Programs;
+            PendingVersions = updates.Pending.Take(5).ToList();
+            Outdated = updates.Outdated.Sum(o => o.Outdated);
         }
 
         return Page();

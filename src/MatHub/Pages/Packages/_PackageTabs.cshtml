@@ -1,9 +1,10 @@
 @model long
-@* The areas of a package: General (what it is and how it is installed) and Assignments (which groups get it). *@
+@* The areas of a package: General (what it is, how MatHub sees it), Versions (installers per platform, test and approval) and Assignments (which groups get it). *@
 @{
     var active = ViewData["Tab"] as string ?? "general";
 }
 <mh-tabs label="@L["Packages.Tabs"]">
     <mh-tab href="/packages/edit?id=@Model" active="@(active == "general")">@L["Packages.Tab.General"]</mh-tab>
+    <mh-tab href="/packages/@Model/versions" active="@(active == "versions")">@L["Versions.Title"]</mh-tab>
     <mh-tab href="/packages/@Model/assignments" active="@(active == "assignments")">@L["Packages.Tab.Assignments"]</mh-tab>
 </mh-tabs>

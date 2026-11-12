@@ -9,10 +9,10 @@ namespace MatHub.Pages.Clients;
 public sealed class InventoryModel(AppDbContext db) : ClientPageModel(db)
 {
     private sealed record Stored(List<DiskInfo>? Disks, List<NetworkInfo>? Network, string? BiosVersion, DateTime? BiosDate, int? ProcessorCores, int? ProcessorThreads,
-        List<string>? Graphics, DateTime? OsInstallDate, bool? SecureBoot);
+        List<string>? Graphics, DateTime? OsInstallDate, bool? SecureBoot, string? Platform);
 
     /// <summary>What the inventory says about the hardware beyond the columns of the client.</summary>
-    public sealed record HardwareFacts(string? BiosVersion, DateTime? BiosDate, int? ProcessorCores, int? ProcessorThreads, IReadOnlyList<string> Graphics, DateTime? OsInstallDate, bool? SecureBoot);
+    public sealed record HardwareFacts(string? BiosVersion, DateTime? BiosDate, int? ProcessorCores, int? ProcessorThreads, IReadOnlyList<string> Graphics, DateTime? OsInstallDate, bool? SecureBoot, string? Platform = null);
 
     public HardwareFacts? Hardware { get; private set; }
 
@@ -48,7 +48,7 @@ public sealed class InventoryModel(AppDbContext db) : ClientPageModel(db)
                 Network = stored?.Network ?? [];
                 if (stored is not null)
                 {
-                    Hardware = new HardwareFacts(stored.BiosVersion, stored.BiosDate, stored.ProcessorCores, stored.ProcessorThreads, stored.Graphics ?? [], stored.OsInstallDate, stored.SecureBoot);
+                    Hardware = new HardwareFacts(stored.BiosVersion, stored.BiosDate, stored.ProcessorCores, stored.ProcessorThreads, stored.Graphics ?? [], stored.OsInstallDate, stored.SecureBoot, stored.Platform);
                 }
             }
             catch (JsonException)

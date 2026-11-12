@@ -306,38 +306,132 @@ public sealed class HubTests
         Assert.False(await ScriptFileService.AllowedAsync(t.Db, client.Id, uploaded.Value));
     }
 
+    private static async Task InventoryAsync(TestDatabase t, Client c, params (string Name, string Id, string Version)[] programs)
+        => await InventoryService.ApplyAsync(t.Db, await t.Db.Clients.SingleAsync(x => x.Id == c.Id), new InventoryReport
+        {
+            HostName = c.Name,
+            Software = programs.Select(p => new SoftwareInfo(p.Name, p.Version, "Contoso")).ToList(),
+            WingetInstalled = programs.Select(p => new WingetPackageInfo(p.Name, p.Id, p.Version)).ToList(),
+            WingetUpgrades = [],
+        });
+
+    private static async Task<Package> PackageWithVersionAsync(TestDatabase t, string version, long? pilot = null)
+    {
+        var package = (await PackageService.SaveAsync(t.Db, Admin, null, new PackageForm("Editor", "Contoso", null, "Contoso.Editor", DetectionKind.WingetId, null, false, pilot))).Value!;
+        var v = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, version, "upload")).Value!;
+        Assert.True((await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, v.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: version), null, null)).Ok);
+        Assert.True((await PackageVersions.SetStatusAsync(t.Db, Admin, v.Id, VersionStatus.Approved)).Ok);
+        return package;
+    }
+
     [DbFact]
-    public async Task The_planner_installs_what_is_missing_once_and_updates_by_itself()
+    public async Task The_planner_brings_only_the_approved_version_and_updates_what_is_older()
     {
         await using var t = await TestDatabase.CreateAsync();
         var group = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("All", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-"))).Value!;
         var key = await KeyAsync(t);
-        var first = await EnrollAsync(t, key, "PC-A", "m-a");
-        var second = await EnrollAsync(t, key, "PC-B", "m-b");
-        foreach (var c in new[] { first, second })
-        {
-            await InventoryService.ApplyAsync(t.Db, await t.Db.Clients.SingleAsync(x => x.Id == c.Id), new InventoryReport
-            {
-                HostName = c.Name,
-                WingetInstalled = c.Id == second.Id ? [new WingetPackageInfo("Mozilla Firefox", "Mozilla.Firefox", "128.0")] : [],
-                WingetUpgrades = c.Id == second.Id ? [new WingetUpgradeInfo("Mozilla Firefox", "Mozilla.Firefox", "128.0", "129.0")] : [],
-            });
-        }
+        var missing = await EnrollAsync(t, key, "PC-A", "m-a");
+        var older = await EnrollAsync(t, key, "PC-B", "m-b");
+        var current = await EnrollAsync(t, key, "PC-C", "m-c");
+        await InventoryAsync(t, missing);
+        await InventoryAsync(t, older, ("Contoso Editor", "Contoso.Editor", "9.11"));
+        await InventoryAsync(t, current, ("Contoso Editor", "Contoso.Editor", "10.2"));
 
-        var package = (await PackageService.SaveAsync(t.Db, Admin, null, new PackageForm("Firefox", "Mozilla", null, PackageKind.Winget, null, "Mozilla.Firefox", null, null, null, DetectionKind.WingetId, null, true))).Value!;
+        var package = await PackageWithVersionAsync(t, "10.2");
         Assert.True((await PackageService.AssignAsync(t.Db, Admin, package.Id, group.Id, AssignmentAction.Install)).Ok);
 
+        // the missing one and the older one get 10.2 (10.2 is newer than 9.11), the current one nothing
         var plan = await Planner.RunOnceAsync(t.Db);
-        Assert.Equal(2, plan.Jobs);
-        var jobs = await t.Db.Jobs.AsNoTracking().Include(j => j.Runs).ToListAsync();
-        Assert.Equal(first.Id, Assert.Single(jobs.Single(j => j.Kind == JobKind.PackageInstall).Runs).ClientId);
-        Assert.Equal(second.Id, Assert.Single(jobs.Single(j => j.Kind == JobKind.WingetUpgrade).Runs).ClientId);
-
-        // while the runs are open nothing is planned twice
+        Assert.Equal(1, plan.Jobs);
+        var job = await t.Db.Jobs.AsNoTracking().Include(j => j.Runs).SingleAsync();
+        Assert.Equal(new[] { missing.Id, older.Id }.Order(), job.Runs.Select(r => r.ClientId).Order());
+        var template = JobService.Template(job)!;
+        Assert.Equal("10.2", template.Version);
         Assert.Equal(0, (await Planner.RunOnceAsync(t.Db)).Jobs);
 
-        // the updates page sees the update of the second client
-        var updates = await UpdateService.ListAsync(t.Db, Admin, null, null);
-        Assert.Equal("Mozilla.Firefox", Assert.Single(updates!.Items).WingetId);
+        // a new version nobody approved goes nowhere
+        await t.Db.JobRuns.ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RunStatus.Cancelled));
+        var newer = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "11.0", "catalog")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, newer.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "11.0"), null, null);
+        await Planner.RunOnceAsync(t.Db);
+        Assert.DoesNotContain(await t.Db.Jobs.AsNoTracking().ToListAsync(), j => j.PackageVersionId == newer.Id);
+
+        // approved: it replaces 10.2 (retired) and goes to every client, also the current one
+        Assert.True((await PackageVersions.SetStatusAsync(t.Db, Admin, newer.Id, VersionStatus.Approved)).Ok);
+        Assert.Equal("11.0", (await t.Db.Packages.AsNoTracking().SingleAsync()).Version);
+        Assert.Equal(VersionStatus.Retired, (await t.Db.PackageVersions.AsNoTracking().SingleAsync(v => v.Version == "10.2")).Status);
+        await t.Db.JobRuns.ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RunStatus.Cancelled));
+        await Planner.RunOnceAsync(t.Db);
+        var update = await t.Db.Jobs.AsNoTracking().Include(j => j.Runs).SingleAsync(j => j.PackageVersionId == newer.Id);
+        Assert.Equal(3, update.Runs.Count);
+    }
+
+    [DbFact]
+    public async Task A_package_from_before_the_versions_is_not_installed_again_and_again()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var group = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("All", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-"))).Value!;
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-L", "m-l");
+        await InventoryAsync(t, client, ("Contoso Editor", "Contoso.Editor", "131.0"));
+        var package = (await PackageService.SaveAsync(t.Db, Admin, null, new PackageForm("Editor", "Contoso", null, "Contoso.Editor", DetectionKind.WingetId, null, false))).Value!;
+        var v = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "latest", "migrated")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, v.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor"), null, null);
+        await PackageVersions.SetStatusAsync(t.Db, Admin, v.Id, VersionStatus.Approved);
+        await PackageService.AssignAsync(t.Db, Admin, package.Id, group.Id, AssignmentAction.Install);
+        Assert.Equal(0, (await Planner.RunOnceAsync(t.Db)).Jobs);
+    }
+
+    [DbFact]
+    public async Task A_version_in_test_goes_to_the_pilot_group_only()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var all = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("All", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-"))).Value!;
+        var pilot = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("Pilot", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-IT"))).Value!;
+        var key = await KeyAsync(t);
+        var it = await EnrollAsync(t, key, "PC-IT1", "m-it");
+        var office = await EnrollAsync(t, key, "PC-OF1", "m-of");
+        await InventoryAsync(t, it, ("Contoso Editor", "Contoso.Editor", "10.2"));
+        await InventoryAsync(t, office, ("Contoso Editor", "Contoso.Editor", "10.2"));
+        var package = await PackageWithVersionAsync(t, "10.2", pilot.Id);
+        await PackageService.AssignAsync(t.Db, Admin, package.Id, all.Id, AssignmentAction.Install);
+
+        var test = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "11.0-beta", "upload")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, test.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "11.0-beta"), null, null);
+        Assert.True((await PackageVersions.SetStatusAsync(t.Db, Admin, test.Id, VersionStatus.Testing)).Ok);
+        await Planner.RunOnceAsync(t.Db);
+        var job = await t.Db.Jobs.AsNoTracking().Include(j => j.Runs).SingleAsync();
+        Assert.Equal(test.Id, job.PackageVersionId);
+        Assert.Equal(it.Id, Assert.Single(job.Runs).ClientId);
+
+        // without a pilot group there is no test
+        var bare = await PackageWithVersionAsync(t, "1.0");
+        var another = (await PackageVersions.CreateAsync(t.Db, Admin, bare.Id, "2.0", "upload")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, another.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "2.0"), null, null);
+        Assert.False((await PackageVersions.SetStatusAsync(t.Db, Admin, another.Id, VersionStatus.Testing)).Ok);
+    }
+
+    [DbFact]
+    public async Task A_version_carries_an_installer_per_platform_and_the_agent_takes_its_own()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var package = (await PackageService.SaveAsync(t.Db, Admin, null, new PackageForm("Viewer", "Contoso", null, null, DetectionKind.DisplayName, "Viewer", false))).Value!;
+        var v = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "3.1", "upload")).Value!;
+        foreach (var (arch, script) in new[] { (InstallerArchitecture.X64, "x64"), (InstallerArchitecture.X86, "x86"), (InstallerArchitecture.Arm64, "arm64") })
+        {
+            Assert.True((await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, v.Id, new InstallerForm(arch, PackageKind.Script, InstallScript: "Write-Output " + script), null, null)).Ok);
+        }
+
+        Assert.False((await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, v.Id, new InstallerForm(InstallerArchitecture.X64, PackageKind.Script, InstallScript: "again"), null, null)).Ok);
+        var version = await t.Db.PackageVersions.AsNoTracking().Include(x => x.Installers).SingleAsync();
+        var job = PackageVersions.Template(version, uninstall: false)!;
+        Assert.Equal("Write-Output x64", job.Script);
+        Assert.Equal(3, job.Alternatives!.Count);
+        Assert.Equal("Write-Output arm64", Architectures.Choose(job, Architectures.Arm64)!.Script);
+        Assert.Equal("Write-Output x86", Architectures.Choose(job, Architectures.X86)!.Script);
+
+        // only x86 there: an x64 and an arm64 computer take it too; an x64 installer does not fit an x86 computer
+        var only86 = job with { Alternatives = [job.Alternatives![1]] };
+        Assert.Equal("Write-Output x86", Architectures.Choose(only86, Architectures.Arm64)!.Script);
+        Assert.Null(Architectures.Choose(job with { Alternatives = [job.Alternatives[0]] }, Architectures.X86));
     }
 }

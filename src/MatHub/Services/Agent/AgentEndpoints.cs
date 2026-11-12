@@ -91,8 +91,8 @@ public static class AgentEndpoints
             return Results.NoContent();
         });
 
-        // the installer of a package, only for an agent that has a run of it
-        api.MapGet("/packages/{id:long}/file", async (long id, HttpContext http, AppDbContext db, PackageFiles store, CancellationToken ct) =>
+        // the installer of a package, only for an agent that has a run of it (also as the step of a sequence)
+        api.MapGet("/installers/{id:long}/file", async (long id, HttpContext http, AppDbContext db, PackageFiles store, CancellationToken ct) =>
         {
             var (client, denied) = await AuthenticateAsync(http, db, ct);
             if (client is null)
@@ -100,14 +100,14 @@ public static class AgentEndpoints
                 return denied!;
             }
 
-            var allowed = await JobService.PackageAllowedAsync(db, client.Id, id, ct);
-            var package = allowed ? await db.Packages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct) : null;
-            if (package?.FileName is null || store.Find(package.Id, package.FileName) is not { } path)
+            var installer = await db.PackageInstallers.AsNoTracking().Include(i => i.PackageVersion).FirstOrDefaultAsync(i => i.Id == id, ct);
+            if (installer?.FileName is null || !await JobService.PackageAllowedAsync(db, client.Id, installer.PackageVersion!.PackageId, ct)
+                || store.Find(installer.PackageVersion.PackageId, installer.Id, installer.FileName) is not { } path)
             {
                 return Results.NotFound();
             }
 
-            return Results.File(path, "application/octet-stream", package.FileName, enableRangeProcessing: true);
+            return Results.File(path, "application/octet-stream", installer.FileName, enableRangeProcessing: true);
         });
 
         // the kiosk: the offers for this client (asked when the kiosk opens, so always the current ones), a start, the state of what it started

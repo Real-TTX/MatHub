@@ -1,4 +1,5 @@
 using MatHub.Services.Packages;
+using PackageVersion = MatHub.Data.PackageVersion;
 using System.Text.Json;
 using MatHub.Data;
 using MatHub.Protocol;
@@ -10,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace MatHub.Services.Jobs;
 
 /// <summary>What a person asks for: run something on clients and on the members of groups.</summary>
-public sealed record JobRequest(JobKind Kind, long? ScriptId, long? PackageId, string? WingetId, IReadOnlyList<long> ClientIds, IReadOnlyList<long> GroupIds, DateTime? NotBefore = null, long? SequenceId = null);
+public sealed record JobRequest(JobKind Kind, long? ScriptId, long? PackageId, string? WingetId, IReadOnlyList<long> ClientIds, IReadOnlyList<long> GroupIds, DateTime? NotBefore = null, long? SequenceId = null, long? PackageVersionId = null);
 
 /// <summary>A job in a list; <paramref name="NotBefore"/>: it starts then (planned), null: at once.</summary>
 public sealed record JobRow(long Id, string Name, JobKind Kind, string Origin, DateTime Created, string? CreatedBy, int Total, int Queued, int Running, int Succeeded, int Failed, int Cancelled, DateTime? NotBefore = null)
@@ -56,34 +57,14 @@ public static class JobService
         _ => "powershell",
     };
 
-    /// <summary>The address the agent downloads the installer of a package from (relative to the server it talks to).</summary>
-    public static string PackageFileUrl(long packageId) => $"/api/agent/v1/packages/{packageId}/file";
-
-    /// <summary>What the agent runs to install or remove a package.</summary>
-    public static AgentJob? PackageTemplate(Package p, bool uninstall)
-    {
-        return (p.Kind, uninstall) switch
-        {
-            (PackageKind.Winget, false) => new AgentJob { Kind = JobKinds.WingetInstall, Arguments = p.WingetId, TimeoutSeconds = 3600 },
-            (PackageKind.Winget, true) => new AgentJob { Kind = JobKinds.WingetUninstall, Arguments = p.WingetId, TimeoutSeconds = 3600 },
-            (PackageKind.Msi, false) when p.FileName is not null => new AgentJob
-            {
-                Kind = JobKinds.MsiInstall, DownloadUrl = PackageFileUrl(p.Id), Sha256 = p.FileSha256, FileName = p.FileName, Arguments = p.InstallArguments, TimeoutSeconds = 3600,
-            },
-            (PackageKind.Msi, true) when p.FileName is not null => new AgentJob
-            {
-                Kind = JobKinds.MsiUninstall, DownloadUrl = PackageFileUrl(p.Id), Sha256 = p.FileSha256, FileName = p.FileName, TimeoutSeconds = 3600,
-            },
-            (PackageKind.Exe, false) when p.FileName is not null => new AgentJob
-            {
-                Kind = JobKinds.ExeInstall, DownloadUrl = PackageFileUrl(p.Id), Sha256 = p.FileSha256, FileName = p.FileName, Arguments = p.InstallArguments, TimeoutSeconds = 3600,
-            },
-            (PackageKind.Exe, true) when !string.IsNullOrWhiteSpace(p.UninstallCommand) => new AgentJob { Kind = JobKinds.Command, Arguments = p.UninstallCommand, TimeoutSeconds = 3600 },
-            (PackageKind.Script, false) when !string.IsNullOrWhiteSpace(p.InstallScript) => new AgentJob { Kind = JobKinds.Script, Script = p.InstallScript, TimeoutSeconds = 3600 },
-            (PackageKind.Script, true) when !string.IsNullOrWhiteSpace(p.UninstallCommand) => new AgentJob { Kind = JobKinds.Script, Script = p.UninstallCommand, TimeoutSeconds = 3600 },
-            _ => null,
-        };
-    }
+    /// <summary>
+    /// The version a job of a package installs: the one asked for, else the approved one (a version in test only when it is asked for: the pilot group gets it
+    /// through the planner).
+    /// </summary>
+    public static async Task<PackageVersion?> VersionForAsync(AppDbContext db, long packageId, long? versionId, CancellationToken ct)
+        => versionId is { } id
+            ? await db.PackageVersions.AsNoTracking().Include(v => v.Installers).FirstOrDefaultAsync(v => v.Id == id && v.PackageId == packageId && v.Status != VersionStatus.Retired, ct)
+            : (await PackageVersions.CurrentAsync(db, packageId, ct)).Approved;
 
     /// <summary>Makes a job for the clients and groups of the request that the actor reaches. Fails when nothing can run or no client is left.</summary>
     public static async Task<Outcome<Job>> CreateAsync(AppDbContext db, Actor actor, JobRequest request, string origin = "manual", long? assignmentId = null, CancellationToken ct = default, long? kioskItemId = null)
@@ -128,13 +109,20 @@ public static class JobService
                 }
 
                 var uninstall = request.Kind == JobKind.PackageUninstall;
-                if (PackageTemplate(package, uninstall) is not { } packageJob)
+                var version = await VersionForAsync(db, package.Id, request.PackageVersionId, ct);
+                if (version is null)
+                {
+                    return Outcome<Job>.Fail(Localization.Text.T("Versions.Error.NoneApproved"));
+                }
+
+                if (PackageVersions.Template(version, uninstall) is not { } packageJob)
                 {
                     return Outcome<Job>.Fail(Localization.Text.T(uninstall ? "Jobs.Error.NoUninstall" : "Jobs.Error.NoInstaller"));
                 }
 
-                job.Name = Localization.Text.T(uninstall ? "Jobs.Name.Uninstall" : "Jobs.Name.Install", package.Name);
+                job.Name = Localization.Text.T(uninstall ? "Jobs.Name.UninstallVersion" : "Jobs.Name.InstallVersion", package.Name, version.Version);
                 job.PackageId = package.Id;
+                job.PackageVersionId = version.Id;
                 job.TimeoutSeconds = packageJob.TimeoutSeconds;
                 template = packageJob;
                 break;
@@ -389,7 +377,7 @@ public static class JobService
 
         var job = new Job
         {
-            Name = old.Name, Kind = old.Kind, ScriptId = old.ScriptId, PackageId = old.PackageId, Payload = old.Payload, Language = old.Language,
+            Name = old.Name, Kind = old.Kind, ScriptId = old.ScriptId, PackageId = old.PackageId, PackageVersionId = old.PackageVersionId, Payload = old.Payload, Language = old.Language,
             TimeoutSeconds = old.TimeoutSeconds, Origin = "manual", SequenceId = old.SequenceId, Steps = old.Steps,
         };
         foreach (var c in clients)

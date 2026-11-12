@@ -5,57 +5,130 @@
     ViewData["Title"] = L["Updates.Title"].Value;
     ViewData["PageSub"] = L["Updates.Sub"].Value;
     ViewData["Crumbs"] = new List<(string, string?)> { (L["Updates.Title"].Value, null) };
+    var o = Model.Overview;
+    var nothing = o.Pending.Count == 0 && o.InCatalog.Count == 0 && o.Outdated.Count == 0;
 }
 
-<div class="mat-list">
-    <partial name="_Toolbar" model="Model.Toolbar" />
-    @if (Model.List.Items.Count == 0)
+<mh-stats label="@L["Updates.Title"]">
+    <mh-stat icon="sparkles" label="@L["Updates.Stat.Pending"]" value="@o.Pending.Count.ToString()" tone="@(o.Pending.Count > 0 ? "warn" : null)" href="#pending" />
+    <mh-stat icon="download" label="@L["Updates.Stat.Catalog"]" value="@o.InCatalog.Count.ToString()" tone="@(o.InCatalog.Count > 0 ? "info" : null)" href="#catalog" />
+    <mh-stat icon="monitor" label="@L["Updates.Stat.Outdated"]" value="@o.Outdated.Sum(x => x.Outdated).ToString()" href="#outdated" />
+    <mh-stat icon="info" label="@L["Updates.Stat.Unmanaged"]" value="@o.Unmanaged.Programs.ToString()" href="#unmanaged" />
+</mh-stats>
+
+<div class="mh-updates">
+    @if (nothing)
     {
-        var first = Model.Toolbar.Total == 0;
-        <partial name="_Empty" model="@(new EmptyStateModel("check-circle", L[first ? "Updates.Empty" : "Updates.NoMatch"].Value, L[first ? "Updates.EmptyText" : "Lists.ChangeTools"].Value, false, null, null, Model.Toolbar.UrlReset()))" />
-    }
-    else
-    {
-        <mh-table caption="@L["Updates.Title"]">
-            <thead><tr><th scope="col">@L["Updates.Col.Program"]</th><th scope="col" class="mat-hide-sm">@L["Software.WingetId"]</th><th scope="col" class="mat-hide-sm">@L["Updates.Col.Installed"]</th><th scope="col">@L["Updates.Col.Available"]</th><th scope="col" class="mat-num">@L["Updates.Col.Clients"]</th><th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th></tr></thead>
-            <tbody>
-                @foreach (var u in Model.List.Items)
-                {
-                    <tr>
-                        <td data-label="@L["Updates.Col.Program"]" class="mat-table__primary">@if (Model.Packages.TryGetValue(u.WingetId, out var packageId)) { <a href="/packages/edit?id=@packageId"><span class="mh-name">@Ui.Icon("box")@u.Name</span></a> } else { <span class="mh-name">@Ui.Icon("box")@u.Name</span> }</td>
-                        <td data-label="@L["Software.WingetId"]" class="mat-mono mat-hide-sm">@u.WingetId</td>
-                        <td data-label="@L["Updates.Col.Installed"]" class="mat-mono mat-hide-sm">@u.Installed</td>
-                        <td data-label="@L["Updates.Col.Available"]"><span class="mat-pill mat-pill--accent">@u.Available</span></td>
-                        <td data-label="@L["Updates.Col.Clients"]" class="mat-num mat-table__keep-label"><a href="/clients?update=@Uri.EscapeDataString(u.WingetId)" aria-label="@L["Updates.ShowClients", u.Name]">@u.Clients</a></td>
-                        <td class="mat-table__cell-actions">
-                            <div class="mat-table__actions">
-                                @if (Model.CanMakePackage && !Model.Packages.ContainsKey(u.WingetId))
-                                {
-                                    <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="@PackageService.NewFromWingetUrl(u.WingetId, u.Name, null)" aria-label="@L["Software.MakePackageNamed", u.Name]" data-tip="@L["Software.MakePackage"]">@Ui.Icon("plus")</a>
-                                }
-                                @if (Model.CanDeploy)
-                                {
-                                    <form method="post">
-                                        <input type="hidden" name="wingetId" value="@u.WingetId" />
-                                        <input type="hidden" name="group" value="@Model.GroupId" />
-                                        <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" aria-label="@L["Updates.UpdateNamed", u.Name, u.Clients]">@Ui.Icon("refresh")<span>@L["Updates.Update"]</span></button>
-                                    </form>
-                                }
-                            </div>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </mh-table>
+        <partial name="_Empty" model="@(new EmptyStateModel("check-circle", L["Updates.AllApproved"].Value, L["Updates.AllApproved.Text"].Value, false, null, null, null))" />
     }
 
-    @if (Model.CanDeploy && Model.List.Items.Count > 0)
+    @if (o.Pending.Count > 0)
     {
-        <div class="mat-actions">
-            <form method="post">
-                <input type="hidden" name="group" value="@Model.GroupId" />
-                <button type="submit" class="mat-btn mat-btn--primary" data-confirm="@L["Updates.AllConfirm", Model.List.Clients]" data-confirm-ok="@L["Updates.All"]">@Ui.Icon("refresh")<span>@L["Updates.AllCount", Model.List.Clients]</span></button>
-            </form>
-        </div>
+        <section aria-labelledby="pending">
+            <h2 class="mh-subhead" id="pending">@Ui.Icon("sparkles")@L["Updates.Pending"]</h2>
+            <p class="mat-muted">@L["Updates.Pending.Hint"]</p>
+            <mh-table caption="@L["Updates.Pending"]">
+                <thead><tr><th scope="col">@L["Packages.One"]</th><th scope="col">@L["Versions.Version"]</th><th scope="col">@L["Common.State"]</th><th scope="col" class="mat-hide-sm">@L["Updates.Col.Approved"]</th><th scope="col" class="mat-hide-md">@L["Versions.Source"]</th><th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th></tr></thead>
+                <tbody>
+                    @foreach (var r in o.Pending)
+                    {
+                        <tr>
+                            <td data-label="@L["Packages.One"]" class="mat-table__primary"><a href="/packages/@r.PackageId/versions"><span class="mh-name">@Ui.Icon("box")@r.Package</span></a></td>
+                            <td data-label="@L["Versions.Version"]"><strong>@r.Version</strong></td>
+                            <td data-label="@L["Common.State"]"><span class="mat-pill mat-pill--@(r.Status == VersionStatus.Testing ? "info" : "warn")">@L["Versions.Status." + r.Status]</span>@if (r.Status == VersionStatus.Testing && r.Pilot is not null) { <span class="mh-muted"> · @r.Pilot</span> }</td>
+                            <td data-label="@L["Updates.Col.Approved"]" class="mat-hide-sm">@PackageVersions.Show(r.Approved)</td>
+                            <td data-label="@L["Versions.Source"]" class="mat-hide-md">@L["Versions.Source." + r.Source] · @Ui.When(r.Created, Model.Zone)</td>
+                            <td class="mat-table__cell-actions"><div class="mat-table__actions"><a class="mat-btn mat-btn--secondary mat-btn--sm" href="/packages/@r.PackageId/versions">@L["Updates.Review"]</a></div></td>
+                        </tr>
+                    }
+                </tbody>
+            </mh-table>
+        </section>
     }
+
+    @if (o.InCatalog.Count > 0)
+    {
+        <section aria-labelledby="catalog">
+            <h2 class="mh-subhead" id="catalog">@Ui.Icon("download")@L["Updates.InCatalog"]</h2>
+            <p class="mat-muted">@L["Updates.InCatalog.Hint"]</p>
+            <mh-table caption="@L["Updates.InCatalog"]">
+                <thead><tr><th scope="col">@L["Packages.One"]</th><th scope="col">@L["Updates.Col.Approved"]</th><th scope="col">@L["Updates.Col.Catalog"]</th>@if (Model.CanEdit) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+                <tbody>
+                    @foreach (var r in o.InCatalog)
+                    {
+                        <tr>
+                            <td data-label="@L["Packages.One"]" class="mat-table__primary"><a href="/packages/@r.PackageId/versions"><span class="mh-name">@Ui.Icon("box")@r.Package</span></a></td>
+                            <td data-label="@L["Updates.Col.Approved"]">@PackageVersions.Show(r.Approved)</td>
+                            <td data-label="@L["Updates.Col.Catalog"]"><span class="mat-pill mat-pill--accent">@r.Catalog</span></td>
+                            @if (Model.CanEdit)
+                            {
+                                <td class="mat-table__cell-actions">
+                                    <form method="post" asp-page-handler="Prepare" asp-route-package="@r.PackageId" class="mat-table__actions">
+                                        <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" data-busy="@L["Store.Caching"]">@Ui.Icon("download")<span>@L["Updates.Prepare"]</span></button>
+                                    </form>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </mh-table>
+        </section>
+    }
+
+    @if (o.Outdated.Count > 0)
+    {
+        <section aria-labelledby="outdated">
+            <h2 class="mh-subhead" id="outdated">@Ui.Icon("monitor")@L["Updates.Outdated"]</h2>
+            <p class="mat-muted">@L["Updates.Outdated.Hint"]</p>
+            <mh-table caption="@L["Updates.Outdated"]">
+                <thead><tr><th scope="col">@L["Packages.One"]</th><th scope="col">@L["Updates.Col.Approved"]</th><th scope="col" class="mat-num">@L["Updates.Col.Older"]</th><th scope="col" class="mat-num">@L["Updates.Col.Current"]</th></tr></thead>
+                <tbody>
+                    @foreach (var r in o.Outdated)
+                    {
+                        <tr>
+                            <td data-label="@L["Packages.One"]" class="mat-table__primary"><a href="/packages/@r.PackageId/assignments"><span class="mh-name">@Ui.Icon("box")@r.Package</span></a></td>
+                            <td data-label="@L["Updates.Col.Approved"]">@r.Approved</td>
+                            <td data-label="@L["Updates.Col.Older"]" class="mat-num"><span class="mat-pill mat-pill--warn">@r.Outdated</span></td>
+                            <td data-label="@L["Updates.Col.Current"]" class="mat-num">@r.Current</td>
+                        </tr>
+                    }
+                </tbody>
+            </mh-table>
+        </section>
+    }
+
+    <section aria-labelledby="unmanaged">
+        <h2 class="mh-subhead" id="unmanaged">@Ui.Icon("info")@L["Updates.Unmanaged"]</h2>
+        <p class="mat-muted">@L["Updates.Unmanaged.Hint"]</p>
+        @if (o.Unmanaged.Items.Count == 0)
+        {
+            <p class="mh-muted">@L["Updates.Unmanaged.None"]</p>
+        }
+        else
+        {
+            <mh-table caption="@L["Updates.Unmanaged"]">
+                <thead><tr><th scope="col">@L["Updates.Col.Program"]</th><th scope="col" class="mat-hide-sm">@L["Software.WingetId"]</th><th scope="col" class="mat-hide-sm">@L["Updates.Col.Installed"]</th><th scope="col">@L["Updates.Col.Available"]</th><th scope="col" class="mat-num">@L["Updates.Col.Clients"]</th>@if (Model.CanEdit) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+                <tbody>
+                    @foreach (var u in o.Unmanaged.Items)
+                    {
+                        <tr>
+                            <td data-label="@L["Updates.Col.Program"]" class="mat-table__primary"><span class="mh-name">@Ui.Icon("box")@u.Name</span></td>
+                            <td data-label="@L["Software.WingetId"]" class="mat-hide-sm"><span class="mat-mono">@u.WingetId</span></td>
+                            <td data-label="@L["Updates.Col.Installed"]" class="mat-hide-sm">@u.Installed</td>
+                            <td data-label="@L["Updates.Col.Available"]"><span class="mat-pill mat-pill--plain">@u.Available</span></td>
+                            <td data-label="@L["Updates.Col.Clients"]" class="mat-num"><a href="/clients?update=@Uri.EscapeDataString(u.WingetId)">@u.Clients</a></td>
+                            @if (Model.CanEdit)
+                            {
+                                <td class="mat-table__cell-actions"><div class="mat-table__actions"><a class="mat-btn mat-btn--ghost mat-btn--sm" href="/store/item?id=@Uri.EscapeDataString(u.WingetId)">@Ui.Icon("plus")<span>@L["Updates.MakePackage"]</span></a></div></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </mh-table>
+        }
+    </section>
 </div>
+
+@section Scripts {
+    <script src="~/js/busy.js" asp-append-version="true"></script>
+}

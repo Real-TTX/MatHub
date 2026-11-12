@@ -4,11 +4,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MatHub.Services.Packages;
 
-public sealed record PackageRow(long Id, string Name, string? Publisher, PackageKind Kind, string? Version, string? WingetId, int Assignments, int Installed);
+/// <param name="Version">The approved version; <paramref name="Testing"/> the one in test; <paramref name="Waiting"/> how many versions wait for an approval.</param>
+/// <param name="Current">Clients with the approved version (or newer); <paramref name="Installed"/> all that have it in any version.</param>
+public sealed record PackageRow(
+    long Id, string Name, string? Publisher, PackageKind Kind, string? Version, string? Testing, int Waiting, IReadOnlyList<InstallerArchitecture> Platforms,
+    string? WingetId, int Assignments, int Installed, int Current);
 
+/// <summary>What a package is (its versions and installers are kept by <see cref="PackageVersions"/>).</summary>
+/// <param name="WingetId">Its id in the catalog of winget: new versions are found there.</param>
+/// <param name="AutoUpdate">New versions of the catalog are prepared by themselves (never approved).</param>
 public sealed record PackageForm(
-    string Name, string? Publisher, string? Description, PackageKind Kind, string? Version, string? WingetId, string? InstallArguments, string? UninstallCommand,
-    string? InstallScript, DetectionKind Detection, string? DetectionValue, bool AutoUpdate);
+    string Name, string? Publisher, string? Description, string? WingetId, DetectionKind Detection, string? DetectionValue, bool AutoUpdate, long? PilotGroupId = null);
 
 public sealed record AssignmentRow(long Id, long GroupId, string GroupName, string? GroupColour, AssignmentAction Action, bool IsActive, int Members, int Installed);
 
@@ -36,6 +42,10 @@ public static class PackageService
         {
             q = q.Where(p => p.Kind == k);
         }
+        else if (kind == "waiting")
+        {
+            q = q.Where(p => p.Versions.Any(v => v.Status == VersionStatus.New || v.Status == VersionStatus.Testing));
+        }
 
         q = (sort, desc) switch
         {
@@ -51,13 +61,19 @@ public static class PackageService
         {
             p.Id, p.Name, p.Publisher, p.Kind, p.Version, p.WingetId, p.Detection, p.DetectionValue,
             Assignments = p.Assignments.Count,
+            Testing = p.Versions.Where(v => v.Status == VersionStatus.Testing).Select(v => v.Version).FirstOrDefault(),
+            Waiting = p.Versions.Count(v => v.Status == VersionStatus.New),
+            Platforms = p.Versions.Where(v => v.Status == VersionStatus.Approved).SelectMany(v => v.Installers).Select(i => i.Architecture).ToList(),
         }).ToListAsync(ct);
 
         var result = new List<PackageRow>();
         foreach (var p in rows)
         {
-            var installed = await InstalledQuery(db, p.Detection, p.DetectionValue, p.WingetId).Where(s => reachable.Contains(s.ClientId)).Select(s => s.ClientId).Distinct().CountAsync(ct);
-            result.Add(new PackageRow(p.Id, p.Name, p.Publisher, p.Kind, p.Version, p.WingetId, p.Assignments, installed));
+            var versions = await InstalledQuery(db, p.Detection, p.DetectionValue, p.WingetId).Where(s => reachable.Contains(s.ClientId))
+                .Select(s => new { s.ClientId, s.Version }).ToListAsync(ct);
+            var installed = versions.Select(v => v.ClientId).Distinct().Count();
+            var current = p.Version is null ? 0 : !PackageVersions.Comparable(p.Version) ? installed : versions.Where(v => v.Version is not null && WingetCatalog.CompareVersions(v.Version, p.Version) >= 0).Select(v => v.ClientId).Distinct().Count();
+            result.Add(new PackageRow(p.Id, p.Name, p.Publisher, p.Kind, p.Version, p.Testing, p.Waiting, p.Platforms.Distinct().Order().ToList(), p.WingetId, p.Assignments, installed, current));
         }
 
         return result;
@@ -80,7 +96,7 @@ public static class PackageService
     }
 
     public static async Task<Package?> GetAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
-        => actor.Can(Permission.PackagesView) ? await db.Packages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct) : null;
+        => actor.Can(Permission.PackagesView) ? await db.Packages.AsNoTracking().Include(p => p.PilotGroup).FirstOrDefaultAsync(p => p.Id == id, ct) : null;
 
     /// <summary>The packages by their winget id (case does not matter): which program of a client is a package already.</summary>
     public static async Task<IReadOnlyDictionary<string, long>> ByWingetIdAsync(AppDbContext db, Actor actor, CancellationToken ct = default)
@@ -102,9 +118,9 @@ public static class PackageService
         return n.Length == 0 ? name.Trim() : n;
     }
 
-    /// <summary>The address of a new package filled in from a program a client has (winget id, name, publisher).</summary>
+    /// <summary>A program a client has becomes a package through the store: its page in the catalog (name, publisher, versions, installers).</summary>
     public static string NewFromWingetUrl(string wingetId, string name, string? publisher)
-        => $"/packages/edit?winget={Uri.EscapeDataString(wingetId)}&name={Uri.EscapeDataString(name)}" + (string.IsNullOrEmpty(publisher) ? string.Empty : $"&publisher={Uri.EscapeDataString(publisher)}");
+        => $"/store/item?id={Uri.EscapeDataString(wingetId)}";
 
     public static async Task<IReadOnlyList<(long Id, string Name, PackageKind Kind)>> ChoicesAsync(AppDbContext db, Actor actor, CancellationToken ct = default)
     {
@@ -130,14 +146,14 @@ public static class PackageService
             return Outcome<Package>.Fail(Localization.Text.T("Common.NameRequired"));
         }
 
-        if (form.Kind == PackageKind.Winget && string.IsNullOrWhiteSpace(form.WingetId))
+        if (form.Detection == DetectionKind.WingetId && string.IsNullOrWhiteSpace(form.DetectionValue ?? form.WingetId))
         {
             return Outcome<Package>.Fail(Localization.Text.T("Packages.WingetId.Required"));
         }
 
-        if (form.Kind == PackageKind.Script && string.IsNullOrWhiteSpace(form.InstallScript))
+        if (form.PilotGroupId is { } pilot && !await AccessRules.Groups(db, actor).AnyAsync(g => g.Id == pilot, ct))
         {
-            return Outcome<Package>.Fail(Localization.Text.T("Packages.InstallScript.Required"));
+            return Outcome<Package>.Denied();
         }
 
         Package package;
@@ -160,46 +176,12 @@ public static class PackageService
         package.Name = Cut(name, 120)!;
         package.Publisher = Cut(form.Publisher, 120);
         package.Description = Cut(form.Description, 1000);
-        package.Kind = form.Kind;
-        package.Version = form.Kind == PackageKind.Winget ? null : Cut(form.Version, 60);
-        package.WingetId = form.Kind == PackageKind.Winget ? Cut(form.WingetId, 200) : null;
-        package.InstallArguments = form.Kind is PackageKind.Msi or PackageKind.Exe ? Cut(form.InstallArguments, 1000) : null;
-        package.UninstallCommand = form.Kind is PackageKind.Exe or PackageKind.Script ? Cut(form.UninstallCommand, 4000) : null;
-        package.InstallScript = form.Kind == PackageKind.Script ? form.InstallScript?.Trim() : null;
-        package.Detection = form.Kind == PackageKind.Winget && form.Detection == DetectionKind.None ? DetectionKind.WingetId : form.Detection;
-        package.DetectionValue = package.Detection == DetectionKind.WingetId && form.Kind == PackageKind.Winget && string.IsNullOrWhiteSpace(form.DetectionValue)
-            ? null
-            : Cut(form.DetectionValue, 300);
-        package.AutoUpdate = form.Kind == PackageKind.Winget && form.AutoUpdate;
+        package.WingetId = Cut(form.WingetId, 200);
+        package.Detection = form.Detection;
+        package.DetectionValue = form.Detection == DetectionKind.WingetId && string.IsNullOrWhiteSpace(form.DetectionValue) ? null : Cut(form.DetectionValue, 300);
+        package.AutoUpdate = package.WingetId is not null && form.AutoUpdate;
+        package.PilotGroupId = form.PilotGroupId;
         ActivityLog.Add(db, actor, "package", id is null ? "create" : "update", package.Name);
-        await db.SaveChangesAsync(ct);
-        return Outcome<Package>.Success(package);
-    }
-
-    public static async Task<Outcome<Package>> UploadAsync(AppDbContext db, Actor actor, PackageFiles store, long id, string fileName, Stream content, CancellationToken ct = default)
-    {
-        if (!actor.Can(Permission.PackagesEdit))
-        {
-            return Outcome<Package>.Denied();
-        }
-
-        var package = await db.Packages.FirstOrDefaultAsync(p => p.Id == id, ct);
-        if (package is null)
-        {
-            return Outcome<Package>.Denied();
-        }
-
-        var extension = Path.GetExtension(fileName).ToLowerInvariant();
-        if ((package.Kind == PackageKind.Msi && extension != ".msi") || (package.Kind == PackageKind.Exe && extension != ".exe") || package.Kind is PackageKind.Winget or PackageKind.Script)
-        {
-            return Outcome<Package>.Fail(Localization.Text.T("Packages.File.WrongType"));
-        }
-
-        var (name, size, sha) = await store.SaveAsync(id, fileName, content, ct);
-        package.FileName = name;
-        package.FileSize = size;
-        package.FileSha256 = sha;
-        ActivityLog.Add(db, actor, "package", "upload", package.Name, name);
         await db.SaveChangesAsync(ct);
         return Outcome<Package>.Success(package);
     }
@@ -264,9 +246,11 @@ public static class PackageService
             return Outcome<PackageAssignment>.Denied();
         }
 
-        if (Jobs.JobService.PackageTemplate(package, action == AssignmentAction.Uninstall) is null)
+        // what is assigned is the approved version: it has to be there, and able to do what the assignment says
+        var (approved, _) = await PackageVersions.CurrentAsync(db, packageId, ct);
+        if (approved is null || PackageVersions.Template(approved, action == AssignmentAction.Uninstall) is null)
         {
-            return Outcome<PackageAssignment>.Fail(Localization.Text.T(action == AssignmentAction.Uninstall ? "Jobs.Error.NoUninstall" : "Jobs.Error.NoInstaller"));
+            return Outcome<PackageAssignment>.Fail(Localization.Text.T(approved is null ? "Versions.Error.NoneApproved" : action == AssignmentAction.Uninstall ? "Jobs.Error.NoUninstall" : "Jobs.Error.NoInstaller"));
         }
 
         var assignment = await db.PackageAssignments.FirstOrDefaultAsync(a => a.PackageId == packageId && a.ClientGroupId == groupId, ct);

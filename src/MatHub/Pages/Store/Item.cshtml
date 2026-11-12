@@ -47,8 +47,9 @@
             </div>
         </section>
 
+        @{ var taken = MatHub.Services.Packages.WingetCatalog.Choose(d.Installers).Select(x => x.Installer.Index).ToHashSet(); }
         <mh-table caption="@L["Store.Installers"]">
-            <thead><tr><th scope="col">@L["Store.Architecture"]</th><th scope="col">@L["Store.Type"]</th><th scope="col" class="mat-hide-sm">@L["Store.Scope"]</th><th scope="col" class="mat-hide-md">@L["Store.Silent"]</th>@if (Model.CanEdit) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+            <thead><tr><th scope="col">@L["Store.Architecture"]</th><th scope="col">@L["Store.Type"]</th><th scope="col" class="mat-hide-sm">@L["Store.Scope"]</th><th scope="col" class="mat-hide-md">@L["Store.Silent"]</th><th scope="col">@L["Store.InPackage"]</th></tr></thead>
             <tbody>
                 @foreach (var i in d.Installers)
                 {
@@ -57,21 +58,7 @@
                         <td data-label="@L["Store.Type"]"><span class="mat-pill mat-pill--plain">@i.Type.ToUpperInvariant()</span></td>
                         <td data-label="@L["Store.Scope"]" class="mat-hide-sm">@(i.Scope is null ? "–" : L["Store.Scope." + (i.Scope == "user" ? "user" : "machine")])</td>
                         <td data-label="@L["Store.Silent"]" class="mat-hide-md"><code class="mh-code-name">@(MatHub.Services.Packages.WingetCatalog.SilentArguments(i) ?? (i.Type is "msi" or "wix" ? "/qn" : "–"))</code></td>
-                        @if (Model.CanEdit)
-                        {
-                            <td class="mat-table__cell-actions">
-                                @if (i.Cacheable)
-                                {
-                                    <form method="post" asp-page-handler="Cache" asp-route-id="@d.WingetId" asp-route-installer="@i.Index" class="mat-table__actions">
-                                        <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" data-busy="@L["Store.Caching"]">@Ui.Icon("archive")<span>@L["Store.Cache"]</span></button>
-                                    </form>
-                                }
-                                else
-                                {
-                                    <span class="mh-muted">@L["Store.WingetOnly"]</span>
-                                }
-                            </td>
-                        }
+                        <td data-label="@L["Store.InPackage"]">@if (taken.Contains(i.Index)) { <span class="mat-pill mat-pill--ok">@L[i.Cacheable ? "Store.Taken.File" : "Store.Taken.Winget"]</span> } else { <span class="mh-muted">–</span> }</td>
                     </tr>
                 }
             </tbody>
@@ -84,29 +71,42 @@
                 <ul class="mat-itemlist mat-itemlist--lines-inset">
                     @if (d.PackageId is { } packageId)
                     {
-                        <li class="mat-item"><a class="mat-item__main" href="/packages/edit?id=@packageId">
+                        <li class="mat-item"><a class="mat-item__main" href="/packages/@packageId/versions">
                             <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--ok">@Ui.Icon("check")</span></span>
-                            <span class="mat-item__body"><span class="mat-item__title">@L["Store.InMatHub"]</span><span class="mat-item__text">@L["Store.OpenPackage"]</span></span>
+                            <span class="mat-item__body"><span class="mat-item__title">@L["Store.InMatHub"]</span><span class="mat-item__text">@(Model.Known ? L["Store.VersionKnown", d.Version].Value : L["Store.OpenPackage"].Value)</span></span>
                             <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
                         </a></li>
+                        @if (Model.CanEdit && !Model.Known)
+                        {
+                            <li class="mat-item">
+                                <form method="post" asp-page-handler="Add" asp-route-id="@d.WingetId" class="mat-item__row">
+                                    <button type="submit" class="mat-item__main" data-busy="@L["Store.Caching"]">
+                                        <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("sparkles")</span></span>
+                                        <span class="mat-item__body"><span class="mat-item__title">@L["Store.TakeVersion", d.Version]</span><span class="mat-item__text">@L["Store.TakeVersion.Hint"]</span></span>
+                                    </button>
+                                </form>
+                            </li>
+                        }
                     }
                     else if (Model.CanEdit)
                     {
                         <li class="mat-item">
-                            <form method="post" asp-page-handler="Winget" asp-route-id="@d.WingetId" class="mat-item__row">
-                                <button type="submit" class="mat-item__main">
-                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("box")</span></span>
+                            <form method="post" asp-page-handler="Add" asp-route-id="@d.WingetId" class="mat-item__row">
+                                <button type="submit" class="mat-item__main" data-busy="@L["Store.Caching"]">
+                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("archive")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@L["Store.AddKept"]</span><span class="mat-item__text">@L["Store.AddKept.Hint"]</span></span>
+                                </button>
+                            </form>
+                        </li>
+                        <li class="mat-item">
+                            <form method="post" asp-page-handler="Add" asp-route-id="@d.WingetId" asp-route-winget="true" class="mat-item__row">
+                                <button type="submit" class="mat-item__main" data-busy="@L["Store.Caching"]">
+                                    <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("box")</span></span>
                                     <span class="mat-item__body"><span class="mat-item__title">@L["Store.AddWinget"]</span><span class="mat-item__text">@L["Store.AddWinget.Hint"]</span></span>
                                 </button>
                             </form>
                         </li>
                     }
-                    <li class="mat-item mh-store-item__note">
-                        <span class="mat-item__main">
-                            <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("archive")</span></span>
-                            <span class="mat-item__body"><span class="mat-item__title">@L["Store.CacheTitle"]</span><span class="mat-item__text">@L["Store.CacheHint"]</span></span>
-                        </span>
-                    </li>
                 </ul>
             </div>
         </section>

@@ -1,74 +1,38 @@
-using System.Globalization;
 using MatHub.Data;
 using MatHub.Localization;
-using MatHub.Services;
 using MatHub.Services.Access;
-using MatHub.Services.Clients;
 using MatHub.Services.Packages;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MatHub.Pages.Updates;
 
 /// <summary>
-/// The updates winget offers on the clients, program by program: on how many clients, which version comes. One click updates a program everywhere, another
-/// everything on every client (or in a group).
+/// Updates are versions, and a person approves them: what waits for a test or an approval, which new versions the catalog has that nobody took yet, which
+/// clients still have an older version, and – only as information – what winget would update beyond the packages of MatHub.
 /// </summary>
-public sealed class IndexModel(AppDbContext db) : AppPageModel
+public sealed class IndexModel(AppDbContext db, WingetCatalog catalog) : AppPageModel
 {
-    public ToolbarModel Toolbar { get; private set; } = null!;
+    public UpdateOverview Overview { get; private set; } = new([], [], [], new UpdateList([], 0, 0));
 
-    public UpdateList List { get; private set; } = new([], 0, 0);
+    public bool CanEdit => Me.Can(Permission.PackagesEdit);
 
-    public long? GroupId { get; private set; }
-
-    public bool CanDeploy => Me.Can(Permission.PackagesDeploy);
-
-    public bool CanMakePackage => Me.Can(Permission.PackagesEdit);
-
-    /// <summary>The packages by winget id (a program that is a package links to it).</summary>
-    public IReadOnlyDictionary<string, long> Packages { get; private set; } = new Dictionary<string, long>();
+    public string Zone => Me.TimeZone;
 
     public async Task<IActionResult> OnGetAsync()
     {
-        var ct = HttpContext.RequestAborted;
-        var search = ListQuery.Text(Request, "q");
-        GroupId = long.TryParse(ListQuery.Text(Request, "group"), out var g) ? g : null;
-        var all = await UpdateService.ListAsync(db, Me.Actor, null, GroupId, ct);
-        var list = await UpdateService.ListAsync(db, Me.Actor, search, GroupId, ct);
-        if (list is null || all is null)
+        if (await UpdateService.OverviewAsync(db, Me.Actor, HttpContext.RequestAborted) is not { } overview)
         {
             return NotFound();
         }
 
-        List = list;
-        Packages = await PackageService.ByWingetIdAsync(db, Me.Actor, ct);
-        var groups = await GroupService.ChoicesAsync(db, Me.Actor, ct);
-        Toolbar = new ToolbarModel
-        {
-            Id = "updates",
-            Action = "/updates",
-            Label = Text.T("Updates.Title"),
-            Search = search,
-            SearchField = true,
-            SearchPlaceholder = Text.T("Updates.Search"),
-            Filters = [new FilterField("group", Text.T("Groups.One"), groups.Select(x => new FilterOption(x.Id.ToString(CultureInfo.InvariantCulture), x.Name)).ToList(), GroupId?.ToString(CultureInfo.InvariantCulture))],
-            SortOptions = [new("clients", Text.T("Updates.Col.Clients"))],
-            Sort = "clients",
-            Descending = true,
-            DefaultSort = "clients",
-            DefaultDescending = true,
-            Total = all.Programs,
-            Matching = list.Programs,
-            Noun = Text.T("Updates.Many"),
-            NounOne = Text.T("Updates.One"),
-        };
+        Overview = overview;
         return Page();
     }
 
-    /// <summary>One program everywhere (<paramref name="wingetId"/>), or everything (empty), on the clients of the group of the filter or on all.</summary>
-    public async Task<IActionResult> OnPostAsync(string? wingetId, long? group)
+    /// <summary>Takes the newer version of the catalog into the package (downloaded and checked, not approved).</summary>
+    public async Task<IActionResult> OnPostPrepareAsync(long package)
     {
-        var outcome = await UpdateService.UpdateAsync(db, Me.Actor, string.IsNullOrWhiteSpace(wingetId) ? null : wingetId, group, null, HttpContext.RequestAborted);
+        var outcome = await catalog.TakeNewerAsync(db, Me.Actor, package, HttpContext.RequestAborted);
         if (outcome.NotAllowed)
         {
             return NotFound();
@@ -80,7 +44,7 @@ public sealed class IndexModel(AppDbContext db) : AppPageModel
             return LocalRedirect("/updates");
         }
 
-        Flash(Text.T("Jobs.Started", outcome.Value!.Name));
-        return LocalRedirect($"/jobs/{outcome.Value.Id}");
+        Flash(Text.T("Versions.Prepared", outcome.Value!.Version));
+        return LocalRedirect($"/packages/{package}/versions");
     }
 }

@@ -432,7 +432,10 @@ public enum DetectionKind
     WingetId = 3,
 }
 
-/// <summary>Software MatHub installs, updates and removes.</summary>
+/// <summary>
+/// Software MatHub installs, updates and removes: the product ("7-Zip"). What runs is a <see cref="PackageVersion"/> with its installers per platform; only an
+/// approved version is distributed (a version in test only to the pilot group). The detection says whether, and in which version, a client has it.
+/// </summary>
 public sealed class Package : SoftEntity
 {
     public string Name { get; set; } = string.Empty;
@@ -441,37 +444,119 @@ public sealed class Package : SoftEntity
 
     public string? Description { get; set; }
 
+    /// <summary>The kind of the installer of the approved version (for the lists; the versions decide).</summary>
     public PackageKind Kind { get; set; } = PackageKind.Winget;
 
-    /// <summary>The version of the uploaded file (empty for winget: always the latest).</summary>
+    /// <summary>The approved version (for the lists; kept by <c>PackageVersions</c>).</summary>
     public string? Version { get; set; }
 
+    /// <summary>Its id in the catalog of winget: new versions are found there, and winget recognises it on the clients.</summary>
     public string? WingetId { get; set; }
 
-    /// <summary>The uploaded installer, in the data volume (<c>/data/packages/{id}/</c>).</summary>
+    public DetectionKind Detection { get; set; } = DetectionKind.None;
+
+    public string? DetectionValue { get; set; }
+
+    /// <summary>MatHub prepares new versions of the catalog by itself (downloaded, checked, "new" – never approved by itself).</summary>
+    public bool AutoUpdate { get; set; } = true;
+
+    /// <summary>The group that gets a version in test before everybody.</summary>
+    public long? PilotGroupId { get; set; }
+
+    public ClientGroup? PilotGroup { get; set; }
+
+    public ICollection<PackageAssignment> Assignments { get; set; } = [];
+
+    public ICollection<PackageVersion> Versions { get; set; } = [];
+}
+
+public enum VersionStatus
+{
+    /// <summary>Prepared (uploaded, or found in the catalog): not distributed.</summary>
+    New = 1,
+
+    /// <summary>Distributed to the pilot group only.</summary>
+    Testing = 2,
+
+    /// <summary>Distributed to every assignment.</summary>
+    Approved = 3,
+
+    /// <summary>Replaced or withdrawn; kept for a way back.</summary>
+    Retired = 4,
+}
+
+/// <summary>A version of a package: its installers per platform and its state of approval.</summary>
+public sealed class PackageVersion : Entity
+{
+    public long PackageId { get; set; }
+
+    public Package? Package { get; set; }
+
+    public string Version { get; set; } = string.Empty;
+
+    public VersionStatus Status { get; set; } = VersionStatus.New;
+
+    /// <summary>upload, store, catalog, script, migrated.</summary>
+    public string Source { get; set; } = "upload";
+
+    public string? Notes { get; set; }
+
+    public DateTime? ApprovedDate { get; set; }
+
+    public long? ApprovedUserId { get; set; }
+
+    public ICollection<PackageInstaller> Installers { get; set; } = [];
+}
+
+/// <summary>The platform an installer is for; neutral installers fit every computer.</summary>
+public enum InstallerArchitecture
+{
+    Neutral = 0,
+    X64 = 1,
+    X86 = 2,
+    Arm64 = 3,
+}
+
+/// <summary>
+/// An installer of a version for one platform: a file kept in MatHub (MSI, EXE), a script, or winget with a pinned version. The agent takes the one that fits
+/// its computer.
+/// </summary>
+public sealed class PackageInstaller : Entity
+{
+    public long PackageVersionId { get; set; }
+
+    public PackageVersion? PackageVersion { get; set; }
+
+    public InstallerArchitecture Architecture { get; set; } = InstallerArchitecture.Neutral;
+
+    public PackageKind Kind { get; set; } = PackageKind.Msi;
+
+    /// <summary>The file, in the data volume (<c>/data/packages/{package}/{installer}/</c>).</summary>
     public string? FileName { get; set; }
 
     public long? FileSize { get; set; }
 
     public string? FileSha256 { get; set; }
 
-    /// <summary>Arguments of the installer (MSI: added to <c>/qn</c>; EXE: e.g. <c>/S</c>).</summary>
-    public string? InstallArguments { get; set; }
+    /// <summary>MSI: added to /qn; EXE: the silent switches.</summary>
+    public string? Arguments { get; set; }
 
-    /// <summary>EXE: the uninstall command line; Script: the PowerShell that removes it.</summary>
+    /// <summary>EXE: the command line that removes it; script: the PowerShell that removes it.</summary>
     public string? UninstallCommand { get; set; }
 
     /// <summary>Script: the PowerShell that installs it.</summary>
     public string? InstallScript { get; set; }
 
-    public DetectionKind Detection { get; set; } = DetectionKind.None;
+    /// <summary>winget: the id; with <see cref="WingetVersion"/> exactly that version (empty: the latest, only for packages from before the versions).</summary>
+    public string? WingetId { get; set; }
 
-    public string? DetectionValue { get; set; }
+    public string? WingetVersion { get; set; }
 
-    /// <summary>Winget: install updates on the assigned clients by themselves.</summary>
-    public bool AutoUpdate { get; set; } = true;
+    /// <summary>MSI: removes it without the file (msiexec /x).</summary>
+    public string? ProductCode { get; set; }
 
-    public ICollection<PackageAssignment> Assignments { get; set; } = [];
+    /// <summary>Where it was downloaded from (the store).</summary>
+    public string? SourceUrl { get; set; }
 }
 
 /// <summary>A program of the winget catalog (the store of MatHub): its latest version, imported every day from the source of Microsoft.</summary>
@@ -547,6 +632,9 @@ public sealed class Job : Entity
     public long? PackageId { get; set; }
 
     public long? PackageAssignmentId { get; set; }
+
+    /// <summary>The version of the package the job installs (or removes).</summary>
+    public long? PackageVersionId { get; set; }
 
     /// <summary>What runs: the script, or the winget id; a copy taken when the job was made.</summary>
     public string Payload { get; set; } = string.Empty;

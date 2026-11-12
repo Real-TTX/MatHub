@@ -60,7 +60,7 @@ public static class Inventory
         var software = Software();
         var upgrades = await Winget.UpgradesAsync(ct);
         var installed = await Winget.InstalledAsync(ct);
-        return report with { Software = software, WingetUpgrades = upgrades, WingetInstalled = installed };
+        return report with { Software = software, WingetUpgrades = upgrades, WingetInstalled = installed, Platform = JobRunner.Platform };
     }
 
     /// <summary>The user signed in at the console now, else the last one.</summary>

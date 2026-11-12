@@ -69,7 +69,7 @@ public sealed class MenuService(AppDbContext db, CurrentUser me)
         _model = new MenuModel
         {
             Pending = actor.Can(Permission.ClientsEnroll) ? await clients.CountAsync(c => c.Status == ClientStatus.Pending) : 0,
-            ClientsWithUpdates = canClients && actor.Can(Permission.PackagesView) ? await clients.CountAsync(c => c.Status == ClientStatus.Active && c.UpdatesAvailable > 0) : 0,
+            ClientsWithUpdates = await Packages.UpdateService.PendingCountAsync(db, actor),
             OpenRuns = actor.Can(Permission.JobsView)
                 ? await db.JobRuns.CountAsync(r => (r.Status == RunStatus.Queued || r.Status == RunStatus.Running) && clients.Any(c => c.Id == r.ClientId))
                 : 0,

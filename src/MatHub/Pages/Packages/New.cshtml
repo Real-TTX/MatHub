@@ -1,0 +1,55 @@
+@page "/packages/new"
+@model MatHub.Pages.Packages.NewModel
+@{
+    ViewData["Title"] = L["Packages.New"].Value;
+    ViewData["PageSub"] = L["Packages.New.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Packages.Title"].Value, "/packages"), (L["Common.New"].Value, null) };
+    var sources = new[] { ("store", "store", "/store"), ("file", "upload", "/packages/new?source=file"), ("script", "terminal", "/packages/new?source=script"), ("winget", "box", "/packages/new?source=winget") };
+    var chosen = string.IsNullOrEmpty(Model.Source) ? null : Model.Source;
+}
+
+<ul class="mh-sources" aria-label="@L["Packages.New.From"]">
+    @foreach (var (key, icon, href) in sources)
+    {
+        <li><a class="mh-source @(chosen == key ? "is-active" : null)" href="@href" aria-current="@(chosen == key ? "page" : null)">
+            <span class="mh-source__icon">@Ui.Icon(icon)</span>
+            <span class="mh-source__body"><strong>@L["Packages.New.From." + key]</strong><span>@L["Packages.New.From." + key + ".Hint"]</span></span>
+        </a></li>
+    }
+</ul>
+
+@if (chosen is not null)
+{
+    <form class="mat-form" method="post" action="/packages/new" asp-antiforgery="true" enctype="multipart/form-data" novalidate>
+        <input type="hidden" name="Source" value="@Model.Source" />
+        <partial name="_FormSummary" model="ViewData.ModelState" />
+        <div class="mat-cols">
+            <div class="mat-col-12 mat-col-lg-7">
+                <div class="mat-card">
+                    <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("upload")@L["Packages.New.Installer"]</h2></div>
+                    <div class="mat-card__body mat-form">
+                        <partial name="_InstallerFields" model="(Model.Input, true)" />
+                    </div>
+                </div>
+            </div>
+            <div class="mat-col-12 mat-col-lg-5">
+                <div class="mat-card">
+                    <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("box")@L["Packages.Tab.General"]</h2></div>
+                    <div class="mat-card__body mat-form">
+                        <mh-field name="Name" label="@L["Common.Name"]" required value="@Model.Name" maxlength="120" msg-required="@L["Common.NameRequired"]" />
+                        <mh-field name="Publisher" label="@L["Software.Publisher"]" value="@Model.Publisher" maxlength="120" optional />
+                        <mh-field name="Description" kind="textarea" label="@L["Common.Description"]" value="@Model.Description" maxlength="1000" rows="2" optional />
+                        <mh-field name="Detection" kind="radios" label="@L["Packages.Detection.How"]" value="@Model.Detection" options="Model.Detections" hint="@L["Packages.Detection.Version"]" />
+                        <mh-field name="DetectionValue" label="@L["Packages.DetectionValue"]" value="@Model.DetectionValue" show-if="Detection" show-value="DisplayName,WingetId" optional hint="@L["Packages.DetectionValue.Hint"]" />
+                        <mh-field name="Approve" kind="switch" label="@L["Packages.New.Approve"]" value="@Model.Approve.ToString()" hint="@L["Packages.New.Approve.Hint"]" />
+                    </div>
+                </div>
+            </div>
+        </div>
+        <mh-buttons save="@L["Common.Create"]" save-icon="plus" back="/packages" />
+    </form>
+}
+
+@section Scripts {
+    <script src="~/js/busy.js" asp-append-version="true"></script>
+}

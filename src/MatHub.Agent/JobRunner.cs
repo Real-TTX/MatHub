@@ -13,8 +13,22 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
 {
     private static readonly int[] InstallerOk = [0, 3010, 1641];
 
-    public async Task<RunResult> RunAsync(AgentJob job, CancellationToken ct)
+    /// <summary>The platform of this Windows: x64, x86 or arm64.</summary>
+    public static string Platform => System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
     {
+        System.Runtime.InteropServices.Architecture.Arm64 => Architectures.Arm64,
+        System.Runtime.InteropServices.Architecture.X86 => Architectures.X86,
+        _ => Architectures.X64,
+    };
+
+    public async Task<RunResult> RunAsync(AgentJob offered, CancellationToken ct)
+    {
+        // a package for several platforms: the installer that fits this computer
+        if (Architectures.Choose(offered, Platform) is not { } job)
+        {
+            return new RunResult { Succeeded = false, Output = $"The package has no installer for this computer ({Platform})." };
+        }
+
         var timeout = TimeSpan.FromSeconds(Math.Clamp(job.TimeoutSeconds, 10, 86400));
         logger.LogInformation("Job {RunId}: {Kind}", job.RunId, job.Kind);
         try
@@ -22,7 +36,7 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
             return job.Kind switch
             {
                 JobKinds.Script => Mask(await ScriptAsync(job, timeout, ct), job.Secrets),
-                JobKinds.WingetInstall => await WingetAsync(["install", "--id", Need(job.Arguments), "--exact", "--silent", "--scope", "machine", "--accept-package-agreements"], timeout, ct, retryWithoutScope: true),
+                JobKinds.WingetInstall => await WingetAsync(["install", "--id", Need(job.Arguments), "--exact", "--silent", "--scope", "machine", "--accept-package-agreements", .. Pinned(job)], timeout, ct, retryWithoutScope: true),
                 JobKinds.WingetUpgrade => string.IsNullOrWhiteSpace(job.Arguments)
                     ? await WingetAsync(["upgrade", "--all", "--silent", "--accept-package-agreements"], timeout, ct)
                     : await WingetAsync(["upgrade", "--id", job.Arguments, "--exact", "--silent", "--accept-package-agreements"], timeout, ct),
@@ -42,6 +56,10 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
             return new RunResult { Succeeded = false, Output = "MatHub agent: " + ex.Message };
         }
     }
+
+    /// <summary>winget: exactly the version and the platform of the job.</summary>
+    private static string[] Pinned(AgentJob job)
+        => [.. string.IsNullOrWhiteSpace(job.Version) ? [] : new[] { "--version", job.Version.Trim() }, .. string.IsNullOrWhiteSpace(job.Architecture) ? [] : new[] { "--architecture", job.Architecture }];
 
     private static string Need(string? value) => string.IsNullOrWhiteSpace(value) ? throw new InvalidOperationException("The job has no value.") : value.Trim();
 

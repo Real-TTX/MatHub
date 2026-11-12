@@ -741,6 +741,9 @@ namespace MatHub.Data.Migrations
                     b.Property<long?>("PackageId")
                         .HasColumnType("bigint");
 
+                    b.Property<long?>("PackageVersionId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("text");
@@ -929,24 +932,6 @@ namespace MatHub.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.Property<string>("FileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("FileSha256")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<long?>("FileSize")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("InstallArguments")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("InstallScript")
-                        .HasColumnType("text");
-
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
 
@@ -955,13 +940,12 @@ namespace MatHub.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<long?>("PilotGroupId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Publisher")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
-
-                    b.Property<string>("UninstallCommand")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
 
                     b.Property<DateTime>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
@@ -981,6 +965,8 @@ namespace MatHub.Data.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PilotGroupId");
 
                     b.ToTable("Package", (string)null);
                 });
@@ -1025,6 +1011,133 @@ namespace MatHub.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("PackageAssignment", (string)null);
+                });
+
+            modelBuilder.Entity("MatHub.Data.PackageInstaller", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Architecture")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Arguments")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("CreateUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("FileSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("InstallScript")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("PackageVersionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProductCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("UninstallCommand")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("UpdateUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("WingetId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("WingetVersion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PackageVersionId");
+
+                    b.ToTable("PackageInstaller", (string)null);
+                });
+
+            modelBuilder.Entity("MatHub.Data.PackageVersion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("ApprovedUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("CreateUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<long>("PackageId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("UpdateUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PackageId", "Status");
+
+                    b.ToTable("PackageVersion", (string)null);
                 });
 
             modelBuilder.Entity("MatHub.Data.RolloutProfile", b =>
@@ -1661,6 +1774,16 @@ namespace MatHub.Data.Migrations
                     b.Navigation("Job");
                 });
 
+            modelBuilder.Entity("MatHub.Data.Package", b =>
+                {
+                    b.HasOne("MatHub.Data.ClientGroup", "PilotGroup")
+                        .WithMany()
+                        .HasForeignKey("PilotGroupId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("PilotGroup");
+                });
+
             modelBuilder.Entity("MatHub.Data.PackageAssignment", b =>
                 {
                     b.HasOne("MatHub.Data.ClientGroup", "ClientGroup")
@@ -1676,6 +1799,28 @@ namespace MatHub.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("ClientGroup");
+
+                    b.Navigation("Package");
+                });
+
+            modelBuilder.Entity("MatHub.Data.PackageInstaller", b =>
+                {
+                    b.HasOne("MatHub.Data.PackageVersion", "PackageVersion")
+                        .WithMany("Installers")
+                        .HasForeignKey("PackageVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PackageVersion");
+                });
+
+            modelBuilder.Entity("MatHub.Data.PackageVersion", b =>
+                {
+                    b.HasOne("MatHub.Data.Package", "Package")
+                        .WithMany("Versions")
+                        .HasForeignKey("PackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Package");
                 });
@@ -1758,6 +1903,13 @@ namespace MatHub.Data.Migrations
             modelBuilder.Entity("MatHub.Data.Package", b =>
                 {
                     b.Navigation("Assignments");
+
+                    b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("MatHub.Data.PackageVersion", b =>
+                {
+                    b.Navigation("Installers");
                 });
 #pragma warning restore 612, 618
         }

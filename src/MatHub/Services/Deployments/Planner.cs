@@ -4,6 +4,7 @@ using MatHub.Services.Clients;
 using MatHub.Services.Jobs;
 using MatHub.Services.Packages;
 using Microsoft.EntityFrameworkCore;
+using PackageVersion = MatHub.Data.PackageVersion;
 
 namespace MatHub.Services.Deployments;
 
@@ -11,10 +12,11 @@ namespace MatHub.Services.Deployments;
 public sealed record PlanResult(int Jobs, int Runs);
 
 /// <summary>
-/// Makes the assignments of the packages true (desired state): every minute it looks at the members of each assigned group and makes the jobs that are missing:
-/// an install where the package is not detected, an uninstall where it still is, an update where winget offers one (packages with automatic updates). A client
-/// is left alone while a run of the assignment is open, for six hours after a failed one, and until it reported an inventory after a run that worked (so
-/// nothing is installed twice). Without an inventory there is no detection: such a client waits for its first one.
+/// Makes the assignments of the packages true (desired state): every minute it looks at the members of each assigned group and makes the jobs that are missing.
+/// What it installs is the approved version of the package – for the members of its pilot group the version in test – where the package is missing or older;
+/// it removes the package where an assignment says so. Nothing else: a version nobody approved never leaves MatHub. A client is left alone while a run of the
+/// assignment is open, for six hours after a failed one, and until it reported an inventory after a run that worked (so nothing is installed twice). Without an
+/// inventory there is no detection: such a client waits for its first one.
 /// </summary>
 public static class Planner
 {
@@ -54,30 +56,64 @@ public static class Planner
                 continue;
             }
 
-            var detected = package.Detection == DetectionKind.None
-                ? await db.JobRuns.Where(r => members.Contains(r.ClientId) && r.Job!.PackageAssignmentId == a.Id && r.Status == RunStatus.Succeeded && r.Job.Kind != JobKind.WingetUpgrade)
-                    .Select(r => r.ClientId).Distinct().ToListAsync(ct)
-                : await PackageService.InstalledQuery(db, package.Detection, package.DetectionValue, package.WingetId).Where(s => members.Contains(s.ClientId))
-                    .Select(s => s.ClientId).Distinct().ToListAsync(ct);
-
-            var install = a.Action == AssignmentAction.Install ? members.Except(detected).ToList() : [];
-            var remove = a.Action == AssignmentAction.Uninstall ? members.Intersect(detected).ToList() : [];
-            var update = new List<long>();
-            if (a.Action == AssignmentAction.Install && package.Kind == PackageKind.Winget && package.AutoUpdate && package.WingetId is { } wingetId)
+            var (approved, testing) = await PackageVersions.CurrentAsync(db, package.Id, ct);
+            if (approved is null && testing is null)
             {
-                var id = wingetId.ToLower();
-                update = await db.ClientSoftware.Where(s => detected.Contains(s.ClientId) && s.AvailableVersion != null && s.WingetId != null && s.WingetId.ToLower() == id)
-                    .Select(s => s.ClientId).Distinct().ToListAsync(ct);
+                continue;
             }
 
-            foreach (var (kind, clients) in new[] { (JobKind.PackageInstall, install), (JobKind.PackageUninstall, remove), (JobKind.WingetUpgrade, update) })
-            {
-                if (clients.Count == 0)
-                {
-                    continue;
-                }
+            // the members of the pilot group get the version in test
+            var pilots = testing is not null && package.PilotGroupId is { } pilotGroup
+                ? await db.ClientGroupMembers.Where(m => m.ClientGroupId == pilotGroup && members.Contains(m.ClientId)).Select(m => m.ClientId).ToListAsync(ct)
+                : [];
+            PackageVersion? TargetOf(long client) => pilots.Contains(client) ? testing : approved;
 
-                var request = new JobRequest(kind, null, package.Id, kind == JobKind.WingetUpgrade ? package.WingetId : null, clients, []);
+            // the version each member has: by the detection, or (without one) by the runs of this assignment that worked
+            var installed = new Dictionary<long, string?>();
+            if (package.Detection == DetectionKind.None)
+            {
+                var done = await db.JobRuns.Where(r => members.Contains(r.ClientId) && r.Job!.PackageAssignmentId == a.Id && r.Status == RunStatus.Succeeded && r.Job.Kind == JobKind.PackageInstall)
+                    .OrderBy(r => r.Id).Select(r => new { r.ClientId, r.Job!.PackageVersionId }).ToListAsync(ct);
+                var versions = await db.PackageVersions.AsNoTracking().Where(v => v.PackageId == package.Id).ToDictionaryAsync(v => v.Id, v => v.Version, ct);
+                foreach (var d in done)
+                {
+                    installed[d.ClientId] = d.PackageVersionId is { } vid && versions.TryGetValue(vid, out var v) ? v : "0";
+                }
+            }
+            else
+            {
+                var rows = await PackageService.InstalledQuery(db, package.Detection, package.DetectionValue, package.WingetId).Where(s => members.Contains(s.ClientId))
+                    .Select(s => new { s.ClientId, s.Version }).ToListAsync(ct);
+                foreach (var g in rows.GroupBy(r => r.ClientId))
+                {
+                    installed[g.Key] = g.Select(r => r.Version ?? "0").OrderByDescending(v => v, Comparer<string>.Create(WingetCatalog.CompareVersions)).First();
+                }
+            }
+
+            var work = new List<(JobKind Kind, PackageVersion Version, List<long> Clients)>();
+            if (a.Action == AssignmentAction.Install)
+            {
+                // missing or older than its version: installed (an installer updates what is there)
+                foreach (var group in members.Select(m => (Client: m, Target: TargetOf(m))).Where(x => x.Target is not null)
+                    .Where(x => !installed.TryGetValue(x.Client, out var have) || have is null
+                                || (PackageVersions.Comparable(x.Target!.Version) && WingetCatalog.CompareVersions(have, x.Target.Version) < 0))
+                    .GroupBy(x => x.Target!.Id))
+                {
+                    work.Add((JobKind.PackageInstall, group.First().Target!, group.Select(x => x.Client).ToList()));
+                }
+            }
+            else
+            {
+                var remove = members.Where(installed.ContainsKey).ToList();
+                if (remove.Count > 0)
+                {
+                    work.Add((JobKind.PackageUninstall, (approved ?? testing)!, remove));
+                }
+            }
+
+            foreach (var (kind, version, clients) in work)
+            {
+                var request = new JobRequest(kind, null, package.Id, null, clients, [], PackageVersionId: version.Id);
                 var outcome = await JobService.CreateAsync(db, Actor.System, request, "planner", a.Id, ct);
                 if (outcome.Ok)
                 {

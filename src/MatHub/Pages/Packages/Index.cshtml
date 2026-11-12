@@ -10,21 +10,25 @@
     @if (Model.Items.Count == 0)
     {
         var first = Model.Toolbar.Total == 0;
-        <partial name="_Empty" model="@(new EmptyStateModel("box", L[first ? "Packages.Empty" : "Packages.NoMatch"].Value, L[first ? "Packages.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanEdit, "/packages/edit", L["Packages.New"].Value, Model.Toolbar.UrlReset()))" />
+        <partial name="_Empty" model="@(new EmptyStateModel("box", L[first ? "Packages.Empty" : "Packages.NoMatch"].Value, L[first ? "Packages.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanEdit, "/packages/new", L["Packages.New"].Value, Model.Toolbar.UrlReset()))" />
     }
     else
     {
         <mh-table caption="@L["Packages.Title"]">
-            <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Packages.Kind"]</th><th scope="col" class="mat-hide-sm">@L["Packages.Source"]</th><th scope="col" class="mat-num mat-hide-sm">@L["Packages.Assignments"]</th><th scope="col" class="mat-num">@L["Packages.Installed"]</th>@if (Model.CanDeploy) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+            <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Packages.Approved"]</th><th scope="col" class="mat-hide-sm">@L["Packages.Platforms"]</th><th scope="col" class="mat-num mat-hide-sm">@L["Packages.Assignments"]</th><th scope="col" class="mat-num">@L["Packages.CurrentOfInstalled"]</th>@if (Model.CanDeploy) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
             <tbody>
                 @foreach (var p in Model.Items)
                 {
                     <tr>
                         <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/packages/edit?id=@p.Id"><span class="mh-name">@Ui.Icon(JobUi.PackageIcon(p.Kind))@p.Name</span></a>@if (p.Publisher is not null) { <small class="mh-muted mh-block-line">@p.Publisher</small> }</td>
-                        <td data-label="@L["Packages.Kind"]"><span class="mat-pill mat-pill--plain">@L["Packages.Kind." + p.Kind]</span></td>
-                        <td data-label="@L["Packages.Source"]" class="mat-hide-sm">@if (p.WingetId is not null) { <span class="mat-mono">@p.WingetId</span> } else if (p.Version is not null) { <span>@L["Packages.VersionOf", p.Version]</span> } else { <span class="mh-muted">–</span> }</td>
+                        <td data-label="@L["Packages.Approved"]">
+                            @if (p.Version is not null) { <span class="mat-pill mat-pill--ok">@MatHub.Services.Packages.PackageVersions.Show(p.Version)</span> } else { <span class="mat-pill mat-pill--plain">@L["Versions.NoneApproved"]</span> }
+                            @if (p.Testing is not null) { <span class="mat-pill mat-pill--info">@L["Versions.Status.Testing"] @p.Testing</span> }
+                            @if (p.Waiting > 0) { <a class="mat-pill mat-pill--warn" href="/packages/@p.Id/versions">@L["Packages.WaitingCount", p.Waiting]</a> }
+                        </td>
+                        <td data-label="@L["Packages.Platforms"]" class="mat-hide-sm"><span class="mh-platforms">@foreach (var a in p.Platforms) { <span class="mat-tag">@L["Versions.Platform." + MatHub.Services.Packages.PackageVersions.Code(a)]</span> }</span></td>
                         <td data-label="@L["Packages.Assignments"]" class="mat-num mat-hide-sm">@p.Assignments</td>
-                        <td data-label="@L["Packages.Installed"]" class="mat-num mat-table__keep-label">@p.Installed</td>
+                        <td data-label="@L["Packages.CurrentOfInstalled"]" class="mat-num mat-table__keep-label"><span class="@(p.Current < p.Installed ? "mh-warn-text" : null)">@p.Current</span> / @p.Installed</td>
                         @if (Model.CanDeploy)
                         {
                             <td class="mat-table__cell-actions"><div class="mat-table__actions"><a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="/jobs/new?package=@p.Id" aria-label="@L["Packages.InstallNamed", p.Name]" data-tip="@L["Packages.InstallNow"]">@Ui.Icon("download")</a></div></td>
@@ -38,7 +42,7 @@
         @if (Model.CanEdit)
         {
             <a class="mat-btn mat-btn--primary" href="/store">@Ui.Icon("store")<span>@L["Store.FromStore"]</span></a>
-            <a class="mat-btn mat-btn--secondary" href="/packages/edit">@Ui.Icon("plus")<span>@L["Packages.New"]</span></a>
+            <a class="mat-btn mat-btn--secondary" href="/packages/new">@Ui.Icon("plus")<span>@L["Packages.New"]</span></a>
         }
         <a class="mat-btn mat-btn--secondary" href="/updates">@Ui.Icon("refresh")<span>@L["Updates.Title"]</span></a>
     </div>

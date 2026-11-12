@@ -41,7 +41,7 @@ public sealed class IndexModel(AppDbContext db) : AppPageModel
             Search = search,
             SearchField = true,
             SearchPlaceholder = Text.T("Packages.Search"),
-            Filters = [new FilterField("kind", Text.T("Packages.Kind"), Enum.GetValues<PackageKind>().Select(k => new FilterOption(k.ToString().ToLowerInvariant(), Text.T("Packages.Kind." + k))).ToList(), kind)],
+            Filters = [new FilterField("kind", Text.T("Packages.Kind"), Enum.GetValues<PackageKind>().Select(k => new FilterOption(k.ToString().ToLowerInvariant(), Text.T("Packages.Kind." + k))).Append(new FilterOption("waiting", Text.T("Packages.Filter.Waiting"))).ToList(), kind)],
             SortOptions = [new("name", Text.T("Common.Name")), new("kind", Text.T("Packages.Kind")), new("created", Text.T("Common.Created"))],
             Sort = sort,
             Descending = desc,

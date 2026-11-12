@@ -54,7 +54,7 @@
                     <a class="@Cls(Under("/updates"))" href="/updates" aria-current="@Cur(Under("/updates"))">@Ui.Icon("refresh")<span>@L["Updates.Title"]</span>
                         @if (m.ClientsWithUpdates > 0)
                         {
-                            <span class="mat-nav__badge mat-nav__badge--accent">@Badge(m.ClientsWithUpdates)<span class="mat-sr-only"> @L["Updates.ClientsWithUpdates"]</span></span>
+                            <span class="mat-nav__badge mat-nav__badge--accent">@Badge(m.ClientsWithUpdates)<span class="mat-sr-only"> @L["Updates.Stat.Pending"]</span></span>
                         }
                     </a>
                 </li>

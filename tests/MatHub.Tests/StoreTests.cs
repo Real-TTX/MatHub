@@ -102,7 +102,7 @@ public sealed class StoreTests
             new CatalogPackage { WingetId = "Contoso.FirefoxHelper", Name = "Helper for Firefox", Version = "1.0", ManifestPath = "m", Tags = "browser" });
         await t.Db.SaveChangesAsync();
         var admin = new Actor(1, true, new HashSet<string>(), true, []);
-        await PackageService.SaveAsync(t.Db, admin, null, new PackageForm("Firefox", "Mozilla", null, PackageKind.Winget, null, "Mozilla.Firefox", null, null, null, DetectionKind.WingetId, null, true));
+        await PackageService.SaveAsync(t.Db, admin, null, new PackageForm("Firefox", "Mozilla", null, "Mozilla.Firefox", DetectionKind.WingetId, null, true));
 
         var (items, matching) = (await WingetCatalog.SearchAsync(t.Db, admin, "firefox", 1, 10))!.Value;
         Assert.Equal(3, matching);

@@ -150,7 +150,7 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
         var actor = Me.Actor;
         var ct = HttpContext.RequestAborted;
         Kinds = Enum.GetValues<JobKind>()
-            .Where(k => actor.Can(JobService.PermissionFor(k)))
+            .Where(k => actor.Can(JobService.PermissionFor(k)) && k != JobKind.WingetUpgrade)
             .Select(k => new Choice(k.ToString(), Text.T("Jobs.Kind." + k), Text.T("Jobs.Kind." + k + ".Hint")))
             .ToList();
         ScriptChoices = (await ScriptService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name)).ToList();

@@ -34,6 +34,7 @@ else
                         <dt>@L["Clients.Model"]</dt><dd>@(c.Model ?? "–")</dd>
                         <dt>@L["Clients.Serial"]</dt><dd class="mat-mono">@(c.SerialNumber ?? "–")</dd>
                         <dt>@L["Inventory.Bios"]</dt><dd>@(hw?.BiosVersion ?? "–") @if (hw?.BiosDate is { } bd) { <span class="mh-muted">@Dates.Local(bd, Model.Zone).ToString("d", System.Globalization.CultureInfo.CurrentUICulture)</span> }</dd>
+                        <dt>@L["Inventory.Platform"]</dt><dd>@(hw?.Platform is { } platform ? L["Versions.Platform." + platform].Value : "–")</dd>
                         <dt>@L["Inventory.Graphics"]</dt><dd>@(hw?.Graphics is { Count: > 0 } g ? string.Join(", ", g) : "–")</dd>
                         <dt>@L["Inventory.SecureBoot"]</dt><dd>@if (hw?.SecureBoot is { } sb) { <span class="mat-pill mat-pill--@(sb ? "ok" : "warn")">@L[sb ? "Inventory.On" : "Inventory.Off"]</span> } else { <span>–</span> }</dd>
                     </dl>

@@ -147,6 +147,52 @@ public sealed record AgentJob
 
     /// <summary>The files of the script: downloaded (and checked) into the folder it runs in, <c>MATHUB_FILES</c>.</summary>
     public IReadOnlyList<JobFile>? Files { get; init; }
+
+    /// <summary>winget: exactly this version (<c>--version</c>); empty: the latest.</summary>
+    public string? Version { get; init; }
+
+    /// <summary>The platform of this installer: x64, x86, arm64 (null: every one). winget installs it with <c>--architecture</c>.</summary>
+    public string? Architecture { get; init; }
+
+    /// <summary>
+    /// The same job for other platforms: the agent runs the one that fits its computer (arm64 → x64 → x86; a neutral one always fits). An agent that does not
+    /// know them runs the job itself, which is the one for x64.
+    /// </summary>
+    public IReadOnlyList<AgentJob>? Alternatives { get; init; }
+}
+
+public static class Architectures
+{
+    public const string X64 = "x64";
+    public const string X86 = "x86";
+    public const string Arm64 = "arm64";
+
+    /// <summary>The platforms that run on a computer, best first (an arm64 Windows runs x64 and x86 programs too).</summary>
+    public static IReadOnlyList<string> Fitting(string computer) => computer switch
+    {
+        Arm64 => [Arm64, X64, X86],
+        X64 => [X64, X86],
+        _ => [X86],
+    };
+
+    /// <summary>The job of <paramref name="job"/> or its alternatives that fits the computer: the best platform, else a neutral one; null when none fits.</summary>
+    public static AgentJob? Choose(AgentJob job, string computer)
+    {
+        if (job.Alternatives is not { Count: > 0 } all)
+        {
+            return job;
+        }
+
+        foreach (var platform in Fitting(computer))
+        {
+            if (all.FirstOrDefault(a => string.Equals(a.Architecture, platform, StringComparison.OrdinalIgnoreCase)) is { } fit)
+            {
+                return fit with { RunId = job.RunId, Title = job.Title, Secrets = fit.Secrets ?? job.Secrets };
+            }
+        }
+
+        return all.FirstOrDefault(a => a.Architecture is null) is { } neutral ? neutral with { RunId = job.RunId, Title = job.Title } : null;
+    }
 }
 
 /// <summary>A file a script brings along (an XML, a configuration): its name in the folder of the run and where the agent downloads it.</summary>
@@ -183,6 +229,9 @@ public sealed record InventoryReport
     public string? OsBuild { get; init; }
 
     public string? Architecture { get; init; }
+
+    /// <summary>The platform of Windows the packages are chosen for: x64, x86, arm64.</summary>
+    public string? Platform { get; init; }
 
     public string? Manufacturer { get; init; }
 

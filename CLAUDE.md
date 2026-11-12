@@ -46,7 +46,7 @@ src/MatHub.Shared/AgentProtocol.cs   THE protocol of server and agent (DTOs, job
 src/MatHub
   Program.cs                 composition root: services, cookie auth (+ MatIdentity), rate limits (signin 10/min, enroll 60/min), static files, endpoints
   Infrastructure.cs          HealthCheck (--healthcheck), Database (migrate with retry, seed the built-in roles), SecurityHeaders (CSP), MaintenanceService (hourly), EmptyStringBinderProvider
-  Data/                      Entities.cs (User, UserSession, AccessRole(+Group), Client, ClientSoftware, ClientGroup(+Member), EnrollmentKey, Script, Package, PackageAssignment,
+  Data/                      Entities.cs (User, UserSession, AccessRole(+Group), Client, ClientSoftware, ClientGroup(+Member), EnrollmentKey, Script, Package, PackageVersion, PackageInstaller, PackageAssignment, CatalogPackage,
                              Job, JobRun, Secret, Sequence, KioskItem, BootImage, RolloutProfile, BootDevice, RolloutTask, Activity, SystemSetting), AppDbContext.cs, Migrations/
   Services/Access/           Permission (the keys: clients-view …), Actor (who acts: permissions + reach), AccessRules (Clients/Groups the actor reaches), RoleService (+ seed)
   Services/Clients/          ClientService, GroupService (rules: one or more conditions, all or any; members of dynamic groups are computed into ClientGroupMember), EnrollmentService (keys, enroll, hashes)
@@ -54,7 +54,10 @@ src/MatHub
   Services/Jobs/             JobService (jobs: a copy of what runs in Payload, of a sequence in Steps; runs, what the agent takes – with the secrets its script names –
                              and reports, lost runs, the state for the kiosk), SequenceService (sequences: steps, the copy a job gets)
   Services/Kiosk/            KioskService (offers for all clients or groups; the live offer for an agent; a start = a job for that client, origin "kiosk")
-  Services/Packages/         PackageService (+ assignments, detection), PackageFiles (/data/packages), UpdateService (what winget offers, one-click updates)
+  Services/Packages/         PackageService (what a package is, assignments, detection), PackageVersions (versions New/Testing/Approved/Retired, installers per platform,
+                             the AgentJob of a version with its Alternatives per platform), PackageFiles (/data/packages/{package}/{installer}/, staging of the assistant),
+                             InstallerAnalysis (MSI: Property table via OpenMcdf; EXE: setup marks, PE machine), WingetCatalog (the store: index of winget → CatalogPackage,
+                             manifests, icons, add, prepare new versions), UpdateService (what waits, what is newer, who is behind; unmanaged updates only shown)
   Services/Deployments/      Planner (+ PlannerService, every minute): makes the assignments true (install, uninstall, auto-update), waits for the next inventory
   Services/Scripts/          ScriptBlocks (THE catalog of actions + the compilers of blocks and flows, the prelude: $MatHubVars, Invoke-MatHubDialog, Get-MatHubSecret;
                              BlocksToFlow), ScriptSteps (the PowerShell of each action and check; dialogs as UiDialog JSON), ScriptTemplates, ScriptService,
@@ -67,7 +70,7 @@ src/MatHub
   MatPlatform/               copy of the shared package (MatDesign, 2.4.0). Never edit here.
   Platform/                  MatHubPlatform (definition, state, settings, actions, health), MatHubIdentityUsers
   Controls/                  ONE code base per control: <mh-field>, <mh-buttons>, <mh-table>, <mh-tabs>/<mh-tab>, <mh-stats>/<mh-stat> (a row of numbers)
-  Pages/                     Index (landing; _Dashboard = the overview), Clients/ (list + tabs General, Inventory, Software, Jobs, Activity), Groups/, Enrollment/, Packages/ (+ Assignments),
+  Pages/                     Index (landing; _Dashboard = the overview), Clients/ (list + tabs General, Inventory, Software, Jobs, Activity), Groups/, Enrollment/, Packages/ (Index, New = the assistant, Edit = General, Versions, Assignments), Store/ (Index, Item),
                              Updates/, Scripts/ (Edit = General + templates, Code = the editor of its kind, Files), Secrets/, Sequences/ (+ _Step), Kiosk/, Jobs/ (Index, New = now or later, Detail, Run), Groups/_Condition (a row of a rule), Rollout/ (Index = tasks, TaskEdit, Devices,
                              Profiles/ProfileEdit, Images/ImageEdit, Setup), Admin/ (Users, Roles, Connections, Activity, System), Account/, Search, About
   wwwroot/js/                editors.js (code editor with toolbar/search/snippets, block editor, flow editor with zoom; the searchable palette, the field editor of dialogs),
@@ -100,6 +103,11 @@ texts (`Blocks.Type/Hint/Field/Option.*`); `ScriptTests` compiles every action. 
 environment variables; the agent masks their values. The kiosk pipe: every signed-in user may use it (it offers what the kiosk shows anyway); the service
 creates it first, clients check the server is the installed agent. A culture set inside an async method is gone when it returns: return it and set it in the caller. The files of a rollout task are served only while it runs,
 behind its random token; its share password is in `mathub-setup.cmd` (say so: a read-only account).
+
+**Software**: a package is the software, its versions carry installers per platform; only an approved version is distributed (a version in test to the
+pilot group of the package); new versions of the catalog are prepared, never approved by MatHub itself (the user's decision); no path may install an unapproved
+version (no winget upgrade as a job or a step any more – the enum stays for old jobs). Versions are compared like winget (`WingetCatalog.CompareVersions`);
+"latest" (packages from before the versions) is no version: installed is enough (`PackageVersions.Comparable`).
 
 **Agent**: polling only (no open port on the client); jobs one after the other; scripts as files in the agent's own folder (deleted after the run); winget as
 SYSTEM from the folder of the App Installer, its tables read by header positions (any language); the version is the server's build (`agent.version` next to
