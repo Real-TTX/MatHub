@@ -9,12 +9,12 @@
 }
 
 <div class="mat-stack" data-live-target="job" data-live-refresh="@(Model.Busy ? "4" : null)">
-    <div class="mat-cols mh-stats">
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("monitor", "mat-stat__icon")<span class="mat-stat__label">@L["Clients.Title"]</span><span class="mat-stat__value">@runs.Count</span></div></div></div>
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("check-circle", "mat-stat__icon")<span class="mat-stat__label">@L["Runs.Status.Succeeded"]</span><span class="mat-stat__value">@runs.Count(r => r.Status == RunStatus.Succeeded)</span></div></div></div>
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("x-circle", "mat-stat__icon")<span class="mat-stat__label">@L["Runs.Status.Failed"]</span><span class="mat-stat__value">@runs.Count(r => r.Status == RunStatus.Failed)</span></div></div></div>
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("clock", "mat-stat__icon")<span class="mat-stat__label">@L["Jobs.State.Open"]</span><span class="mat-stat__value">@runs.Count(r => r.Status is RunStatus.Queued or RunStatus.Running)</span></div></div></div>
-    </div>
+    <mh-stats label="@L["Jobs.Runs"]">
+        <mh-stat icon="monitor" label="@L["Clients.Title"]" value="@runs.Count.ToString()" />
+        <mh-stat icon="check-circle" label="@L["Runs.Status.Succeeded"]" value="@runs.Count(r => r.Status == RunStatus.Succeeded).ToString()" tone="ok" />
+        <mh-stat icon="x-circle" label="@L["Runs.Status.Failed"]" value="@runs.Count(r => r.Status == RunStatus.Failed).ToString()" tone="@(runs.Any(r => r.Status == RunStatus.Failed) ? "danger" : null)" />
+        <mh-stat icon="clock" label="@L["Jobs.State.Open"]" value="@runs.Count(r => r.Status is RunStatus.Queued or RunStatus.Running).ToString()" tone="@(runs.Any(r => r.Status is RunStatus.Queued or RunStatus.Running) ? "info" : null)" />
+    </mh-stats>
 
     <mh-table caption="@L["Jobs.Runs"]">
         <thead><tr><th scope="col">@L["Clients.One"]</th><th scope="col">@L["Common.Status"]</th><th scope="col" class="mat-hide-sm">@L["Runs.Started"]</th><th scope="col" class="mat-hide-md">@L["Runs.Finished"]</th><th scope="col" class="mat-num mat-hide-sm">@L["Runs.ExitCode"]</th><th scope="col" class="mat-hide-md">@L["Runs.Output"]</th></tr></thead>
@@ -24,8 +24,8 @@
                 <tr>
                     <td data-label="@L["Clients.One"]" class="mat-table__primary"><a href="/jobs/runs/@r.Id"><span class="mh-name">@Ui.Icon("monitor")@r.ClientName</span></a></td>
                     <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.Tone(r.Status)">@L[JobUi.StatusKey(r.Status)]</span></td>
-                    <td data-label="@L["Runs.Started"]" class="mat-mono mat-hide-sm">@(r.Started is { } s ? Dates.Stamp(s, Model.Zone) : "–")</td>
-                    <td data-label="@L["Runs.Finished"]" class="mat-mono mat-hide-md">@(r.Finished is { } f ? Dates.Stamp(f, Model.Zone) : "–")</td>
+                    <td data-label="@L["Runs.Started"]" class="mat-hide-sm mh-nowrap">@Ui.When(r.Started, Model.Zone)</td>
+                    <td data-label="@L["Runs.Finished"]" class="mat-hide-md mh-nowrap">@Ui.When(r.Finished, Model.Zone)</td>
                     <td data-label="@L["Runs.ExitCode"]" class="mat-num mat-mono mat-hide-sm">@r.ExitCode</td>
                     <td data-label="@L["Runs.Output"]" class="mat-mono mat-hide-md mh-output-line">@(r.Output?.Trim().Split('\n').LastOrDefault())</td>
                 </tr>
@@ -50,6 +50,10 @@
                 <dl class="mh-dl">
                     <dt>@L["Jobs.Col.Created"]</dt><dd>@Dates.Stamp(job.CreateDate, Model.Zone)</dd>
                     <dt>@L["Jobs.Col.By"]</dt><dd>@(Model.Detail.CreatedBy ?? L["Jobs.Origin." + job.Origin].Value)</dd>
+                    @if (job.NotBeforeDate is { } start)
+                    {
+                        <dt>@L["Jobs.StartsAt"]</dt><dd>@Dates.Stamp(start, Model.Zone)</dd>
+                    }
                     <dt>@L["Jobs.Timeout"]</dt><dd>@L["Common.Minutes", job.TimeoutSeconds / 60]</dd>
                 </dl>
             </div>

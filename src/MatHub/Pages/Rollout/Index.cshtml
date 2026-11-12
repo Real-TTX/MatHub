@@ -26,7 +26,7 @@
                             <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.RolloutTone(t.Status)">@L["Rollout.Status." + t.Status]</span></td>
                             <td data-label="@L["Rollout.Mac"]" class="mat-mono mat-hide-sm">@t.MacAddress</td>
                             <td data-label="@L["Profiles.One"]" class="mat-hide-md">@t.ProfileName</td>
-                            <td data-label="@L["Rollout.Booted"]" class="mat-mono mat-hide-sm">@(t.Booted is { } b ? Dates.Stamp(b, Model.Zone) : "–")</td>
+                            <td data-label="@L["Rollout.Booted"]" class="mat-hide-sm mh-nowrap">@Ui.When(t.Booted, Model.Zone)</td>
                             <td data-label="@L["Clients.One"]" class="mat-hide-md">@if (t.ClientId is { } cid) { <a href="/clients/@cid">@L["Rollout.OpenClient"]</a> } else { <span class="mh-muted">–</span> }</td>
                         </tr>
                     }

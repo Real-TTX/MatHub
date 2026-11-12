@@ -17,10 +17,16 @@ public sealed class SoftwareModel(AppDbContext db) : ClientPageModel(db)
 
     public int UpdateCount { get; private set; }
 
+    /// <summary>The packages by winget id: a program that is one links to it, one that is not can become one.</summary>
+    public IReadOnlyDictionary<string, long> Packages { get; private set; } = new Dictionary<string, long>();
+
+    public bool CanMakePackage => Me.Can(Permission.PackagesEdit);
+
     public bool CanUpdate => Client.Status == ClientStatus.Active && Me.Can(Permission.PackagesDeploy);
 
     public async Task<IActionResult> OnGetAsync()
     {
+        Packages = await PackageService.ByWingetIdAsync(Db, Me.Actor, HttpContext.RequestAborted);
         if (!await LoadClientAsync())
         {
             return NotFound();

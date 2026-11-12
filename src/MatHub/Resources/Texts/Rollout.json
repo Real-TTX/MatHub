@@ -1,5 +1,6 @@
 {
-  "Rollout.Tasks": { "en": "Rollout", "de": "Rollout" },
+  "Rollout.Tasks": { "en": "Computers to install", "de": "Zu installierende Computer" },
+  "Rollout.Menu": { "en": "Tasks", "de": "Aufgaben" },
   "Rollout.Sub": { "en": "Computers that are installed at their next network boot", "de": "Computer, die beim nächsten Netzwerk-Boot installiert werden" },
   "Rollout.One": { "en": "task", "de": "Aufgabe" },
   "Rollout.Many": { "en": "tasks", "de": "Aufgaben" },

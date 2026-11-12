@@ -110,6 +110,31 @@ public sealed class HubTests
     }
 
     [DbFact]
+    public async Task A_group_with_several_conditions_takes_all_of_them_or_one_of_them()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        GroupCondition[] conditions = [new(GroupRuleField.Name, GroupRuleOperator.StartsWith, "BER-"), new(GroupRuleField.Name, GroupRuleOperator.Contains, "-NB-")];
+        var all = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("Berlin laptops", null, null, GroupKind.Dynamic, conditions))).Value!;
+        var any = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("Berlin or laptops", null, null, GroupKind.Dynamic, conditions, MatchAny: true))).Value!;
+        var key = await KeyAsync(t);
+        var berlinLaptop = await EnrollAsync(t, key, "BER-NB-1", "m-1");
+        var berlinDesktop = await EnrollAsync(t, key, "BER-PC-1", "m-2");
+        var hamburgLaptop = await EnrollAsync(t, key, "HAM-NB-1", "m-3");
+
+        async Task<long[]> MembersOf(ClientGroup g) => await t.Db.ClientGroupMembers.Where(m => m.ClientGroupId == g.Id).Select(m => m.ClientId).OrderBy(x => x).ToArrayAsync();
+        Assert.Equal([berlinLaptop.Id], await MembersOf(all));
+        Assert.Equal(new[] { berlinLaptop.Id, berlinDesktop.Id, hamburgLaptop.Id }.Order(), await MembersOf(any));
+
+        // the conditions come back in their order, and the list says them in words
+        Assert.Equal(conditions, GroupService.Conditions((await GroupService.GetAsync(t.Db, Admin, all.Id))!));
+        var row = (await GroupService.ListAsync(t.Db, Admin, "Berlin laptops"))!.Single();
+        Assert.Contains(MatHub.Localization.Text.T("Groups.And"), row.Rule, StringComparison.Ordinal);
+
+        // a dynamic group without a condition is refused
+        Assert.False((await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("Empty", null, null, GroupKind.Dynamic, [new GroupCondition(GroupRuleField.Name, GroupRuleOperator.Contains, " ")]))).Ok);
+    }
+
+    [DbFact]
     public async Task The_planner_installs_what_is_missing_once_and_updates_by_itself()
     {
         await using var t = await TestDatabase.CreateAsync();

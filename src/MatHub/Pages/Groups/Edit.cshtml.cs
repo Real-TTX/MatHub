@@ -21,11 +21,22 @@ public sealed class EditModel(AppDbContext db) : AppPageModel
 
     [BindProperty] public GroupKind Kind { get; set; } = GroupKind.Static;
 
-    [BindProperty] public GroupRuleField RuleField { get; set; } = GroupRuleField.Name;
+    /// <summary>The conditions of a dynamic group, as the rows of the form send them.</summary>
+    [BindProperty] public List<ConditionInput> Conditions { get; set; } = [new()];
 
-    [BindProperty] public GroupRuleOperator RuleOperator { get; set; } = GroupRuleOperator.StartsWith;
+    /// <summary>"all" or "any".</summary>
+    [BindProperty] public string Match { get; set; } = "all";
 
-    [BindProperty] public string RuleValue { get; set; } = string.Empty;
+    public List<Choice> Matches { get; } = [new("all", Text.T("Groups.Match.All"), null), new("any", Text.T("Groups.Match.Any"), null)];
+
+    public sealed class ConditionInput
+    {
+        public GroupRuleField Field { get; set; } = GroupRuleField.Name;
+
+        public GroupRuleOperator Operator { get; set; } = GroupRuleOperator.StartsWith;
+
+        public string Value { get; set; } = string.Empty;
+    }
 
     public IReadOnlyList<ClientRow> Members { get; private set; } = [];
 
@@ -58,16 +69,16 @@ public sealed class EditModel(AppDbContext db) : AppPageModel
         Description = group.Description ?? string.Empty;
         Colour = group.Colour ?? string.Empty;
         Kind = group.Kind;
-        RuleField = group.RuleField;
-        RuleOperator = group.RuleOperator;
-        RuleValue = group.RuleValue ?? string.Empty;
+        var conditions = GroupService.Conditions(group);
+        Conditions = conditions.Count == 0 ? [new()] : conditions.Select(c => new ConditionInput { Field = c.Field, Operator = c.Operator, Value = c.Value }).ToList();
+        Match = group.MatchAny ? "any" : "all";
         Members = await GroupService.MembersAsync(db, Me.Actor, id, HttpContext.RequestAborted);
         return Page();
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
-        var outcome = await GroupService.SaveAsync(db, Me.Actor, Id, new GroupForm(Name, Description, Colour, Kind, RuleField, RuleOperator, RuleValue), HttpContext.RequestAborted);
+        var outcome = await GroupService.SaveAsync(db, Me.Actor, Id, new GroupForm(Name, Description, Colour, Kind, Conditions.Select(c => new GroupCondition(c.Field, c.Operator, c.Value)).ToList(), Match == "any"), HttpContext.RequestAborted);
         if (outcome.NotAllowed)
         {
             return NotFound();
@@ -75,7 +86,12 @@ public sealed class EditModel(AppDbContext db) : AppPageModel
 
         if (!outcome.Ok)
         {
-            ModelState.AddModelError(Kind == GroupKind.Dynamic && string.IsNullOrWhiteSpace(RuleValue) ? nameof(RuleValue) : nameof(Name), outcome.Error!);
+            if (Conditions.Count == 0)
+            {
+                Conditions = [new()];
+            }
+
+            ModelState.AddModelError(Kind == GroupKind.Dynamic && Conditions.All(c => string.IsNullOrWhiteSpace(c.Value)) ? "Conditions" : nameof(Name), outcome.Error!);
             if (Id is { } id)
             {
                 Members = await GroupService.MembersAsync(db, Me.Actor, id, HttpContext.RequestAborted);

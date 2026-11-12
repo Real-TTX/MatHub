@@ -149,6 +149,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             e.Property(x => x.Description).HasMaxLength(1000);
             e.Property(x => x.Colour).HasMaxLength(7);
             e.Property(x => x.RuleValue).HasMaxLength(200);
+            e.Property(x => x.MoreRules).HasColumnType("jsonb");
             e.HasQueryFilter(x => x.UpdateState != SoftEntity.Deleted);
         });
 

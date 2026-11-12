@@ -16,13 +16,13 @@ else
     <div class="mat-stack">
         @foreach (var g in Model.Groups)
         {
-            <div class="mat-card">
-                <div class="mat-card__head"><h2 class="mat-card__title">@g.Name <span class="mat-badge">@g.Items.Count</span></h2></div>
+            <div class="mat-card mat-card--flush">
+                <div class="mat-card__head"><h2 class="mat-card__title">@g.Name</h2><span class="mat-pill mat-pill--plain mh-head-end">@g.Items.Count</span></div>
                 <div class="mat-card__body">
-                    <ul class="mat-itemlist">
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
                         @foreach (var i in g.Items)
                         {
-                            <li class="mat-item"><a class="mat-item__main" href="@i.Href"><span class="mat-item__lead">@Ui.Icon(i.Icon)</span><span class="mat-item__body"><span class="mat-item__title">@i.Title</span>@if (!string.IsNullOrEmpty(i.Text)) { <span class="mat-item__text">@i.Text</span> }</span></a></li>
+                            <li class="mat-item"><a class="mat-item__main" href="@i.Href"><span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon(i.Icon)</span></span><span class="mat-item__body"><span class="mat-item__title">@i.Title</span>@if (!string.IsNullOrEmpty(i.Text)) { <span class="mat-item__text">@i.Text</span> }</span><span class="mat-item__chevron">@Ui.Icon("chevron-right")</span></a></li>
                         }
                     </ul>
                 </div>

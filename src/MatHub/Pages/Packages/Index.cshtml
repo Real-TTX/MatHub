@@ -22,7 +22,7 @@
                     <tr>
                         <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/packages/edit?id=@p.Id"><span class="mh-name">@Ui.Icon(JobUi.PackageIcon(p.Kind))@p.Name</span></a>@if (p.Publisher is not null) { <small class="mh-muted mh-block-line">@p.Publisher</small> }</td>
                         <td data-label="@L["Packages.Kind"]"><span class="mat-pill mat-pill--plain">@L["Packages.Kind." + p.Kind]</span></td>
-                        <td data-label="@L["Packages.Source"]" class="mat-mono mat-hide-sm">@(p.WingetId ?? p.Version ?? "–")</td>
+                        <td data-label="@L["Packages.Source"]" class="mat-hide-sm">@if (p.WingetId is not null) { <span class="mat-mono">@p.WingetId</span> } else if (p.Version is not null) { <span>@L["Packages.VersionOf", p.Version]</span> } else { <span class="mh-muted">–</span> }</td>
                         <td data-label="@L["Packages.Assignments"]" class="mat-num mat-hide-sm">@p.Assignments</td>
                         <td data-label="@L["Packages.Installed"]" class="mat-num mat-table__keep-label">@p.Installed</td>
                         @if (Model.CanDeploy)

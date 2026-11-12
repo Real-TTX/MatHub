@@ -84,7 +84,7 @@
         {
             <li class="mat-nav__group" role="presentation">@L["Shell.Group.Rollout"]</li>
             <li>
-                <a class="@Cls(path.Equals("/rollout", StringComparison.OrdinalIgnoreCase) || Under("/rollout/tasks"))" href="/rollout" aria-current="@Cur(path.Equals("/rollout", StringComparison.OrdinalIgnoreCase) || Under("/rollout/tasks"))">@Ui.Icon("server")<span>@L["Rollout.Tasks"]</span>
+                <a class="@Cls(path.Equals("/rollout", StringComparison.OrdinalIgnoreCase) || Under("/rollout/tasks"))" href="/rollout" aria-current="@Cur(path.Equals("/rollout", StringComparison.OrdinalIgnoreCase) || Under("/rollout/tasks"))">@Ui.Icon("server")<span>@L["Rollout.Menu"]</span>
                     @if (m.RolloutsOpen > 0)
                     {
                         <span class="mat-nav__badge mat-nav__badge--plain">@Badge(m.RolloutsOpen)<span class="mat-sr-only"> @L["Rollout.Open"]</span></span>

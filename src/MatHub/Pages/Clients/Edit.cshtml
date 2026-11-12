@@ -66,31 +66,66 @@
                 </dl>
             </div>
         </div>
-        <div class="mat-card">
-            <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("play")@L["Clients.Actions"]</h2></div>
-            <div class="mat-card__body">
-                <div class="mat-btn-row mat-btn-row--plain">
-                    @if (Model.CanRun)
-                    {
-                        <a class="mat-btn mat-btn--primary" href="/jobs/new?client=@c.Id">@Ui.Icon("play")<span>@L["Clients.Run"]</span></a>
-                    }
-                    <form method="post" asp-page-handler="Inventory">
-                        <button type="submit" class="mat-btn mat-btn--secondary" @(c.InventoryRequested ? "disabled" : null)>@Ui.Icon("list-checks")<span>@L[c.InventoryRequested ? "Clients.InventoryPending" : "Clients.RequestInventory"]</span></button>
-                    </form>
-                    @if (c.Status == ClientStatus.Active && Model.CanManage)
-                    {
-                        <form method="post" asp-page-handler="Disable">
-                            <button type="submit" class="mat-btn mat-btn--secondary" data-confirm="@L["Clients.DisableConfirm", c.Name]" data-confirm-ok="@L["Clients.Disable"]">@Ui.Icon("pause")<span>@L["Clients.Disable"]</span></button>
-                        </form>
-                    }
-                    else if (c.Status == ClientStatus.Disabled && Me.Can(Permission.ClientsEnroll))
-                    {
-                        <form method="post" asp-page-handler="Approve">
-                            <button type="submit" class="mat-btn mat-btn--secondary">@Ui.Icon("play")<span>@L["Clients.Enable"]</span></button>
-                        </form>
-                    }
+        @if (c.Status != ClientStatus.Pending)
+        {
+            <section class="mat-card mat-card--flush" aria-labelledby="actions-title">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="actions-title">@Ui.Icon("play")@L["Clients.Actions"]</h2></div>
+                <div class="mat-card__body">
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
+                        @if (Model.CanRun && c.Status == ClientStatus.Active)
+                        {
+                            <li class="mat-item"><a class="mat-item__main" href="/jobs/new?client=@c.Id">
+                                <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("play")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@L["Clients.Run"]</span><span class="mat-item__text">@L["Clients.Run.Hint"]</span></span>
+                                <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                            </a></li>
+                            @if (c.UpdatesAvailable > 0)
+                            {
+                                <li class="mat-item"><a class="mat-item__main" href="/clients/@c.Id/software?updates=1">
+                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--warn">@Ui.Icon("refresh")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@L["Clients.UpdatesWaiting", c.UpdatesAvailable]</span><span class="mat-item__text">@L["Clients.UpdatesWaiting.Hint"]</span></span>
+                                    <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                                </a></li>
+                            }
+                            <li class="mat-item"><a class="mat-item__main" href="/jobs/new?client=@c.Id&amp;kind=Restart">
+                                <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("power")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@L["Jobs.Kind.Restart"]</span><span class="mat-item__text">@L["Jobs.Kind.Restart.Hint"]</span></span>
+                                <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                            </a></li>
+                        }
+                        <li class="mat-item">
+                            <form method="post" asp-page-handler="Inventory" class="mat-item__row">
+                                <button type="submit" class="mat-item__main" disabled="@c.InventoryRequested">
+                                    <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("list-checks")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@L[c.InventoryRequested ? "Clients.InventoryPending" : "Clients.RequestInventory"]</span><span class="mat-item__text">@L[c.InventoryRequested ? "Clients.InventoryPending.Hint" : "Clients.RequestInventory.Hint"]</span></span>
+                                </button>
+                            </form>
+                        </li>
+                        @if (c.Status == ClientStatus.Active && Model.CanManage)
+                        {
+                            <li class="mat-item">
+                                <form method="post" asp-page-handler="Disable" class="mat-item__row">
+                                    <button type="submit" class="mat-item__main" data-confirm="@L["Clients.DisableConfirm", c.Name]" data-confirm-ok="@L["Clients.Disable"]">
+                                        <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("pause")</span></span>
+                                        <span class="mat-item__body"><span class="mat-item__title">@L["Clients.Disable"]</span><span class="mat-item__text">@L["Clients.Disable.Hint"]</span></span>
+                                    </button>
+                                </form>
+                            </li>
+                        }
+                        else if (c.Status == ClientStatus.Disabled && Me.Can(Permission.ClientsEnroll))
+                        {
+                            <li class="mat-item">
+                                <form method="post" asp-page-handler="Approve" class="mat-item__row">
+                                    <button type="submit" class="mat-item__main">
+                                        <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--ok">@Ui.Icon("play")</span></span>
+                                        <span class="mat-item__body"><span class="mat-item__title">@L["Clients.Enable"]</span><span class="mat-item__text">@L["Clients.Enable.Hint"]</span></span>
+                                    </button>
+                                </form>
+                            </li>
+                        }
+                    </ul>
                 </div>
-            </div>
-        </div>
+            </section>
+        }
     </div>
 </div>

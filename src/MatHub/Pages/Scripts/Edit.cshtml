@@ -39,22 +39,37 @@
     @if (!Model.IsNew)
     {
         <div class="mat-col-12 mat-col-lg-5">
-            <div class="mat-card">
-                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("play")@L["Clients.Actions"]</h2></div>
+            <section class="mat-card mat-card--flush" aria-labelledby="script-actions">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="script-actions">@Ui.Icon("play")@L["Clients.Actions"]</h2></div>
                 <div class="mat-card__body">
-                    <div class="mat-btn-row mat-btn-row--plain">
-                        <a class="mat-btn mat-btn--secondary" href="/scripts/@Model.Id/code">@Ui.Icon(JobUi.EditorIcon(Model.Editor))<span>@L["Scripts.OpenEditor"]</span></a>
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
+                        <li class="mat-item"><a class="mat-item__main" href="/scripts/@Model.Id/code">
+                            <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon(JobUi.EditorIcon(Model.Editor))</span></span>
+                            <span class="mat-item__body"><span class="mat-item__title">@L["Scripts.OpenEditor"]</span><span class="mat-item__text">@L["Scripts.Editor." + Model.Editor + ".Hint"]</span></span>
+                            <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                        </a></li>
                         @if (Model.CanRun)
                         {
-                            <a class="mat-btn mat-btn--primary" href="/jobs/new?script=@Model.Id">@Ui.Icon("play")<span>@L["Scripts.Run"]</span></a>
+                            <li class="mat-item"><a class="mat-item__main" href="/jobs/new?script=@Model.Id">
+                                <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--ok">@Ui.Icon("play")</span></span>
+                                <span class="mat-item__body"><span class="mat-item__title">@L["Scripts.Run"]</span><span class="mat-item__text">@L["Scripts.Run.Hint"]</span></span>
+                                <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                            </a></li>
                         }
                         @if (Model.CanEdit)
                         {
-                            <form method="post" asp-page-handler="Duplicate" asp-route-id="@Model.Id"><button type="submit" class="mat-btn mat-btn--ghost">@Ui.Icon("copy")<span>@L["Scripts.Duplicate"]</span></button></form>
+                            <li class="mat-item">
+                                <form method="post" asp-page-handler="Duplicate" asp-route-id="@Model.Id" class="mat-item__row">
+                                    <button type="submit" class="mat-item__main">
+                                        <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("copy")</span></span>
+                                        <span class="mat-item__body"><span class="mat-item__title">@L["Scripts.Duplicate"]</span><span class="mat-item__text">@L["Scripts.Duplicate.Hint"]</span></span>
+                                    </button>
+                                </form>
+                            </li>
                         }
-                    </div>
+                    </ul>
                 </div>
-            </div>
+            </section>
         </div>
     }
 </div>

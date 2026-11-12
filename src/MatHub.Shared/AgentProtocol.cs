@@ -173,6 +173,22 @@ public sealed record InventoryReport
 
     public DateTime? BootTime { get; init; }
 
+    public string? BiosVersion { get; init; }
+
+    public DateTime? BiosDate { get; init; }
+
+    public int? ProcessorCores { get; init; }
+
+    public int? ProcessorThreads { get; init; }
+
+    /// <summary>The names of the graphics adapters.</summary>
+    public IReadOnlyList<string>? Graphics { get; init; }
+
+    public DateTime? OsInstallDate { get; init; }
+
+    /// <summary>Secure Boot on (null: not known, e.g. a BIOS without UEFI).</summary>
+    public bool? SecureBoot { get; init; }
+
     public IReadOnlyList<DiskInfo> Disks { get; init; } = [];
 
     public IReadOnlyList<NetworkInfo> Network { get; init; } = [];

@@ -292,6 +292,12 @@ public sealed class ClientGroup : SoftEntity
 
     public string? RuleValue { get; set; }
 
+    /// <summary>The conditions after the first one (JSON: field, operator, value); the first one is RuleField, RuleOperator, RuleValue.</summary>
+    public string? MoreRules { get; set; }
+
+    /// <summary>A client is a member when one condition matches (false: when all of them match).</summary>
+    public bool MatchAny { get; set; }
+
     public ICollection<ClientGroupMember> Members { get; set; } = [];
 }
 

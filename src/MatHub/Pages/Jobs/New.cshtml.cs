@@ -1,3 +1,4 @@
+using MatHub.Services;
 using System.Globalization;
 using MatHub.Controls;
 using MatHub.Data;
@@ -29,6 +30,15 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
     [BindProperty] public string Clients { get; set; } = string.Empty;
 
     [BindProperty] public string Groups { get; set; } = string.Empty;
+
+    /// <summary>now or later.</summary>
+    [BindProperty] public string When { get; set; } = "now";
+
+    [BindProperty] public string StartDate { get; set; } = string.Empty;
+
+    [BindProperty] public string StartTime { get; set; } = string.Empty;
+
+    public List<Choice> WhenChoices { get; } = [new("now", Text.T("Jobs.When.Now"), null), new("later", Text.T("Jobs.When.Later"), null)];
 
     public List<Choice> Kinds { get; private set; } = [];
 
@@ -76,13 +86,40 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
+        DateTime? notBefore = null;
+        if (When == "later")
+        {
+            var day = Dates.ParseIso(StartDate);
+            var time = Dates.ParseTime(StartTime) ?? new TimeOnly(0, 0);
+            if (day is null)
+            {
+                ModelState.AddModelError(nameof(StartDate), Text.T("Jobs.Error.NoStart"));
+            }
+            else
+            {
+                var local = DateTime.SpecifyKind(day.Value.ToDateTime(time), DateTimeKind.Unspecified);
+                notBefore = TimeZoneInfo.ConvertTimeToUtc(local, Dates.Zone(Me.TimeZone));
+                if (notBefore <= DateTime.UtcNow)
+                {
+                    ModelState.AddModelError(nameof(StartDate), Text.T("Jobs.Error.StartPast"));
+                }
+            }
+
+            if (!ModelState.IsValid)
+            {
+                await LoadAsync();
+                return Page();
+            }
+        }
+
         var request = new JobRequest(
             Kind,
             long.TryParse(ScriptId, out var s) ? s : null,
             long.TryParse(PackageId, out var p) ? p : null,
             Kind == JobKind.WingetUpgrade ? WingetId : null,
             Ids(Clients),
-            Ids(Groups));
+            Ids(Groups),
+            notBefore);
         var outcome = await JobService.CreateAsync(db, Me.Actor, request, ct: HttpContext.RequestAborted);
         if (!outcome.Ok)
         {

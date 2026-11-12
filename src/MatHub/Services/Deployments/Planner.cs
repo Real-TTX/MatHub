@@ -22,6 +22,9 @@ public static class Planner
 
     public static async Task<PlanResult> RunOnceAsync(AppDbContext db, CancellationToken ct = default)
     {
+        // the names of the jobs it makes are in the language of the first administrator (nobody is signed in here)
+        var language = await db.Users.AsNoTracking().Where(u => u.Role == UserRole.Admin).OrderBy(u => u.Id).Select(u => u.Language).FirstOrDefaultAsync(ct);
+        System.Globalization.CultureInfo.CurrentUICulture = Localization.Languages.UiCulture(string.IsNullOrEmpty(language) ? Localization.Languages.Default : language);
         await GroupService.RefreshAllAsync(db, ct);
         var assignments = await db.PackageAssignments.AsNoTracking().Include(a => a.Package).Where(a => a.IsActive && a.Package!.UpdateState != SoftEntity.Deleted).ToListAsync(ct);
         var jobs = 0;

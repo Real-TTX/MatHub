@@ -1,3 +1,4 @@
+using MatHub.Services.Packages;
 using System.Text.Json;
 using MatHub.Data;
 using MatHub.Protocol;
@@ -9,7 +10,12 @@ namespace MatHub.Services.Jobs;
 /// <summary>What a person asks for: run something on clients and on the members of groups.</summary>
 public sealed record JobRequest(JobKind Kind, long? ScriptId, long? PackageId, string? WingetId, IReadOnlyList<long> ClientIds, IReadOnlyList<long> GroupIds, DateTime? NotBefore = null);
 
-public sealed record JobRow(long Id, string Name, JobKind Kind, string Origin, DateTime Created, string? CreatedBy, int Total, int Queued, int Running, int Succeeded, int Failed, int Cancelled);
+/// <summary>A job in a list; <paramref name="NotBefore"/>: it starts then (planned), null: at once.</summary>
+public sealed record JobRow(long Id, string Name, JobKind Kind, string Origin, DateTime Created, string? CreatedBy, int Total, int Queued, int Running, int Succeeded, int Failed, int Cancelled, DateTime? NotBefore = null)
+{
+    /// <summary>Waits for its time: nothing ran yet and its start is still to come.</summary>
+    public bool Planned => NotBefore is { } start && start > DateTime.UtcNow && Running == 0 && Queued > 0;
+}
 
 public sealed record JobCriteria(string? Search, string? State, string? Kind, long? ClientId, int Page, int PageSize);
 
@@ -126,7 +132,7 @@ public static class JobService
                 break;
             case JobKind.WingetUpgrade:
                 var id = request.WingetId?.Trim();
-                job.Name = string.IsNullOrEmpty(id) ? Localization.Text.T("Jobs.Name.UpgradeAll") : Localization.Text.T("Jobs.Name.Upgrade", id);
+                job.Name = string.IsNullOrEmpty(id) ? Localization.Text.T("Jobs.Name.UpgradeAll") : Localization.Text.T("Jobs.Name.Upgrade", await ProgramNameAsync(db, id, ct));
                 job.TimeoutSeconds = 3600;
                 template = new AgentJob { Kind = JobKinds.WingetUpgrade, Arguments = string.IsNullOrEmpty(id) ? null : id, TimeoutSeconds = 3600 };
                 break;
@@ -157,7 +163,7 @@ public static class JobService
         db.Jobs.Add(job);
         if (origin == "manual")
         {
-            ActivityLog.Add(db, actor, "job", "run", job.Name, Localization.Text.T("Jobs.ClientCount", clients.Count));
+            ActivityLog.Add(db, actor, "job", "run", job.Name, Ui.ClientCount(clients.Count));
         }
 
         await db.SaveChangesAsync(ct);
@@ -165,6 +171,20 @@ public static class JobService
     }
 
     /// <summary>The active clients of the request the actor reaches: those named and the members of the groups.</summary>
+    /// <summary>The name of a winget program as people know it: its package, else what Windows calls it on a client, else the id.</summary>
+    private static async Task<string> ProgramNameAsync(AppDbContext db, string wingetId, CancellationToken ct)
+    {
+        var lower = wingetId.ToLowerInvariant();
+        var package = await db.Packages.AsNoTracking().Where(p => p.WingetId != null && p.WingetId.ToLower() == lower).Select(p => p.Name).FirstOrDefaultAsync(ct);
+        if (package is not null)
+        {
+            return package;
+        }
+
+        var installed = await db.ClientSoftware.AsNoTracking().Where(s => s.WingetId != null && s.WingetId.ToLower() == lower).Select(s => s.Name).FirstOrDefaultAsync(ct);
+        return installed is null ? wingetId : PackageService.CleanName(installed);
+    }
+
     public static async Task<List<long>> TargetsAsync(AppDbContext db, Actor actor, IReadOnlyList<long> clientIds, IReadOnlyList<long> groupIds, CancellationToken ct = default)
     {
         var ids = clientIds.ToList();
@@ -220,7 +240,7 @@ public static class JobService
         var rows = await q.OrderByDescending(j => j.CreateDate).Skip((c.Page - 1) * c.PageSize).Take(c.PageSize)
             .Select(j => new
             {
-                j.Id, j.Name, j.Kind, j.Origin, j.CreateDate,
+                j.Id, j.Name, j.Kind, j.Origin, j.CreateDate, j.NotBeforeDate,
                 By = db.Users.IgnoreQueryFilters().Where(u => u.Id == j.CreateUserId).Select(u => u.DisplayName).FirstOrDefault(),
                 Counts = runs.Where(r => r.JobId == j.Id).GroupBy(r => r.Status).Select(g => new { Status = g.Key, Count = g.Count() }).ToList(),
             })
@@ -228,7 +248,7 @@ public static class JobService
         return new JobList(rows.Select(r =>
         {
             int N(RunStatus s) => r.Counts.FirstOrDefault(x => x.Status == s)?.Count ?? 0;
-            return new JobRow(r.Id, r.Name, r.Kind, r.Origin, r.CreateDate, r.By, r.Counts.Sum(x => x.Count), N(RunStatus.Queued), N(RunStatus.Running), N(RunStatus.Succeeded), N(RunStatus.Failed), N(RunStatus.Cancelled));
+            return new JobRow(r.Id, r.Name, r.Kind, r.Origin, r.CreateDate, r.By, r.Counts.Sum(x => x.Count), N(RunStatus.Queued), N(RunStatus.Running), N(RunStatus.Succeeded), N(RunStatus.Failed), N(RunStatus.Cancelled), r.NotBeforeDate);
         }).ToList(), total, matching);
     }
 
@@ -317,7 +337,7 @@ public static class JobService
 
         var count = await db.JobRuns.Where(r => r.JobId == id && r.Status == RunStatus.Queued && reachable.Contains(r.ClientId))
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RunStatus.Cancelled).SetProperty(r => r.FinishedDate, DateTime.UtcNow), ct);
-        ActivityLog.Add(db, actor, "job", "cancel", job.Name, Localization.Text.T("Jobs.ClientCount", count));
+        ActivityLog.Add(db, actor, "job", "cancel", job.Name, Ui.ClientCount(count));
         await db.SaveChangesAsync(ct);
         return Outcome<int>.Success(count);
     }
@@ -350,7 +370,7 @@ public static class JobService
         }
 
         db.Jobs.Add(job);
-        ActivityLog.Add(db, actor, "job", "retry", job.Name, Localization.Text.T("Jobs.ClientCount", clients.Count));
+        ActivityLog.Add(db, actor, "job", "retry", job.Name, Ui.ClientCount(clients.Count));
         await db.SaveChangesAsync(ct);
         return Outcome<Job>.Success(job);
     }

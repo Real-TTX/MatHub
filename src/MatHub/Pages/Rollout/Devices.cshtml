@@ -29,7 +29,7 @@
                         <td data-label="@L["Devices.Model"]" class="mat-hide-sm">@string.Join(" ", new[] { d.Manufacturer, d.Product }.Where(x => !string.IsNullOrWhiteSpace(x)))</td>
                         <td data-label="@L["Clients.Serial"]" class="mat-mono mat-hide-md">@d.SerialNumber</td>
                         <td data-label="@L["Clients.Col.Address"]" class="mat-mono mat-hide-md">@d.IpAddress</td>
-                        <td data-label="@L["Devices.LastBoot"]" class="mat-mono">@Dates.Stamp(d.LastBoot, Model.Zone)</td>
+                        <td data-label="@L["Devices.LastBoot"]" class="mh-nowrap">@Ui.When(d.LastBoot, Model.Zone)</td>
                         <td data-label="@L["Common.Status"]">
                             @if (d.ClientId is { } cid)
                             {

@@ -1,5 +1,7 @@
 /* MatHub – the three editors of a script (Pages/Scripts/Code):
-   - the code editor: a real textarea with the highlighting and the line numbers laid under it (Tab indents, Enter keeps the indent, Ctrl+S saves);
+   - the code editor: a real textarea with the highlighting, the line numbers and the current line laid under it; a toolbar (snippets, comment, search, full
+     screen) and a status bar; Tab indents, Enter keeps the indent, pairs close themselves, Ctrl+/ comments, Ctrl+D doubles a line, Alt+Up/Down moves it,
+     Ctrl+F searches, Ctrl+S saves;
    - the block editor: steps one after the other, each with its fields, an optional condition ("only if") and "go on after an error";
    - the flow editor: steps and branches on a canvas (drag a node by its head, drag from a port to a node to connect it; the properties beside it name the
      next steps too, so it works with the keyboard and on a phone).
@@ -62,15 +64,99 @@ export function highlight(code, language) {
 }
 
 // ------------------------------------------------------------------------------------------------------------------------- code editor
+/** Pieces of code to start from, per language; "|" marks where the caret goes. */
+const SNIPPETS = {
+  powershell: [
+    ['if', "if (|) {\n    \n}"],
+    ['ifelse', "if (|) {\n    \n}\nelse {\n    \n}"],
+    ['foreach', "foreach ($item in |) {\n    \n}"],
+    ['try', "try {\n    |\n}\ncatch {\n    Write-Error $_\n    exit 1\n}"],
+    ['function', "function |Name {\n    param([string]$Value)\n    \n}"],
+    ['registry', "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\|' -Name 'Name' -Value 'Value'"],
+    ['service', "Restart-Service -Name '|' -Force"],
+    ['file', "if (Test-Path -Path '|') {\n    \n}"],
+    ['output', "Write-Output \"|\""],
+    ['exit', "exit |0"],
+  ],
+  cmd: [
+    ['if', "if exist \"|\" (\n    \n)"],
+    ['for', "for %%f in (|) do (\n    \n)"],
+    ['errorlevel', "if %errorlevel% neq 0 exit /b %errorlevel%|"],
+    ['output', "echo |"],
+    ['exit', "exit /b |0"],
+  ],
+  bash: [
+    ['if', "if [ | ]; then\n    \nfi"],
+    ['for', "for item in |; do\n    \ndone"],
+    ['function', "|name() {\n    \n}"],
+    ['output', "echo \"|\""],
+    ['exit', "exit |0"],
+  ],
+};
+
+const PAIRS = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
+
 function codeEditor(root) {
   const area = root.querySelector('textarea');
   const language = root.dataset.language || 'powershell';
+  const comment = language === 'cmd' ? 'REM ' : '# ';
   const lines = el('pre', { class: 'mh-code__lines', 'aria-hidden': 'true' });
   const code = el('code');
   const layer = el('pre', { class: 'mh-code__highlight mat-code', 'aria-hidden': 'true' }, code);
+  const current = el('div', { class: 'mh-code__current', 'aria-hidden': 'true' });
   const body = el('div', { class: 'mh-code__body' });
   area.before(body);
-  body.append(lines, layer, area);
+  body.append(lines, current, layer, area);
+
+  // ---- the toolbar: snippets, search, comment, full screen
+  const readOnly = area.readOnly;
+  const bar = el('div', { class: 'mh-code__bar', role: 'toolbar', 'aria-label': t('Code.Tools') });
+  const tool = (iconName, label, onclick, extra = {}) => el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--sm mh-code__tool', title: label, 'aria-label': label, onclick, ...extra }, icon(iconName), el('span', { text: label }));
+  const snippetSelect = el('select', { class: 'mat-select mh-code__snippets', 'aria-label': t('Code.Insert') },
+    el('option', { value: '', text: t('Code.Insert') }),
+    ...(SNIPPETS[language] || []).map(([key]) => el('option', { value: key, text: t('Code.Snippet.' + key) })));
+  snippetSelect.addEventListener('change', () => {
+    const found = (SNIPPETS[language] || []).find(([key]) => key === snippetSelect.value);
+    snippetSelect.value = '';
+    if (found) insertSnippet(found[1]);
+  });
+  const languageTag = el('span', { class: 'mat-tag mh-code__lang', text: language === 'powershell' ? 'PowerShell' : language === 'cmd' ? 'cmd' : 'bash' });
+  const fullButton = tool('external', t('Code.FullScreen'), () => toggleFull(), { 'aria-pressed': 'false' });
+  if (!readOnly) bar.append(snippetSelect, tool('code', t('Code.Comment'), () => toggleComment()));
+  bar.append(tool('search', t('Code.Find'), () => openFind()), el('span', { class: 'mh-code__spacer' }), languageTag, fullButton);
+  root.prepend(bar);
+
+  // ---- the search bar (Ctrl+F): the next or previous place, the matches counted
+  const findInput = el('input', { class: 'mat-input mh-code__find-input', type: 'search', placeholder: t('Code.FindPlaceholder'), 'aria-label': t('Code.Find') });
+  const findCount = el('span', { class: 'mh-code__find-count', 'aria-live': 'polite' });
+  const findBar = el('div', { class: 'mh-code__find', hidden: '' },
+    findInput, findCount,
+    el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm', 'aria-label': t('Code.Previous'), title: t('Code.Previous'), onclick: () => find(-1) }, icon('chevron-up')),
+    el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm', 'aria-label': t('Code.Next'), title: t('Code.Next'), onclick: () => find(1) }, icon('chevron-down')),
+    el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm', 'aria-label': t('Editor.Close'), title: t('Editor.Close'), onclick: () => closeFind() }, icon('x')));
+  bar.after(findBar);
+
+  // ---- the status bar: line, column, lines
+  const status = el('div', { class: 'mh-code__status', 'aria-live': 'off' });
+  root.append(status);
+
+  const lineHeight = () => parseFloat(getComputedStyle(area).lineHeight) || 20;
+  const padTop = () => parseFloat(getComputedStyle(area).paddingTop) || 0;
+
+  const caret = () => {
+    const before = area.value.slice(0, area.selectionStart);
+    const line = before.split('\n').length;
+    const column = area.selectionStart - before.lastIndexOf('\n');
+    return { line, column };
+  };
+  const showCaret = () => {
+    const { line, column } = caret();
+    const count = area.value.split('\n').length;
+    const selected = Math.abs(area.selectionEnd - area.selectionStart);
+    status.textContent = t('Code.Status', line, column, count) + (selected > 0 ? ' · ' + t('Code.Selected', selected) : '');
+    current.style.transform = 'translateY(' + (padTop() + (line - 1) * lineHeight() - area.scrollTop) + 'px)';
+    current.style.height = lineHeight() + 'px';
+  };
 
   const render = () => {
     code.innerHTML = highlight(area.value, language);
@@ -82,34 +168,201 @@ function codeEditor(root) {
     layer.scrollTop = area.scrollTop;
     layer.scrollLeft = area.scrollLeft;
     lines.scrollTop = area.scrollTop;
+    showCaret();
   };
+  const changed = () => { render(); area.dispatchEvent(new Event('change', { bubbles: true })); };
+
+  function lineBounds(from, to) {
+    const value = area.value;
+    const start = value.lastIndexOf('\n', from - 1) + 1;
+    let end = value.indexOf('\n', to > from && value[to - 1] === '\n' ? to - 1 : to);
+    if (end < 0) end = value.length;
+    return { start, end };
+  }
+
+  function insertSnippet(text) {
+    if (readOnly) return;
+    const { selectionStart: s, value } = area;
+    const lineStart = value.lastIndexOf('\n', s - 1) + 1;
+    const indent = /^[ \t]*/.exec(value.slice(lineStart, s))[0];
+    const placed = text.replace(/\n/g, '\n' + indent);
+    const at = placed.indexOf('|');
+    area.focus();
+    area.setRangeText(placed.replace('|', ''), s, area.selectionEnd, 'start');
+    area.selectionStart = area.selectionEnd = s + Math.max(0, at);
+    changed();
+  }
+
+  function toggleComment() {
+    if (readOnly) return;
+    const { start, end } = lineBounds(area.selectionStart, area.selectionEnd);
+    const block = area.value.slice(start, end);
+    const rows = block.split('\n');
+    const marker = comment.trim();
+    const all = rows.filter(r => r.trim()).every(r => r.trimStart().toUpperCase().startsWith(marker.toUpperCase()));
+    const next = rows.map(r => {
+      if (!r.trim()) return r;
+      const lead = /^\s*/.exec(r)[0];
+      if (all) return lead + r.slice(lead.length + marker.length).replace(/^ /, '');
+      return lead + comment + r.slice(lead.length);
+    }).join('\n');
+    area.focus();
+    area.setRangeText(next, start, end, 'select');
+    changed();
+  }
+
+  function duplicateLine() {
+    const { start, end } = lineBounds(area.selectionStart, area.selectionEnd);
+    const text = area.value.slice(start, end);
+    area.setRangeText(text + '\n', start, start, 'preserve');
+    area.selectionStart = area.selectionStart + text.length + 1;
+    area.selectionEnd = area.selectionEnd + text.length + 1;
+    changed();
+  }
+
+  function moveLine(direction) {
+    const { start, end } = lineBounds(area.selectionStart, area.selectionEnd);
+    const value = area.value;
+    if (direction < 0 && start === 0) return;
+    if (direction > 0 && end >= value.length) return;
+    const block = value.slice(start, end);
+    const offset = area.selectionStart - start;
+    const length = area.selectionEnd - area.selectionStart;
+    if (direction < 0) {
+      const prevStart = value.lastIndexOf('\n', start - 2) + 1;
+      const prev = value.slice(prevStart, start - 1);
+      area.setRangeText(block + '\n' + prev, prevStart, end, 'preserve');
+      area.selectionStart = prevStart + offset;
+    } else {
+      let nextEnd = value.indexOf('\n', end + 1);
+      if (nextEnd < 0) nextEnd = value.length;
+      const next = value.slice(end + 1, nextEnd);
+      area.setRangeText(next + '\n' + block, start, nextEnd, 'preserve');
+      area.selectionStart = start + next.length + 1 + offset;
+    }
+    area.selectionEnd = area.selectionStart + length;
+    changed();
+  }
+
+  // ---- search
+  function openFind() {
+    findBar.hidden = false;
+    const selected = area.value.slice(area.selectionStart, area.selectionEnd);
+    if (selected && !selected.includes('\n')) findInput.value = selected;
+    findInput.focus();
+    findInput.select();
+    countMatches();
+  }
+  function closeFind() { findBar.hidden = true; area.focus(); }
+  function countMatches() {
+    const term = findInput.value;
+    if (!term) { findCount.textContent = ''; return; }
+    const hay = area.value.toLowerCase();
+    let n = 0;
+    for (let i = hay.indexOf(term.toLowerCase()); i >= 0; i = hay.indexOf(term.toLowerCase(), i + term.length)) n++;
+    findCount.textContent = n === 0 ? t('Code.NoMatch') : t('Code.Matches', n);
+  }
+  function find(direction) {
+    const term = findInput.value.toLowerCase();
+    if (!term) return;
+    const hay = area.value.toLowerCase();
+    let at = direction > 0 ? hay.indexOf(term, area.selectionEnd) : hay.lastIndexOf(term, Math.max(0, area.selectionStart - 1));
+    if (at < 0) at = direction > 0 ? hay.indexOf(term) : hay.lastIndexOf(term);
+    if (at < 0) return;
+    area.focus();
+    area.setSelectionRange(at, at + term.length);
+    const line = area.value.slice(0, at).split('\n').length;
+    area.scrollTop = Math.max(0, (line - 4) * lineHeight());
+    sync();
+  }
+  findInput.addEventListener('input', countMatches);
+  findInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); find(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+  });
+
+  // ---- full screen (Escape leaves it)
+  function toggleFull(force) {
+    const on = force ?? !root.classList.contains('is-full');
+    root.classList.toggle('is-full', on);
+    document.documentElement.classList.toggle('mh-code-full', on);
+    fullButton.setAttribute('aria-pressed', String(on));
+    area.focus();
+    sync();
+  }
 
   area.addEventListener('input', render);
   area.addEventListener('scroll', sync);
+  ['keyup', 'click', 'select', 'focus'].forEach(name => area.addEventListener(name, showCaret));
   area.addEventListener('keydown', e => {
-    if (area.readOnly) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); openFind(); return; }
+    if (e.key === 'F3') { e.preventDefault(); find(e.shiftKey ? -1 : 1); return; }
+    if (e.key === 'Escape' && root.classList.contains('is-full')) { e.preventDefault(); toggleFull(false); return; }
+    if (readOnly) return;
+    const { selectionStart: s, selectionEnd: end, value } = area;
     if (e.key === 'Tab') {
       e.preventDefault();
-      const { selectionStart: s, selectionEnd: end, value } = area;
       const lineStart = value.lastIndexOf('\n', s - 1) + 1;
       if (s === end && !e.shiftKey) {
         area.setRangeText('    ', s, end, 'end');
       } else {
         // indent or outdent every line of the selection
         const block = value.slice(lineStart, end);
-        const changed = e.shiftKey ? block.replace(/^ {1,4}/gm, '') : block.replace(/^/gm, '    ');
-        area.setRangeText(changed, lineStart, end, 'select');
+        const next = e.shiftKey ? block.replace(/^ {1,4}/gm, '') : block.replace(/^/gm, '    ');
+        area.setRangeText(next, lineStart, end, 'select');
       }
-      render();
-    } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+      changed();
+    } else if (e.key === 'Enter' && !mod) {
       e.preventDefault();
-      const { selectionStart: s, value } = area;
       const lineStart = value.lastIndexOf('\n', s - 1) + 1;
       const indent = /^[ \t]*/.exec(value.slice(lineStart, s))[0];
-      const opens = /[{(]\s*$/.test(value.slice(lineStart, s));
-      area.setRangeText('\n' + indent + (opens ? '    ' : ''), s, area.selectionEnd, 'end');
-      render();
-    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      const before = value.slice(lineStart, s);
+      const opens = /[{(]\s*$/.test(before);
+      const closes = opens && /^\s*[})]/.test(value.slice(end));
+      if (closes) {
+        // between a pair: the caret on an indented line of its own, the closing one under the opening line
+        area.setRangeText('\n' + indent + '    \n' + indent, s, end, 'start');
+        area.selectionStart = area.selectionEnd = s + 1 + indent.length + 4;
+      } else {
+        area.setRangeText('\n' + indent + (opens ? '    ' : ''), s, end, 'end');
+      }
+      changed();
+    } else if (e.key === 'Backspace' && s === end && s > 0 && PAIRS[value[s - 1]] !== undefined && PAIRS[value[s - 1]] === value[s]) {
+      e.preventDefault();
+      area.setRangeText('', s - 1, s + 1, 'end');
+      changed();
+    } else if (PAIRS[e.key] && !mod && !e.altKey) {
+      const close = PAIRS[e.key];
+      const quote = e.key === close;
+      if (quote && value[s] === e.key && s === end) {
+        // typing the closing quote over the one that is there
+        e.preventDefault();
+        area.selectionStart = area.selectionEnd = s + 1;
+        showCaret();
+        return;
+      }
+      if (quote && s === end && /\w/.test(value[s - 1] || '')) return; // an apostrophe in a word
+      e.preventDefault();
+      const inner = value.slice(s, end);
+      area.setRangeText(e.key + inner + close, s, end, 'preserve');
+      area.selectionStart = s + 1;
+      area.selectionEnd = s + 1 + inner.length;
+      changed();
+    } else if ((e.key === ')' || e.key === ']' || e.key === '}') && s === end && value[s] === e.key && !mod) {
+      e.preventDefault();
+      area.selectionStart = area.selectionEnd = s + 1;
+      showCaret();
+    } else if (mod && (e.key === '/' || e.code === 'Slash' || e.key === '#')) {
+      e.preventDefault();
+      toggleComment();
+    } else if (mod && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      duplicateLine();
+    } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      moveLine(e.key === 'ArrowUp' ? -1 : 1);
+    } else if (mod && e.key.toLowerCase() === 's') {
       e.preventDefault();
       area.form?.requestSubmit();
     }
@@ -318,7 +571,40 @@ function flowEditor(root) {
   svg.setAttribute('class', 'mh-flow__edges');
   svg.setAttribute('aria-hidden', 'true');
   const layer = el('div', { class: 'mh-flow__nodes' });
-  canvas.append(svg, layer);
+  // the stage holds the edges and the nodes and is scaled; the sizer around it gives the canvas the size to scroll
+  const stage = el('div', { class: 'mh-flow__stage' }, svg, layer);
+  const sizer = el('div', { class: 'mh-flow__sizer' }, stage);
+  canvas.append(sizer);
+  let zoom = 1;
+  let contentSize = [0, 0];
+  const zoomLabel = el('span', { class: 'mh-flow__zoom', 'aria-live': 'polite' });
+  const setZoom = value => {
+    zoom = Math.min(1.5, Math.max(0.4, Math.round(value * 100) / 100));
+    stage.style.transform = 'scale(' + zoom + ')';
+    sizer.style.width = contentSize[0] * zoom + 'px';
+    sizer.style.height = contentSize[1] * zoom + 'px';
+    zoomLabel.textContent = Math.round(zoom * 100) + ' %';
+  };
+  const fit = () => {
+    const xs = model.nodes.map(n => n.x + NODE_W + 40), ys = model.nodes.map(n => n.y + NODE_H + 40);
+    const w = Math.max(...xs, 1), h = Math.max(...ys, 1);
+    setZoom(Math.min(1, (canvas.clientWidth - 16) / w, (canvas.clientHeight - 16) / h));
+    canvas.scrollLeft = 0;
+    canvas.scrollTop = 0;
+  };
+  const zoomTool = (iconName, label, onclick) => el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm', title: label, 'aria-label': label, onclick }, icon(iconName));
+  const tools = el('div', { class: 'mh-flow__tools', role: 'toolbar', 'aria-label': t('Flow.View') },
+    zoomTool('minus', t('Flow.ZoomOut'), () => setZoom(zoom - 0.1)), zoomLabel, zoomTool('plus', t('Flow.ZoomIn'), () => setZoom(zoom + 0.1)),
+    el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--sm', onclick: () => setZoom(1) }, el('span', { text: '100 %' })),
+    el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--sm', onclick: fit }, icon('grid'), el('span', { text: t('Flow.Fit') })));
+  const column = el('div', { class: 'mh-flow__main' });
+  canvas.before(column);
+  column.append(tools, canvas);
+  canvas.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    setZoom(zoom - Math.sign(e.deltaY) * 0.1);
+  }, { passive: false });
   let selected = null;
   let selectedEdge = null;
 
@@ -366,12 +652,17 @@ function flowEditor(root) {
       parts.push(path);
     }
     svg.replaceChildren(...parts);
-    const width = Math.max(canvas.clientWidth, ...model.nodes.map(n => n.x + NODE_W + 80));
-    const height = Math.max(480, ...model.nodes.map(n => n.y + NODE_H + 120));
+    const width = Math.max(canvas.clientWidth / zoom, ...model.nodes.map(n => n.x + NODE_W + 80));
+    const height = Math.max(canvas.clientHeight / zoom, 480, ...model.nodes.map(n => n.y + NODE_H + 120));
     svg.setAttribute('width', width);
     svg.setAttribute('height', height);
     layer.style.width = width + 'px';
     layer.style.height = height + 'px';
+    stage.style.width = width + 'px';
+    stage.style.height = height + 'px';
+    contentSize = [width, height];
+    sizer.style.width = width * zoom + 'px';
+    sizer.style.height = height * zoom + 'px';
   };
 
   const connect = (from, port, to) => {
@@ -384,9 +675,9 @@ function flowEditor(root) {
       const box = el('div', { class: 'mh-node mh-node--' + (['start', 'end', 'if'].includes(node.type) ? node.type : 'step') + (node === selected ? ' is-selected' : ''), 'data-node': node.id });
       box.style.left = node.x + 'px';
       box.style.top = node.y + 'px';
-      const head = el('button', { type: 'button', class: 'mh-node__head', 'aria-pressed': node === selected ? 'true' : 'false' }, icon(iconOf(node)), el('span', { class: 'mh-node__label', text: label(node) }));
+      const head = el('button', { type: 'button', class: 'mh-node__head', title: label(node), 'aria-pressed': node === selected ? 'true' : 'false' }, icon(iconOf(node)), el('span', { class: 'mh-node__label', text: label(node) }));
       const summary = node.type === 'if' && node.condition ? (catalog.byId[node.condition.type]?.label || '') : Object.values(node.values || {}).filter(Boolean)[0] || '';
-      box.append(head, el('span', { class: 'mh-node__summary', text: summary }));
+      box.append(head, el('span', { class: 'mh-node__summary', text: node.type === 'end' && summary ? t('Editors.ExitCodeIs', summary) : summary, title: summary || null }));
       if (node.type !== 'start') box.append(el('span', { class: 'mh-node__port mh-node__port--in', 'aria-hidden': 'true' }));
       for (const port of portsOf(node)) {
         const handle = el('span', { class: 'mh-node__port mh-node__port--' + port, title: portLabel(port), 'aria-hidden': 'true' });
@@ -413,7 +704,7 @@ function flowEditor(root) {
     const sx = e.clientX, sy = e.clientY, ox = node.x, oy = node.y;
     let moved = false;
     const onMove = ev => {
-      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      const dx = (ev.clientX - sx) / zoom, dy = (ev.clientY - sy) / zoom;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
       moved = true;
       node.x = Math.max(0, Math.round((ox + dx) / 10) * 10);
@@ -432,7 +723,7 @@ function flowEditor(root) {
     e.stopPropagation();
     const rect = canvas.getBoundingClientRect();
     const from = portPoint(node, port);
-    const onMove = ev => drawEdges({ from, to: [ev.clientX - rect.left + canvas.scrollLeft, ev.clientY - rect.top + canvas.scrollTop], port });
+    const onMove = ev => drawEdges({ from, to: [(ev.clientX - rect.left + canvas.scrollLeft) / zoom, (ev.clientY - rect.top + canvas.scrollTop) / zoom], port });
     const onUp = ev => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
@@ -454,7 +745,7 @@ function flowEditor(root) {
   };
 
   const addNode = type => {
-    const view = { x: canvas.scrollLeft + 40, y: canvas.scrollTop + 40 };
+    const view = { x: (canvas.scrollLeft + 40) / zoom, y: (canvas.scrollTop + 40) / zoom };
     const last = selected || model.nodes[model.nodes.length - 1];
     const node = { id: uid('n'), type, values: {}, x: last ? last.x : view.x, y: last ? last.y + NODE_H + 50 : view.y };
     if (type === 'if') node.condition = { type: '', values: {}, negate: false };
@@ -519,12 +810,15 @@ function flowEditor(root) {
       }, icon(type.icon), el('span', { text: type.label })))))));
   }
 
-  canvas.addEventListener('click', e => { if (e.target === canvas || e.target === layer || e.target === svg) { selected = null; selectedEdge = null; render(); } });
+  canvas.addEventListener('click', e => { if (e.target === canvas || e.target === layer || e.target === svg || e.target === stage || e.target === sizer) { selected = null; selectedEdge = null; render(); } });
   canvas.addEventListener('keydown', e => {
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdge && !readonly) { model.edges = model.edges.filter(x => x !== selectedEdge); selectedEdge = null; render(); changed(); }
   });
   window.addEventListener('resize', debounce(() => drawEdges(), 150));
   render();
+  // the first view shows the whole flow when it is larger than the canvas
+  const extent = [Math.max(...model.nodes.map(n => n.x + NODE_W + 40)), Math.max(...model.nodes.map(n => n.y + NODE_H + 40))];
+  if (extent[0] > canvas.clientWidth || extent[1] > canvas.clientHeight) fit(); else setZoom(1);
   changed();
 }
 

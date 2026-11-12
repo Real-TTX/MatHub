@@ -16,30 +16,15 @@
             var done = j.Succeeded + j.Failed + j.Cancelled;
             var percent = j.Total == 0 ? 0 : (int)Math.Round(done * 100.0 / j.Total);
             <tr>
-                <td data-label="@L["Jobs.Col.Job"]" class="mat-table__primary"><a href="/jobs/@j.Id"><span class="mh-name">@Ui.Icon(JobUi.Icon(j.Kind))@j.Name</span></a></td>
+                <td data-label="@L["Jobs.Col.Job"]" class="mat-table__primary"><a href="/jobs/@j.Id"><span class="mh-name mh-nowrap">@Ui.Icon(JobUi.Icon(j.Kind))@j.Name</span></a></td>
                 <td data-label="@L["Common.Status"]">
-                    @if (j.Queued + j.Running > 0)
-                    {
-                        <span class="mat-pill mat-pill--busy">@L["Jobs.State.Running", done, j.Total]</span>
-                    }
-                    else if (j.Failed > 0)
-                    {
-                        <span class="mat-pill mat-pill--error">@L["Jobs.State.FailedCount", j.Failed, j.Total]</span>
-                    }
-                    else if (j.Succeeded == 0)
-                    {
-                        <span class="mat-pill mat-pill--plain">@L["Jobs.State.Cancelled"]</span>
-                    }
-                    else
-                    {
-                        <span class="mat-pill mat-pill--ok">@L["Jobs.State.Done"]</span>
-                    }
+                    <partial name="_JobState" model="j" />
                 </td>
                 <td data-label="@L["Jobs.Col.Progress"]" class="mat-hide-sm">
                     <div class="mat-meter mat-meter--sm" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@percent" aria-label="@L["Jobs.Col.Progress"]"><div class="mat-meter__fill" data-value="@percent" data-tone="@(j.Failed > 0 ? "error" : null)"></div></div>
                 </td>
                 <td data-label="@L["Jobs.Col.By"]" class="mat-hide-md">@(j.CreatedBy ?? L["Jobs.Origin." + j.Origin].Value)</td>
-                <td data-label="@L["Jobs.Col.Created"]" class="mat-mono mat-hide-sm">@Dates.Stamp(j.Created, Model.Zone)</td>
+                <td data-label="@L["Jobs.Col.Created"]" class="mat-hide-sm mh-nowrap">@Ui.When(j.Created, Model.Zone)</td>
             </tr>
         }
     </tbody>

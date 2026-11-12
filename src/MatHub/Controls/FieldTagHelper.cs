@@ -263,7 +263,9 @@ public sealed class FieldTagHelper : TagHelper
             }
         }
 
-        sb.Append($"><legend class=\"mat-legend\">{E(Label)}</legend><div class=\"mat-checks mat-checks--inline\">");
+        // short choices without hints stand in one line; long ones or ones with a hint one under the other
+        var inline = (Options ?? []).All(o => o.Hint is null) && (Options ?? []).Sum(o => o.Label.Length) <= 36;
+        sb.Append($"><legend class=\"mat-legend\">{E(Label)}</legend><div class=\"mat-checks{(inline ? " mat-checks--inline" : string.Empty)}\">");
         var i = 0;
         foreach (var o in Options ?? [])
         {

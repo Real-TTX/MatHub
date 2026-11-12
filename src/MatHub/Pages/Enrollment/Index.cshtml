@@ -28,9 +28,11 @@
 <div class="mat-cols">
     <div class="mat-col-12 mat-col-lg-7">
         <div class="mat-list">
+            <partial name="_Toolbar" model="Model.Toolbar" />
             @if (Model.Keys.Count == 0)
             {
-                <partial name="_Empty" model="@(new EmptyStateModel("key", L["Enrollment.Empty"].Value, L["Enrollment.EmptyText"].Value, true, "/enrollment/edit", L["Enrollment.New"].Value))" />
+                var first = Model.Toolbar.Total == 0;
+                <partial name="_Empty" model="@(new EmptyStateModel("key", L[first ? "Enrollment.Empty" : "Enrollment.NoMatch"].Value, L[first ? "Enrollment.EmptyText" : "Lists.ChangeTools"].Value, first, "/enrollment/edit", L["Enrollment.New"].Value, Model.Toolbar.UrlReset()))" />
             }
             else
             {
@@ -40,8 +42,8 @@
                         @foreach (var k in Model.Keys)
                         {
                             <tr>
-                                <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/enrollment/edit?id=@k.Id"><span class="mh-name">@Ui.Icon("key")@k.Name</span></a><small class="mh-muted mat-mono mh-block-line">@k.Prefix…</small></td>
-                                <td data-label="@L["Common.Status"]">
+                                <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/enrollment/edit?id=@k.Id"><span class="mh-name mh-nowrap">@Ui.Icon("key")@k.Name</span></a><small class="mh-muted mat-mono mh-block-line">@k.Prefix…</small></td>
+                                <td data-label="@L["Common.Status"]"><div class="mh-pills">
                                     @if (k.Usable)
                                     {
                                         <span class="mat-pill mat-pill--ok">@L["Common.Active"]</span>
@@ -54,7 +56,7 @@
                                     {
                                         <span class="mat-pill mat-pill--warn">@L["Enrollment.NeedsApproval"]</span>
                                     }
-                                </td>
+                                </div></td>
                                 <td data-label="@L["Enrollment.Group"]" class="mat-hide-sm">@if (k.GroupName is not null) { <span class="mat-tag" data-colour="@k.GroupColour">@k.GroupName</span> } else { <span class="mh-muted">–</span> }</td>
                                 <td data-label="@L["Enrollment.Uses"]" class="mat-num mat-table__keep-label">@k.UseCount@(k.MaxUses > 0 ? " / " + k.MaxUses : string.Empty)</td>
                             </tr>

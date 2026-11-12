@@ -1,0 +1,160 @@
+@model MatHub.Pages.IndexModel
+@using MatHub.Services.Access
+@*
+    The overview of a signed-in person: the numbers (each a link to its list), the clients that wait for an approval (approved right here), the latest jobs,
+    the state of the clients and their operating systems, the updates on the most clients. Everything only within the reach of the person.
+*@
+@{
+    var cl = Model.Clients;
+}
+<mh-stats label="@L["Dashboard.Title"]">
+    @if (cl is not null)
+    {
+        <mh-stat icon="monitor" label="@L["Dashboard.Clients"]" value="@cl.Total.ToString()" hint="@L["Dashboard.OnlineOf", cl.Online]" href="/clients" tone="@(cl.Online > 0 ? "ok" : null)" />
+        @if (Model.Actor.Can(Permission.PackagesView))
+        {
+            <mh-stat icon="refresh" label="@L["Dashboard.Updates"]" value="@cl.WithUpdates.ToString()" hint="@L["Dashboard.UpdatePrograms", Model.UpdatePrograms]" href="/updates" tone="@(cl.WithUpdates > 0 ? "warn" : "ok")" />
+        }
+        @if (Model.Actor.Can(Permission.ClientsEnroll))
+        {
+            <mh-stat icon="clock" label="@L["Dashboard.Pending"]" value="@cl.Pending.ToString()" hint="@L["Dashboard.PendingHint"]" href="/clients?state=pending" tone="@(cl.Pending > 0 ? "info" : null)" />
+        }
+    }
+    @if (Model.Runs is { } runs)
+    {
+        <mh-stat icon="alert" label="@L["Dashboard.Failed"]" value="@runs.Failed.ToString()" hint="@L["Dashboard.OpenRuns", runs.Open]" href="/jobs?state=failed" tone="@(runs.Failed > 0 ? "danger" : "ok")" />
+    }
+</mh-stats>
+
+@if (cl is { Total: 0 } && Model.Actor.Can(Permission.ClientsEnroll))
+{
+    <div class="mat-alert mat-alert--info mh-mb" role="status">
+        @Ui.Icon("info")
+        <div class="mat-alert__body">
+            <strong class="mat-alert__title">@L["Dashboard.FirstClient.Title"]</strong>
+            <p>@L["Dashboard.FirstClient.Text"]</p>
+            <div class="mat-alert__actions"><a class="mat-btn mat-btn--primary mat-btn--sm" href="/enrollment">@Ui.Icon("key")<span>@L["Dashboard.FirstClient.Action"]</span></a></div>
+        </div>
+    </div>
+}
+
+<div class="mat-cols">
+    <div class="mat-col-12 mat-col-lg-7">
+        @if (Model.Pending.Count > 0)
+        {
+            <section class="mat-card mat-card--flush" aria-labelledby="pending-title">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="pending-title">@Ui.Icon("clock")@L["Dashboard.Pending"]</h2><span class="mat-pill mat-pill--info mh-head-end">@cl?.Pending</span></div>
+                <div class="mat-card__body">
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
+                        @foreach (var p in Model.Pending)
+                        {
+                            <li class="mat-item">
+                                <div class="mat-item__row">
+                                    <a class="mat-item__main" href="/clients/@p.Id">
+                                        <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--info">@Ui.Icon("monitor")</span></span>
+                                        <span class="mat-item__body"><span class="mat-item__title">@p.Name</span><span class="mat-item__text">@(p.OperatingSystem is null ? L["Dashboard.NoInventory"].Value : Ui.Os(p.OperatingSystem)) · @Ui.When(p.LastSeen, Model.Zone)</span></span>
+                                    </a>
+                                    <form method="post" asp-page-handler="Approve" asp-route-id="@p.Id" class="mat-item__aside">
+                                        <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm">@Ui.Icon("check")<span>@L["Clients.Approve"]</span></button>
+                                    </form>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </section>
+        }
+        <section class="mat-card mat-card--flush" aria-labelledby="jobs-title">
+            <div class="mat-card__head">
+                <h2 class="mat-card__title" id="jobs-title">@Ui.Icon("activity")@L["Dashboard.RecentJobs"]</h2>
+                @if (Model.Actor.Can(Permission.JobsView) && Model.RecentJobs.Count > 0)
+                {
+                    <a class="mat-btn mat-btn--ghost mat-btn--sm mh-head-end" href="/jobs"><span>@L["Dashboard.AllJobs"]</span>@Ui.Icon("chevron-right")</a>
+                }
+            </div>
+            <div class="mat-card__body">
+                @if (Model.RecentJobs.Count == 0)
+                {
+                    <div class="mat-empty">
+                        <span class="mat-empty__icon">@Ui.Icon("activity")</span>
+                        <p class="mat-empty__title">@L["Jobs.Empty"]</p>
+                        <p>@L["Dashboard.NoJobs"]</p>
+                    </div>
+                }
+                else
+                {
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
+                        @foreach (var j in Model.RecentJobs)
+                        {
+                            <li class="mat-item">
+                                <a class="mat-item__main" href="/jobs/@j.Id">
+                                    <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon(JobUi.Icon(j.Kind))</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@j.Name</span><span class="mat-item__text">@(j.CreatedBy ?? L["Jobs.Origin." + j.Origin].Value) · @Ui.When(j.Created, Model.Zone) · @Ui.ClientCount(j.Total)</span></span>
+                                    <span class="mat-item__end"><partial name="_JobState" model="j" /></span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </section>
+    </div>
+    <div class="mat-col-12 mat-col-lg-5">
+        @if (cl is { Total: > 0 })
+        {
+            var activeTotal = Math.Max(1, cl.Online + cl.Offline);
+            <section class="mat-card" aria-labelledby="clients-title">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="clients-title">@Ui.Icon("monitor")@L["Dashboard.ClientsState"]</h2></div>
+                <div class="mat-card__body mat-stack">
+                    <div class="mat-meter mat-meter--lg mat-meter--stack" role="img" aria-label="@L["Dashboard.SplitLabel", cl.Online, cl.Offline]">
+                        <div class="mat-meter__fill" data-value="@((int)Math.Round(cl.Online * 100.0 / activeTotal))" data-tone="ok"></div>
+                        <div class="mat-meter__fill mh-fill-muted" data-value="@(100 - (int)Math.Round(cl.Online * 100.0 / activeTotal))"></div>
+                    </div>
+                    <ul class="mh-legend">
+                        <li><a href="/clients?state=online"><span class="mh-legend__dot mh-legend__dot--ok"></span>@L["Clients.State.Online"] <strong>@cl.Online</strong></a></li>
+                        <li><a href="/clients?state=offline"><span class="mh-legend__dot"></span>@L["Clients.State.Offline"] <strong>@cl.Offline</strong></a></li>
+                        @if (cl.Disabled > 0)
+                        {
+                            <li><a href="/clients?state=disabled"><span class="mh-legend__dot mh-legend__dot--off"></span>@L["Clients.State.Disabled"] <strong>@cl.Disabled</strong></a></li>
+                        }
+                    </ul>
+                    @if (cl.Systems.Count > 0)
+                    {
+                        <h3 class="mh-subhead">@L["Dashboard.Systems"]</h3>
+                        <ul class="mh-bars">
+                            @foreach (var (system, count) in cl.Systems.Take(6))
+                            {
+                                var share = (int)Math.Round(count * 100.0 / activeTotal);
+                                <li class="mh-bars__row">
+                                    <a class="mh-bars__label" href="/clients?os=@Uri.EscapeDataString(system)">@Ui.Os(system)</a>
+                                    <span class="mh-bars__value">@count</span>
+                                    <div class="mat-meter mat-meter--sm mh-bars__meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@share" aria-label="@system"><div class="mat-meter__fill" data-value="@share"></div></div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </section>
+        }
+        @if (Model.TopUpdates.Count > 0)
+        {
+            <section class="mat-card mat-card--flush" aria-labelledby="updates-title">
+                <div class="mat-card__head"><h2 class="mat-card__title" id="updates-title">@Ui.Icon("refresh")@L["Dashboard.TopUpdates"]</h2><a class="mat-btn mat-btn--ghost mat-btn--sm mh-head-end" href="/updates"><span>@L["Dashboard.AllUpdates"]</span>@Ui.Icon("chevron-right")</a></div>
+                <div class="mat-card__body">
+                    <ul class="mat-itemlist mat-itemlist--lines-inset">
+                        @foreach (var u in Model.TopUpdates)
+                        {
+                            <li class="mat-item">
+                                <a class="mat-item__main" href="/updates?q=@Uri.EscapeDataString(u.WingetId)">
+                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--warn">@Ui.Icon("box")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@u.Name</span><span class="mat-item__text mat-mono">@u.Installed → @u.Available</span></span>
+                                    <span class="mat-item__end"><span class="mat-item__note">@Ui.ClientCount(u.Clients)</span></span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </section>
+        }
+    </div>
+</div>

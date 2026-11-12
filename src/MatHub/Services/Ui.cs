@@ -10,8 +10,8 @@ public static partial class Ui
     public const string AppId = "mathub";
     public const string AppName = "MatHub";
 
-    /// <summary>The accent: the orange of the office suites (white text on it 4.6:1). The four apps have colours of their own (<c>IKindHandler.Colour</c>).</summary>
-    public const string Accent = "#d83b01";
+    /// <summary>The accent of MatHub: amber (white text on it 5.0:1).</summary>
+    public const string Accent = "#b45309";
 
     [GeneratedRegex("^[a-z0-9-]+$")]
     private static partial Regex NameRegex();
@@ -31,6 +31,27 @@ public static partial class Ui
         var data = IsColour(colour) ? $" data-colour=\"{colour}\"" : string.Empty;
         return new HtmlString($"<svg class=\"{cls}\"{data} aria-hidden=\"true\" focusable=\"false\"><use href=\"#mat-i-{name}\"></use></svg>");
     }
+
+    /// <summary>A moment as a person reads it in a list: "5 min ago", "Yesterday 14:05" … with the exact time as its title.</summary>
+    public static IHtmlContent When(DateTime? utc, string? zone, string? none = null)
+    {
+        if (utc is null)
+        {
+            return new HtmlString($"<span class=\"mh-muted\">{System.Net.WebUtility.HtmlEncode(none ?? "–")}</span>");
+        }
+
+        var iso = DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+        var stamp = System.Net.WebUtility.HtmlEncode(Dates.Stamp(utc, zone));
+        var ago = System.Net.WebUtility.HtmlEncode(Dates.Ago(utc.Value, zone));
+        return new HtmlString($"<time class=\"mh-when\" datetime=\"{iso}\" title=\"{stamp}\">{ago}</time>");
+    }
+
+    /// <summary>An operating system as it is read in a list: "Windows 11 Pro" (without the "Microsoft" every Windows starts with).</summary>
+    public static string Os(string? name)
+        => string.IsNullOrWhiteSpace(name) ? "–" : name.Replace("Microsoft ", string.Empty, StringComparison.Ordinal).Trim();
+
+    /// <summary>"1 client", "3 clients".</summary>
+    public static string ClientCount(int n) => Localization.Text.T(n == 1 ? "Jobs.ClientCount.One" : "Jobs.ClientCount", n);
 
     public static bool IsColour(string? value) => value is not null && ColourRegex().IsMatch(value);
 

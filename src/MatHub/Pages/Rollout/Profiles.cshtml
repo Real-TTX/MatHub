@@ -7,9 +7,11 @@
 }
 
 <div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
     @if (Model.Items.Count == 0)
     {
-        <partial name="_Empty" model="@(new EmptyStateModel("layers", L["Profiles.Empty"].Value, L["Profiles.EmptyText"].Value, Model.CanManage, "/rollout/profiles/edit", L["Profiles.New"].Value))" />
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("layers", L[first ? "Profiles.Empty" : "Profiles.NoMatch"].Value, L[first ? "Profiles.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanManage, "/rollout/profiles/edit", L["Profiles.New"].Value, Model.Toolbar.UrlReset()))" />
     }
     else
     {

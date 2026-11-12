@@ -19,14 +19,15 @@ and install new computers over the network. A small agent on every computer, one
 
 | Area | What you get |
 |---|---|
-| **Clients** | Every computer with its agent: online or not, operating system, hardware, disks, network, the last user, the installed programs and the updates winget offers; tags, a description, run something on several at once |
-| **Groups** | By hand, or by a rule over the inventory (name, operating system, domain, manufacturer, model, address, tag) that MatHub keeps up to date; groups are the targets of jobs and assignments and the reach of roles |
+| **Overview** | The numbers that matter, each a link to its list; clients waiting for an approval (approved right there), the latest jobs, online and offline, the operating systems, the updates on the most clients |
+| **Clients** | Every computer with its agent: online or not, operating system, hardware (BIOS, processor cores, graphics, Secure Boot), disks, network, uptime, the last user, the installed programs and the updates winget offers; tags, a description, run something on several at once |
+| **Groups** | By hand, or by rules over the inventory (name, operating system, domain, manufacturer, model, address, tag; all of them or one of them must match) that MatHub keeps up to date; groups are the targets of jobs and assignments and the reach of roles |
 | **Enrollment** | Keys for the agent (valid until, how often, the group of the new clients, approval) and one line for an elevated PowerShell that downloads, checks and installs the agent as a Windows service |
-| **Packages** | winget packages, uploaded MSI and EXE installers, scripted installs; MatHub sees by the inventory whether a package is installed |
+| **Packages** | winget packages, uploaded MSI and EXE installers, scripted installs; MatHub sees by the inventory whether a package is installed; a program a client has becomes a package with one click |
 | **Assignments** | "The laptops have Firefox": MatHub makes the jobs that are missing every minute, checks the result in the next inventory and installs updates by itself |
-| **Updates** | What winget offers, program by program and on how many clients – one click updates a program everywhere, another updates everything |
-| **Scripts** | PowerShell, cmd or bash in a code editor; steps one after the other in the block editor (each with an "only if" and "go on after an error"); a flow with branches on a canvas – the visual editors write PowerShell |
-| **Jobs** | Every run on every client with its state, its exit code and everything it wrote; cancel what has not started, run the failed ones again |
+| **Updates** | What winget offers, program by program and on which clients – one click updates a program everywhere, another updates everything |
+| **Scripts** | PowerShell, cmd or bash in a code editor (highlighting, snippets, search, comment and duplicate lines, pairs that close themselves, full screen); steps one after the other in the block editor (each with an "only if" and "go on after an error"); a flow with branches on a canvas that zooms – the visual editors write PowerShell |
+| **Jobs** | Now or at a time to come; every run on every client with its state, its exit code and everything it wrote; cancel what has not started, run the failed ones again |
 | **Rollout** | PXE with iPXE and a TFTP server built in: a task names a MAC address, a computer name and a profile, and at its next network boot the computer installs Windows unattended (Windows PE through wimboot, an answer file MatHub writes), enrolls its agent and joins its group; Linux and iPXE scripts of your own too |
 | **Permissions** | Roles with permissions per area, for all clients or only the members of some groups – checked in the business layer, not only on the page; MatIdentity can give roles and permissions |
 | **Administration** | People, roles, connections (MatIdentity, MatSMTP), activity, system settings |
@@ -38,6 +39,7 @@ English and German, light and dark, a phone layout, and an installable app (PWA)
 | ![The block editor with its live PowerShell](docs/images/script-blocks.png) | ![The flow editor: a branch, an error path, two ends](docs/images/script-flow.png) |
 | ![The updates winget offers, program by program](docs/images/updates.png) | ![A client: its software with the updates](docs/images/software.png) |
 | ![A job and its runs, one failed](docs/images/job.png) | ![Rollout: computers that are installed at their next network boot](docs/images/rollout.png) |
+| ![The inventory of a client: hardware, system, disks, network](docs/images/inventory.png) | ![A group by rules: a tag or a notebook name](docs/images/group.png) |
 
 <p align="center"><img src="docs/images/phone-client.png" width="300" alt="The software of a client on a phone in dark mode" /></p>
 

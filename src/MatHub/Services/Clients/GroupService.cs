@@ -6,7 +6,18 @@ namespace MatHub.Services.Clients;
 
 public sealed record GroupRow(long Id, string Name, string? Description, string? Colour, GroupKind Kind, int Members, string? Rule);
 
-public sealed record GroupForm(string Name, string? Description, string? Colour, GroupKind Kind, GroupRuleField RuleField, GroupRuleOperator RuleOperator, string? RuleValue);
+/// <summary>One condition of a dynamic group: a fact of the inventory, how it is compared, the value.</summary>
+public sealed record GroupCondition(GroupRuleField Field, GroupRuleOperator Operator, string Value);
+
+/// <summary>What the edit page of a group sends; <paramref name="Conditions"/> and <paramref name="MatchAny"/> only matter for a dynamic group.</summary>
+public sealed record GroupForm(string Name, string? Description, string? Colour, GroupKind Kind, IReadOnlyList<GroupCondition> Conditions, bool MatchAny = false)
+{
+    /// <summary>A group with one condition (the tests and the simple cases).</summary>
+    public GroupForm(string name, string? description, string? colour, GroupKind kind, GroupRuleField field, GroupRuleOperator op, string? value)
+        : this(name, description, colour, kind, string.IsNullOrWhiteSpace(value) ? [] : [new GroupCondition(field, op, value)])
+    {
+    }
+}
 
 /// <summary>
 /// The groups of clients (static, by hand; dynamic, by a rule over the inventory). The members of a dynamic group are computed and kept in
@@ -15,6 +26,37 @@ public sealed record GroupForm(string Name, string? Description, string? Colour,
 /// </summary>
 public static class GroupService
 {
+    /// <summary>The most conditions a group has.</summary>
+    public const int MaxConditions = 10;
+
+    private static readonly System.Text.Json.JsonSerializerOptions Json = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    /// <summary>The conditions of a group: the first one in its columns, the others in <see cref="ClientGroup.MoreRules"/>.</summary>
+    public static IReadOnlyList<GroupCondition> Conditions(ClientGroup g) => Conditions(g.RuleField, g.RuleOperator, g.RuleValue, g.MoreRules);
+
+    private static List<GroupCondition> Conditions(GroupRuleField field, GroupRuleOperator op, string? value, string? more)
+    {
+        var list = new List<GroupCondition>();
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            list.Add(new GroupCondition(field, op, value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(more))
+        {
+            try
+            {
+                list.AddRange((System.Text.Json.JsonSerializer.Deserialize<List<GroupCondition>>(more, Json) ?? []).Where(c => !string.IsNullOrWhiteSpace(c.Value)));
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // conditions MatHub cannot read count as none
+            }
+        }
+
+        return list;
+    }
+
     public static async Task<IReadOnlyList<GroupRow>?> ListAsync(AppDbContext db, Actor actor, string? search, CancellationToken ct = default)
     {
         if (!actor.Can(Permission.ClientsView))
@@ -30,9 +72,9 @@ public static class GroupService
         }
 
         var rows = await q.OrderBy(g => g.Name)
-            .Select(g => new { g.Id, g.Name, g.Description, g.Colour, g.Kind, g.RuleField, g.RuleOperator, g.RuleValue, Members = g.Members.Count(m => m.Client!.UpdateState != SoftEntity.Deleted) })
+            .Select(g => new { g.Id, g.Name, g.Description, g.Colour, g.Kind, g.RuleField, g.RuleOperator, g.RuleValue, g.MoreRules, g.MatchAny, Members = g.Members.Count(m => m.Client!.UpdateState != SoftEntity.Deleted) })
             .ToListAsync(ct);
-        return rows.Select(g => new GroupRow(g.Id, g.Name, g.Description, g.Colour, g.Kind, g.Members, g.Kind == GroupKind.Dynamic ? RuleText(g.RuleField, g.RuleOperator, g.RuleValue) : null)).ToList();
+        return rows.Select(g => new GroupRow(g.Id, g.Name, g.Description, g.Colour, g.Kind, g.Members, g.Kind == GroupKind.Dynamic ? RuleText(Conditions(g.RuleField, g.RuleOperator, g.RuleValue, g.MoreRules), g.MatchAny) : null)).ToList();
     }
 
     /// <summary>The groups the actor may pick as a target or a scope: id, name, colour.</summary>
@@ -72,7 +114,9 @@ public static class GroupService
             return Outcome<ClientGroup>.Fail(Localization.Text.T("Common.NameRequired"));
         }
 
-        if (form.Kind == GroupKind.Dynamic && string.IsNullOrWhiteSpace(form.RuleValue))
+        var conditions = form.Conditions.Where(c => !string.IsNullOrWhiteSpace(c.Value) && Enum.IsDefined(c.Field) && Enum.IsDefined(c.Operator))
+            .Select(c => c with { Value = ClientService.Clean(c.Value, 200)! }).Take(MaxConditions).ToList();
+        if (form.Kind == GroupKind.Dynamic && conditions.Count == 0)
         {
             return Outcome<ClientGroup>.Fail(Localization.Text.T("Groups.Rule.Required"));
         }
@@ -97,9 +141,12 @@ public static class GroupService
         group.Description = ClientService.Clean(form.Description, 1000);
         group.Colour = Ui.IsColour(form.Colour) ? form.Colour!.ToLowerInvariant() : null;
         group.Kind = form.Kind;
-        group.RuleField = form.RuleField;
-        group.RuleOperator = form.RuleOperator;
-        group.RuleValue = form.Kind == GroupKind.Dynamic ? ClientService.Clean(form.RuleValue, 200) : null;
+        var dynamic = form.Kind == GroupKind.Dynamic;
+        group.RuleField = dynamic ? conditions[0].Field : GroupRuleField.Name;
+        group.RuleOperator = dynamic ? conditions[0].Operator : GroupRuleOperator.Contains;
+        group.RuleValue = dynamic ? conditions[0].Value : null;
+        group.MoreRules = dynamic && conditions.Count > 1 ? System.Text.Json.JsonSerializer.Serialize(conditions.Skip(1), Json) : null;
+        group.MatchAny = dynamic && form.MatchAny;
         ActivityLog.Add(db, actor, "group", id is null ? "create" : "update", group.Name);
         await db.SaveChangesAsync(ct);
 
@@ -179,7 +226,13 @@ public static class GroupService
         };
     }
 
-    private static bool Matches(ClientGroup g, ClientFacts c) => Matches(g.RuleField, g.RuleOperator, g.RuleValue, c.Name, c.OperatingSystem, c.Domain, c.Manufacturer, c.Model, c.IpAddresses, c.Tags);
+    /// <summary>Whether a client is a member: all conditions match (or one, with <see cref="ClientGroup.MatchAny"/>); a group without a condition has no member.</summary>
+    private static bool Matches(ClientGroup g, ClientFacts c)
+    {
+        var conditions = Conditions(g);
+        bool One(GroupCondition x) => Matches(x.Field, x.Operator, x.Value, c.Name, c.OperatingSystem, c.Domain, c.Manufacturer, c.Model, c.IpAddresses, c.Tags);
+        return conditions.Count > 0 && (g.MatchAny ? conditions.Any(One) : conditions.All(One));
+    }
 
     private static Task<List<ClientFacts>> FactsAsync(AppDbContext db, long? clientId, CancellationToken ct)
         => db.Clients.AsNoTracking().Where(c => clientId == null || c.Id == clientId)
@@ -247,4 +300,8 @@ public static class GroupService
 
     public static string RuleText(GroupRuleField field, GroupRuleOperator op, string? value)
         => $"{Localization.Text.T("Groups.Field." + field)} {Localization.Text.T("Groups.Operator." + op)} „{value}“";
+
+    /// <summary>"Computer name starts with „BER-“ and tag is „laptop“".</summary>
+    public static string RuleText(IReadOnlyList<GroupCondition> conditions, bool matchAny)
+        => string.Join(Localization.Text.T(matchAny ? "Groups.Or" : "Groups.And"), conditions.Select(c => RuleText(c.Field, c.Operator, c.Value)));
 }

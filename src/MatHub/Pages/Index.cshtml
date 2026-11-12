@@ -16,7 +16,6 @@
         ViewData["Crumbs"] = new List<(string, string?)> { (L["Dashboard.Title"].Value, null) };
     }
 
-    var c = Model.Counts;
 }
 
 @if (!Model.SignedIn)
@@ -53,64 +52,7 @@
         </div></div>
     </section>
 }
-else if (c is not null)
+else
 {
-    <div class="mat-cols mh-stats">
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><a class="mat-card mat-card--link mh-stat-card" href="/clients"><div class="mat-card__body mat-stat">@Ui.Icon("monitor", "mat-stat__icon")<span class="mat-stat__label">@L["Dashboard.Clients"]</span><span class="mat-stat__value">@c.Clients</span><span class="mat-stat__delta">@L["Dashboard.OnlineOf", c.Online]</span></div></a></div>
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><a class="mat-card mat-card--link mh-stat-card" href="/updates"><div class="mat-card__body mat-stat">@Ui.Icon("refresh", "mat-stat__icon")<span class="mat-stat__label">@L["Dashboard.Updates"]</span><span class="mat-stat__value">@c.ClientsWithUpdates</span><span class="mat-stat__delta">@L["Dashboard.UpdatesHint"]</span></div></a></div>
-        @if (Model.Actor.Can(Permission.ClientsEnroll))
-        {
-            <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><a class="mat-card mat-card--link mh-stat-card" href="/clients?state=pending"><div class="mat-card__body mat-stat">@Ui.Icon("clock", "mat-stat__icon")<span class="mat-stat__label">@L["Dashboard.Pending"]</span><span class="mat-stat__value">@c.Pending</span><span class="mat-stat__delta">@L["Dashboard.PendingHint"]</span></div></a></div>
-        }
-        @if (Model.Actor.IsAdmin)
-        {
-            <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><a class="mat-card mat-card--link mh-stat-card" href="/jobs?state=failed"><div class="mat-card__body mat-stat">@Ui.Icon("alert", "mat-stat__icon")<span class="mat-stat__label">@L["Dashboard.Failed"]</span><span class="mat-stat__value">@c.FailedRuns24h</span><span class="mat-stat__delta">@L["Dashboard.OpenRuns", c.OpenRuns]</span></div></a></div>
-        }
-    </div>
-
-    @if (c.Clients == 0 && Model.Actor.Can(Permission.ClientsEnroll))
-    {
-        <div class="mat-alert mat-alert--info mh-mt" role="status">
-            @Ui.Icon("info")
-            <div class="mat-alert__body">
-                <strong class="mat-alert__title">@L["Dashboard.FirstClient.Title"]</strong>
-                <p>@L["Dashboard.FirstClient.Text"]</p>
-                <div class="mat-alert__actions"><a class="mat-btn mat-btn--primary mat-btn--sm" href="/enrollment">@Ui.Icon("key")<span>@L["Dashboard.FirstClient.Action"]</span></a></div>
-            </div>
-        </div>
-    }
-
-    <div class="mat-cols mh-mt">
-        @if (Model.Pending.Count > 0)
-        {
-            <div class="mat-col-12 mat-col-lg-5">
-                <div class="mat-card">
-                    <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("clock")@L["Dashboard.Pending"]</h2></div>
-                    <div class="mat-card__body">
-                        <ul class="mat-itemlist">
-                            @foreach (var p in Model.Pending)
-                            {
-                                <li class="mat-item"><a class="mat-item__main" href="/clients/@p.Id"><span class="mat-item__body"><span class="mat-item__title">@p.Name</span><span class="mat-item__text">@p.OperatingSystem</span></span></a></li>
-                            }
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        }
-        <div class="mat-col-12 @(Model.Pending.Count > 0 ? "mat-col-lg-7" : string.Empty)">
-            <div class="mat-card">
-                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("activity")@L["Dashboard.RecentJobs"]</h2></div>
-                <div class="mat-card__body">
-                    @if (Model.RecentJobs.Count == 0)
-                    {
-                        <p class="mh-muted">@L["Dashboard.NoJobs"]</p>
-                    }
-                    else
-                    {
-                        <partial name="_JobTable" model="(Model.RecentJobs, Model.Zone)" />
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
+    <partial name="_Dashboard" model="Model" />
 }

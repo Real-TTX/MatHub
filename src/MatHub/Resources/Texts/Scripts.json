@@ -31,6 +31,8 @@
   "Scripts.Tabs": { "en": "Areas of the script", "de": "Bereiche des Skripts" },
   "Scripts.Tab.General": { "en": "General", "de": "Allgemein" },
   "Scripts.Tab.Script": { "en": "Script", "de": "Skript" },
+  "Scripts.Run.Hint": { "en": "On clients or groups, now or later.", "de": "Auf Clients oder Gruppen, jetzt oder später." },
+  "Scripts.Duplicate.Hint": { "en": "A copy to change without touching this one.", "de": "Eine Kopie zum Ändern, ohne dieses anzufassen." },
   "Scripts.OpenEditor": { "en": "Open the editor", "de": "Editor öffnen" },
   "Scripts.Duplicate": { "en": "Duplicate", "de": "Duplizieren" },
   "Scripts.CopyOf": { "en": "{0} (copy)", "de": "{0} (Kopie)" },

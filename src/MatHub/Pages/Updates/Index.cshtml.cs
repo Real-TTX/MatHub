@@ -23,6 +23,11 @@ public sealed class IndexModel(AppDbContext db) : AppPageModel
 
     public bool CanDeploy => Me.Can(Permission.PackagesDeploy);
 
+    public bool CanMakePackage => Me.Can(Permission.PackagesEdit);
+
+    /// <summary>The packages by winget id (a program that is a package links to it).</summary>
+    public IReadOnlyDictionary<string, long> Packages { get; private set; } = new Dictionary<string, long>();
+
     public async Task<IActionResult> OnGetAsync()
     {
         var ct = HttpContext.RequestAborted;
@@ -36,6 +41,7 @@ public sealed class IndexModel(AppDbContext db) : AppPageModel
         }
 
         List = list;
+        Packages = await PackageService.ByWingetIdAsync(db, Me.Actor, ct);
         var groups = await GroupService.ChoicesAsync(db, Me.Actor, ct);
         Toolbar = new ToolbarModel
         {

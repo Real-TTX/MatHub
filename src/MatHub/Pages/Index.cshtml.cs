@@ -1,25 +1,33 @@
 using MatHub.Data;
+using MatHub.Localization;
 using MatHub.Services;
 using MatHub.Services.Access;
 using MatHub.Services.Clients;
 using MatHub.Services.Jobs;
+using MatHub.Services.Packages;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace MatHub.Pages;
 
 /// <summary>The start page: for a visitor what MatHub is, for a signed-in person the overview (clients, updates, jobs, what to do next).</summary>
-public sealed class IndexModel(AccountService accounts, CurrentUser me, AppDbContext db, InstanceService instance) : PageModel
+public sealed class IndexModel(AccountService accounts, CurrentUser me, AppDbContext db, InstanceService instance) : AppPageModel
 {
     public bool RegistrationOpen { get; private set; }
 
     public bool SignedIn => me.IsAuthenticated;
 
-    public InstanceSnapshot? Counts { get; private set; }
+    public ClientOverview? Clients { get; private set; }
+
+    /// <summary>Failed runs of the last 24 hours and runs still open (administrators only).</summary>
+    public (int Failed, int Open)? Runs { get; private set; }
 
     public IReadOnlyList<JobRow> RecentJobs { get; private set; } = [];
 
     public IReadOnlyList<ClientRow> Pending { get; private set; } = [];
+
+    public IReadOnlyList<UpdateRow> TopUpdates { get; private set; } = [];
+
+    public int UpdatePrograms { get; private set; }
 
     public string Zone => me.TimeZone;
 
@@ -34,29 +42,38 @@ public sealed class IndexModel(AccountService accounts, CurrentUser me, AppDbCon
         }
 
         var ct = HttpContext.RequestAborted;
-        Counts = await DashboardAsync(ct);
-        RecentJobs = (await JobService.ListAsync(db, me.Actor, new JobCriteria(null, null, null, null, 1, 6), ct))?.Items ?? [];
+        Clients = await ClientService.OverviewAsync(db, me.Actor, ct);
+        if (me.IsAdmin)
+        {
+            var snapshot = await instance.SnapshotAsync(ct);
+            Runs = (snapshot.FailedRuns24h, snapshot.OpenRuns);
+        }
+
+        RecentJobs = (await JobService.ListAsync(db, me.Actor, new JobCriteria(null, null, null, null, 1, 7), ct))?.Items ?? [];
         if (me.Actor.Can(Permission.ClientsEnroll))
         {
             Pending = (await ClientService.ListAsync(db, me.Actor, new ClientCriteria(null, "pending", null, null, "created", true, 1, 5), ct))?.Items ?? [];
         }
 
+        if (await UpdateService.ListAsync(db, me.Actor, null, null, ct) is { } updates)
+        {
+            TopUpdates = updates.Items.Take(5).ToList();
+            UpdatePrograms = updates.Programs;
+        }
+
         return Page();
     }
 
-    /// <summary>The numbers of the clients the person reaches (an administrator: all of them).</summary>
-    private async Task<InstanceSnapshot> DashboardAsync(CancellationToken ct)
+    /// <summary>Approves a client that waits (the business layer checks the permission and the reach).</summary>
+    public async Task<IActionResult> OnPostApproveAsync(long id)
     {
-        if (me.IsAdmin)
+        var outcome = await ClientService.SetStatusAsync(db, me.Actor, id, ClientStatus.Active, HttpContext.RequestAborted);
+        if (outcome.NotAllowed)
         {
-            return await instance.SnapshotAsync(ct);
+            return NotFound();
         }
 
-        var actor = me.Actor;
-        var list = await ClientService.ListAsync(db, actor, new ClientCriteria(null, null, null, null, "name", false, 1, 1), ct);
-        var online = await ClientService.ListAsync(db, actor, new ClientCriteria(null, "online", null, null, "name", false, 1, 1), ct);
-        var pending = await ClientService.ListAsync(db, actor, new ClientCriteria(null, "pending", null, null, "name", false, 1, 1), ct);
-        var updates = await ClientService.ListAsync(db, actor, new ClientCriteria(null, "updates", null, null, "name", false, 1, 1), ct);
-        return new InstanceSnapshot(0, 0, list?.Total ?? 0, online?.Matching ?? 0, pending?.Matching ?? 0, updates?.Matching ?? 0, 0, 0, 0, 0, 0, null);
+        Flash(Text.T("Clients.Approved", outcome.Value!.Name));
+        return LocalRedirect("/");
     }
 }

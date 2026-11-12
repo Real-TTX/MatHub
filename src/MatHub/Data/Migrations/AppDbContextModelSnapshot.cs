@@ -445,6 +445,12 @@ namespace MatHub.Data.Migrations
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("MatchAny")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MoreRules")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)

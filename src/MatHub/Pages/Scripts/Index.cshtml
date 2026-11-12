@@ -23,7 +23,7 @@
                         <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/scripts/edit?id=@s.Id"><span class="mh-name">@Ui.Icon(JobUi.EditorIcon(s.Editor))@s.Name</span></a></td>
                         <td data-label="@L["Scripts.Editor"]"><span class="mat-pill mat-pill--plain">@L["Scripts.Editor." + s.Editor]</span> <span class="mh-muted">@L["Scripts.Language." + s.Language]</span></td>
                         <td data-label="@L["Scripts.Category"]" class="mat-hide-sm">@if (s.Category is not null) { <span class="mat-tag">@s.Category</span> }</td>
-                        <td data-label="@L["Common.Updated"]" class="mat-mono mat-hide-md">@Dates.Stamp(s.Updated, Model.Zone)</td>
+                        <td data-label="@L["Common.Updated"]" class="mat-hide-md mh-nowrap">@Ui.When(s.Updated, Model.Zone)</td>
                         <td data-label="@L["Scripts.Runs"]" class="mat-num mat-hide-sm">@s.Runs</td>
                         @if (Model.CanRun)
                         {

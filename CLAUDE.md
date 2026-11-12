@@ -44,7 +44,7 @@ src/MatHub
   Data/                      Entities.cs (User, UserSession, AccessRole(+Group), Client, ClientSoftware, ClientGroup(+Member), EnrollmentKey, Script, Package, PackageAssignment,
                              Job, JobRun, BootImage, RolloutProfile, BootDevice, RolloutTask, Activity, SystemSetting), AppDbContext.cs, Migrations/
   Services/Access/           Permission (the keys: clients-view …), Actor (who acts: permissions + reach), AccessRules (Clients/Groups the actor reaches), RoleService (+ seed)
-  Services/Clients/          ClientService, GroupService (rules; members of dynamic groups are computed into ClientGroupMember), EnrollmentService (keys, enroll, hashes)
+  Services/Clients/          ClientService, GroupService (rules: one or more conditions, all or any; members of dynamic groups are computed into ClientGroupMember), EnrollmentService (keys, enroll, hashes)
   Services/Agent/            AgentEndpoints (/api/agent/v1/*, /agent/mathub-agent.exe, /agent/install.ps1), AgentFiles (the agent of the image, its SHA, the install script), InventoryService
   Services/Jobs/JobService   jobs (a copy of what runs in Payload), runs, what the agent takes and reports, lost runs
   Services/Packages/         PackageService (+ assignments, detection), PackageFiles (/data/packages), UpdateService (what winget offers, one-click updates)
@@ -55,11 +55,11 @@ src/MatHub
   Services/                  ActivityLog, SearchService (/live/search), InstanceService (numbers, settings, housekeeping), MenuService, JobUi, Ui, ListModels, Dates …
   MatPlatform/               copy of the shared package (MatDesign, 2.4.0). Never edit here.
   Platform/                  MatHubPlatform (definition, state, settings, actions, health), MatHubIdentityUsers
-  Controls/                  ONE code base per control: <mh-field>, <mh-buttons>, <mh-table>, <mh-tabs>/<mh-tab>
-  Pages/                     Index (landing / overview), Clients/ (list + tabs General, Inventory, Software, Jobs, Activity), Groups/, Enrollment/, Packages/ (+ Assignments),
-                             Updates/, Scripts/ (Edit = General, Code = the editor of its kind), Jobs/ (Index, New, Detail, Run), Rollout/ (Index = tasks, TaskEdit, Devices,
+  Controls/                  ONE code base per control: <mh-field>, <mh-buttons>, <mh-table>, <mh-tabs>/<mh-tab>, <mh-stats>/<mh-stat> (a row of numbers)
+  Pages/                     Index (landing; _Dashboard = the overview), Clients/ (list + tabs General, Inventory, Software, Jobs, Activity), Groups/, Enrollment/, Packages/ (+ Assignments),
+                             Updates/, Scripts/ (Edit = General, Code = the editor of its kind), Jobs/ (Index, New = now or later, Detail, Run), Groups/_Condition (a row of a rule), Rollout/ (Index = tasks, TaskEdit, Devices,
                              Profiles/ProfileEdit, Images/ImageEdit, Setup), Admin/ (Users, Roles, Connections, Activity, System), Account/, Search, About
-  wwwroot/js/                editors.js (code editor, block editor, flow editor), live.js (refreshes running jobs), util.js, offline.js, pwa.js, zone.js, autosubmit.js
+  wwwroot/js/                editors.js (code editor with toolbar/search/snippets, block editor, flow editor with zoom), conditions.js (the rows of a group rule), live.js (refreshes running jobs), util.js, offline.js, pwa.js, zone.js, autosubmit.js
   wwwroot/css/               app.css (accent, shell), hub.css (the views of MatHub, prefix mh-)
 src/MatHub.Agent             Program (commands), Setup (install/enroll/uninstall, sc.exe), AgentWorker (the loop), AgentClient (HTTP), JobRunner (scripts, winget, MSI, EXE),
                              Inventory (CIM through Windows PowerShell + registry + winget), Winget (locate as SYSTEM, read its tables), Updater (self-update, apply-update), AgentConfig (DPAPI, ACL)
@@ -88,7 +88,7 @@ the exe in the image), the agent follows it up or down.
 
 **UI (MatDesign rules)**: CRUD = list page (toolbar above, table, pager under it, actions left below) + separate edit page (Save, Back, space, Delete); an entity
 with several areas has **tabs** (client, script, package); fields a kind does not need are hidden (`show-if`: package kind, profile kind, group kind, the
-language of a script). Every `td` has `data-label`. Icons via `Ui.Icon` (toolkit sprite + `wwwroot/img/app-icons.svg`). The version at the foot of the menu links to `/About`.
+language of a script). Every `td` has `data-label`. Moments in lists are `Ui.When` ("5 min ago", the exact time as its title); operating systems `Ui.Os` (without "Microsoft"); a row of numbers is `<mh-stats>`; actions of a record are a `mat-itemlist` of rows with a hint (client, script). Cards one under the other in a column keep their distance (hub.css). Icons via `Ui.Icon` (toolkit sprite + `wwwroot/img/app-icons.svg`). The version at the foot of the menu links to `/About`.
 
 **Code**: Microsoft C# guidelines, file-scoped namespaces, `.editorconfig`. No database queries in page models or views beyond calling the business layer.
 English identifiers and comments, UI texts only in the catalog. Permission keys: small letters and `-` (the platform does not allow dots).

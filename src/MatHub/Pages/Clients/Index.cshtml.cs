@@ -1,3 +1,4 @@
+using MatHub.Services.Packages;
 using MatHub.Data;
 using MatHub.Localization;
 using MatHub.Services;
@@ -31,10 +32,11 @@ public sealed class IndexModel(AppDbContext db) : AppPageModel
         var state = ListQuery.Text(Request, "state");
         var group = long.TryParse(ListQuery.Text(Request, "group"), out var g) ? g : (long?)null;
         var system = ListQuery.Text(Request, "os");
+        var update = ListQuery.Text(Request, "update");
         var sort = ListQuery.Text(Request, "sort") ?? "name";
         var desc = ListQuery.Descending(Request);
         var page = ListQuery.Page(Request);
-        var list = await ClientService.ListAsync(db, Me.Actor, new ClientCriteria(search, state, group, system, sort, desc, page, PageSize), ct);
+        var list = await ClientService.ListAsync(db, Me.Actor, new ClientCriteria(search, state, group, system, sort, desc, page, PageSize, update), ct);
         if (list is null)
         {
             return NotFound();
@@ -43,6 +45,7 @@ public sealed class IndexModel(AppDbContext db) : AppPageModel
         Items = list.Items;
         var groups = await GroupService.ChoicesAsync(db, Me.Actor, ct);
         var systems = await ClientService.SystemsAsync(db, Me.Actor, ct);
+        var updates = await UpdateService.ListAsync(db, Me.Actor, null, null, ct);
         Toolbar = new ToolbarModel
         {
             Id = "clients",
@@ -55,7 +58,8 @@ public sealed class IndexModel(AppDbContext db) : AppPageModel
             [
                 new FilterField("state", Text.T("Common.Status"), new[] { "online", "offline", "pending", "disabled", "updates" }.Select(s => new FilterOption(s, Text.T("Clients.State." + Capital(s)))).ToList(), state),
                 new FilterField("group", Text.T("Groups.One"), groups.Select(x => new FilterOption(x.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), x.Name)).ToList(), group?.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-                new FilterField("os", Text.T("Clients.Col.System"), systems.Select(s => new FilterOption(s, s)).ToList(), system),
+                new FilterField("os", Text.T("Clients.Col.System"), systems.Select(s => new FilterOption(s, Ui.Os(s))).ToList(), system),
+                new FilterField("update", Text.T("Clients.UpdateFor"), (updates?.Items ?? []).Select(u => new FilterOption(u.WingetId, u.Name)).ToList(), update),
             ],
             SortOptions = [new("name", Text.T("Common.Name")), new("seen", Text.T("Clients.Col.LastSeen")), new("os", Text.T("Clients.Col.System")), new("updates", Text.T("Clients.Col.Updates")), new("created", Text.T("Clients.Enrolled"))],
             Sort = sort,

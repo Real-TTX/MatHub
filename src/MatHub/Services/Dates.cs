@@ -83,6 +83,42 @@ public static class Dates
     public static string Stamp(DateTime? utc, string? zone)
         => utc is null ? string.Empty : Local(utc.Value, zone).ToString(De ? "dd.MM.yyyy HH:mm" : "dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
 
+    /// <summary>"just now", "5 min ago", "3 h ago" (today), "Yesterday 14:05", the weekday and time within a week, else the date (and the time).</summary>
+    public static string Ago(DateTime utc, string? zone)
+    {
+        var span = DateTime.UtcNow - DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        var local = Local(utc, zone);
+        var today = Today(zone);
+        var day = DateOnly.FromDateTime(local);
+        var time = Time(TimeOnly.FromDateTime(local));
+        if (span < TimeSpan.Zero)
+        {
+            return Relative(day, TimeOnly.FromDateTime(local), today);
+        }
+
+        if (span.TotalMinutes < 1)
+        {
+            return Text.T("Common.Ago.Now");
+        }
+
+        if (span.TotalMinutes < 60)
+        {
+            return Text.T("Common.Ago.Minutes", (int)span.TotalMinutes);
+        }
+
+        if (day == today)
+        {
+            return Text.T("Common.Ago.Hours", (int)span.TotalHours);
+        }
+
+        if (today.DayNumber - day.DayNumber < 7)
+        {
+            return $"{Relative(day, today)} {time}";
+        }
+
+        return day.Year == today.Year ? $"{DayMonth(day)} {time}" : $"{DayMonth(day)} {day.Year}";
+    }
+
     /// <summary>The last moment of a day in a time zone, in UTC (a link that works "until" a day works the whole day).</summary>
     public static DateTime EndOfDayUtc(DateOnly day, string? zone)
         => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(day.ToDateTime(new TimeOnly(23, 59, 59)), DateTimeKind.Unspecified), Zone(zone));

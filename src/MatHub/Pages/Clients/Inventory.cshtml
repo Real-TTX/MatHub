@@ -15,11 +15,46 @@
 }
 else
 {
-    <div class="mat-cols mh-stats">
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("monitor", "mat-stat__icon")<span class="mat-stat__label">@L["Clients.Col.System"]</span><span class="mat-stat__value mh-stat-text">@c.OperatingSystem</span><span class="mat-stat__delta">@c.OsVersion @c.OsBuild @c.Architecture</span></div></div></div>
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("sliders", "mat-stat__icon")<span class="mat-stat__label">@L["Inventory.Processor"]</span><span class="mat-stat__value mh-stat-text">@(c.Processor ?? "–")</span></div></div></div>
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("database", "mat-stat__icon")<span class="mat-stat__label">@L["Inventory.Memory"]</span><span class="mat-stat__value">@(c.MemoryBytes is { } mem ? Ui.Bytes(mem) : "–")</span></div></div></div>
-        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("hard-drive", "mat-stat__icon")<span class="mat-stat__label">@L["Inventory.Disks"]</span><span class="mat-stat__value">@(c.DiskFreeBytes is { } free ? Ui.Bytes(free) : "–")</span><span class="mat-stat__delta">@L["Inventory.FreeOf", c.DiskTotalBytes is { } total ? Ui.Bytes(total) : "–"]</span></div></div></div>
+    var disksUsed = c.DiskTotalBytes is > 0 && c.DiskFreeBytes is { } dfree ? (int)Math.Round((c.DiskTotalBytes.Value - dfree) * 100.0 / c.DiskTotalBytes.Value) : 0;
+    var hw = Model.Hardware;
+    <mh-stats label="@L["Clients.Tab.Inventory"]">
+        <mh-stat icon="monitor" label="@L["Clients.Col.System"]" value="@(c.OperatingSystem ?? "–")" hint="@string.Join(" · ", new[] { c.OsVersion, c.OsBuild, c.Architecture }.Where(x => !string.IsNullOrEmpty(x)))" text="true" />
+        <mh-stat icon="cpu" label="@L["Inventory.Processor"]" value="@(c.Processor ?? "–")" hint="@(hw?.ProcessorCores is { } cores ? L["Inventory.Cores", cores, hw.ProcessorThreads ?? cores].Value : null)" text="true" />
+        <mh-stat icon="database" label="@L["Inventory.Memory"]" value="@(c.MemoryBytes is { } mem ? Ui.Bytes(mem) : "–")" />
+        <mh-stat icon="hard-drive" label="@L["Inventory.FreeSpace"]" value="@(c.DiskFreeBytes is { } free ? Ui.Bytes(free) : "–")" hint="@L["Inventory.FreeOf", c.DiskTotalBytes is { } total ? Ui.Bytes(total) : "–"]" tone="@(disksUsed > 90 ? "danger" : disksUsed > 75 ? "warn" : null)" />
+    </mh-stats>
+
+    <div class="mat-cols">
+        <div class="mat-col-12 mat-col-lg-6">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("monitor")@L["Inventory.Hardware"]</h2></div>
+                <div class="mat-card__body">
+                    <dl class="mh-dl">
+                        <dt>@L["Inventory.Manufacturer"]</dt><dd>@(c.Manufacturer ?? "–")</dd>
+                        <dt>@L["Clients.Model"]</dt><dd>@(c.Model ?? "–")</dd>
+                        <dt>@L["Clients.Serial"]</dt><dd class="mat-mono">@(c.SerialNumber ?? "–")</dd>
+                        <dt>@L["Inventory.Bios"]</dt><dd>@(hw?.BiosVersion ?? "–") @if (hw?.BiosDate is { } bd) { <span class="mh-muted">@Dates.Local(bd, Model.Zone).ToString("d", System.Globalization.CultureInfo.CurrentUICulture)</span> }</dd>
+                        <dt>@L["Inventory.Graphics"]</dt><dd>@(hw?.Graphics is { Count: > 0 } g ? string.Join(", ", g) : "–")</dd>
+                        <dt>@L["Inventory.SecureBoot"]</dt><dd>@if (hw?.SecureBoot is { } sb) { <span class="mat-pill mat-pill--@(sb ? "ok" : "warn")">@L[sb ? "Inventory.On" : "Inventory.Off"]</span> } else { <span>–</span> }</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="mat-col-12 mat-col-lg-6">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("windows")@L["Inventory.System"]</h2></div>
+                <div class="mat-card__body">
+                    <dl class="mh-dl">
+                        <dt>@L["Clients.Col.System"]</dt><dd>@(c.OperatingSystem ?? "–")</dd>
+                        <dt>@L["Inventory.Version"]</dt><dd class="mat-mono">@string.Join(" · ", new[] { c.OsVersion, c.OsBuild, c.Architecture }.Where(x => !string.IsNullOrEmpty(x)))</dd>
+                        <dt>@L["Inventory.Installed"]</dt><dd>@(hw?.OsInstallDate is { } id ? Dates.Stamp(id, Model.Zone) : "–")</dd>
+                        <dt>@L["Clients.Domain"]</dt><dd>@(c.Domain ?? L["Inventory.Workgroup"].Value)</dd>
+                        <dt>@L["Clients.Col.User"]</dt><dd>@(c.LastUser ?? "–")</dd>
+                        <dt>@L["Inventory.Booted"]</dt><dd>@if (c.BootDate is { } boot) { @Dates.Stamp(boot, Model.Zone) <span class="mh-muted">@L["Inventory.Uptime", Model.Uptime(boot)]</span> } else { <span>–</span> }</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="mat-cols mh-mt">

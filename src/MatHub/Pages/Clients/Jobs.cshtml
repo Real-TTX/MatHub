@@ -24,8 +24,8 @@
                     <tr>
                         <td data-label="@L["Jobs.Col.Job"]" class="mat-table__primary"><a href="/jobs/runs/@r.Id"><span class="mh-name">@Ui.Icon(JobUi.Icon(r.Kind))@r.JobName</span></a></td>
                         <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.Tone(r.Status)">@L[JobUi.StatusKey(r.Status)]</span></td>
-                        <td data-label="@L["Runs.Started"]" class="mat-mono mat-hide-sm">@(r.Started is { } s ? Dates.Stamp(s, Model.Zone) : "–")</td>
-                        <td data-label="@L["Runs.Finished"]" class="mat-mono mat-hide-md">@(r.Finished is { } f ? Dates.Stamp(f, Model.Zone) : "–")</td>
+                        <td data-label="@L["Runs.Started"]" class="mat-hide-sm mh-nowrap">@Ui.When(r.Started, Model.Zone)</td>
+                        <td data-label="@L["Runs.Finished"]" class="mat-hide-md mh-nowrap">@Ui.When(r.Finished, Model.Zone)</td>
                         <td data-label="@L["Runs.ExitCode"]" class="mat-num mat-mono mat-hide-sm">@r.ExitCode</td>
                     </tr>
                 }

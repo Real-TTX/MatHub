@@ -69,7 +69,7 @@ public static class BootService
         device.Product = Cut(request.Product, 200) ?? device.Product;
         device.SerialNumber = Cut(request.Serial, 120) ?? device.SerialNumber;
         device.Uuid = Cut(request.Uuid, 60) ?? device.Uuid;
-        device.IpAddress = Cut(request.Ip, 64) ?? device.IpAddress;
+        device.IpAddress = System.Net.IPAddress.TryParse(request.Ip?.Trim(), out var ip) ? ip.ToString() : device.IpAddress;
         device.LastBootDate = now;
         device.BootCount++;
 

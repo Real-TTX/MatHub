@@ -61,7 +61,24 @@ public sealed class EditModel(AppDbContext db, PackageFiles files) : AppPageMode
     {
         if (Id is not { } id)
         {
-            return Me.Can(Permission.PackagesEdit) ? Page() : NotFound();
+            if (!Me.Can(Permission.PackagesEdit))
+            {
+                return NotFound();
+            }
+
+            // filled in from a program a client has (software tab, updates)
+            var q = Request.Query;
+            if (q["winget"].ToString() is { Length: > 0 and <= 200 } winget)
+            {
+                Kind = PackageKind.Winget;
+                WingetId = winget.Trim();
+                Name = q["name"].ToString() is { Length: > 0 and <= 200 } n ? PackageService.CleanName(n) : WingetId;
+                Publisher = q["publisher"].ToString() is { Length: <= 200 } pub ? pub.Trim() : string.Empty;
+                Detection = DetectionKind.WingetId;
+                AutoUpdate = true;
+            }
+
+            return Page();
         }
 
         var p = await PackageService.GetAsync(db, Me.Actor, id, HttpContext.RequestAborted);

@@ -1,0 +1,27 @@
+@model MatHub.Services.Jobs.JobRow
+@inject CurrentUser Me
+@* The state of a job as a pill (TABLE-03): running "3 of 8", failed "1 of 8 failed", cancelled, done. One code base for every list of jobs. *@
+@{
+    var j = Model;
+    var done = j.Succeeded + j.Failed + j.Cancelled;
+}
+@if (j.Planned)
+{
+    <span class="mat-pill mat-pill--info">@L["Jobs.State.Planned", Dates.Ago(j.NotBefore!.Value, Me.TimeZone)]</span>
+}
+else if (j.Queued + j.Running > 0)
+{
+    <span class="mat-pill mat-pill--busy">@L["Jobs.State.Running", done, j.Total]</span>
+}
+else if (j.Failed > 0)
+{
+    <span class="mat-pill mat-pill--error">@L["Jobs.State.FailedCount", j.Failed, j.Total]</span>
+}
+else if (j.Succeeded == 0)
+{
+    <span class="mat-pill mat-pill--plain">@L["Jobs.State.Cancelled"]</span>
+}
+else
+{
+    <span class="mat-pill mat-pill--ok">@L["Jobs.State.Done"]</span>
+}

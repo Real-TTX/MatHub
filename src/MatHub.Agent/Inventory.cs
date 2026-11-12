@@ -24,6 +24,8 @@ public static class Inventory
         $nt = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
         $disks = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object { [pscustomobject]@{ name = $_.DeviceID; fileSystem = $_.FileSystem; totalBytes = [int64]$_.Size; freeBytes = [int64]$_.FreeSpace } })
         $net = @(Get-CimInstance Win32_NetworkAdapterConfiguration -Filter 'IPEnabled=True' | ForEach-Object { [pscustomobject]@{ name = $_.Description; macAddress = $_.MACAddress; addresses = @($_.IPAddress) } })
+        $gpu = @(Get-CimInstance Win32_VideoController | Where-Object { $_.Name } | ForEach-Object { $_.Name.Trim() })
+        $secure = $null; try { $secure = [bool](Confirm-SecureBootUEFI -ErrorAction Stop) } catch { }
         $user = $cs.UserName
         if (-not $user) { $user = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI').LastLoggedOnUser }
         [pscustomobject]@{
@@ -40,6 +42,13 @@ public static class Inventory
             memoryBytes = [int64]$cs.TotalPhysicalMemory
             lastUser = $user
             bootTime = $os.LastBootUpTime.ToUniversalTime().ToString('o')
+            biosVersion = $(if ($bios.SMBIOSBIOSVersion) { $bios.SMBIOSBIOSVersion.Trim() } else { $null })
+            biosDate = $(if ($bios.ReleaseDate) { $bios.ReleaseDate.ToUniversalTime().ToString('o') } else { $null })
+            processorCores = $(if ($cpu) { [int]$cpu.NumberOfCores } else { $null })
+            processorThreads = $(if ($cpu) { [int]$cpu.NumberOfLogicalProcessors } else { $null })
+            graphics = $gpu
+            osInstallDate = $(if ($os.InstallDate) { $os.InstallDate.ToUniversalTime().ToString('o') } else { $null })
+            secureBoot = $secure
             disks = $disks
             network = $net
         } | ConvertTo-Json -Depth 4 -Compress

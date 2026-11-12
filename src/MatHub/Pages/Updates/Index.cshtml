@@ -1,5 +1,6 @@
 @page "/updates"
 @model MatHub.Pages.Updates.IndexModel
+@using MatHub.Services.Packages
 @{
     ViewData["Title"] = L["Updates.Title"].Value;
     ViewData["PageSub"] = L["Updates.Sub"].Value;
@@ -16,26 +17,32 @@
     else
     {
         <mh-table caption="@L["Updates.Title"]">
-            <thead><tr><th scope="col">@L["Updates.Col.Program"]</th><th scope="col" class="mat-hide-sm">@L["Software.WingetId"]</th><th scope="col" class="mat-hide-sm">@L["Updates.Col.Installed"]</th><th scope="col">@L["Updates.Col.Available"]</th><th scope="col" class="mat-num">@L["Updates.Col.Clients"]</th>@if (Model.CanDeploy) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+            <thead><tr><th scope="col">@L["Updates.Col.Program"]</th><th scope="col" class="mat-hide-sm">@L["Software.WingetId"]</th><th scope="col" class="mat-hide-sm">@L["Updates.Col.Installed"]</th><th scope="col">@L["Updates.Col.Available"]</th><th scope="col" class="mat-num">@L["Updates.Col.Clients"]</th><th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th></tr></thead>
             <tbody>
                 @foreach (var u in Model.List.Items)
                 {
                     <tr>
-                        <td data-label="@L["Updates.Col.Program"]"><span class="mh-name">@Ui.Icon("box")@u.Name</span></td>
+                        <td data-label="@L["Updates.Col.Program"]" class="mat-table__primary">@if (Model.Packages.TryGetValue(u.WingetId, out var packageId)) { <a href="/packages/edit?id=@packageId"><span class="mh-name">@Ui.Icon("box")@u.Name</span></a> } else { <span class="mh-name">@Ui.Icon("box")@u.Name</span> }</td>
                         <td data-label="@L["Software.WingetId"]" class="mat-mono mat-hide-sm">@u.WingetId</td>
                         <td data-label="@L["Updates.Col.Installed"]" class="mat-mono mat-hide-sm">@u.Installed</td>
                         <td data-label="@L["Updates.Col.Available"]"><span class="mat-pill mat-pill--accent">@u.Available</span></td>
-                        <td data-label="@L["Updates.Col.Clients"]" class="mat-num mat-table__keep-label">@u.Clients</td>
-                        @if (Model.CanDeploy)
-                        {
-                            <td class="mat-table__cell-actions">
-                                <form method="post" class="mat-table__actions">
-                                    <input type="hidden" name="wingetId" value="@u.WingetId" />
-                                    <input type="hidden" name="group" value="@Model.GroupId" />
-                                    <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" aria-label="@L["Updates.UpdateNamed", u.Name, u.Clients]">@Ui.Icon("refresh")<span>@L["Updates.Update"]</span></button>
-                                </form>
-                            </td>
-                        }
+                        <td data-label="@L["Updates.Col.Clients"]" class="mat-num mat-table__keep-label"><a href="/clients?update=@Uri.EscapeDataString(u.WingetId)" aria-label="@L["Updates.ShowClients", u.Name]">@u.Clients</a></td>
+                        <td class="mat-table__cell-actions">
+                            <div class="mat-table__actions">
+                                @if (Model.CanMakePackage && !Model.Packages.ContainsKey(u.WingetId))
+                                {
+                                    <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="@PackageService.NewFromWingetUrl(u.WingetId, u.Name, null)" aria-label="@L["Software.MakePackageNamed", u.Name]" data-tip="@L["Software.MakePackage"]">@Ui.Icon("plus")</a>
+                                }
+                                @if (Model.CanDeploy)
+                                {
+                                    <form method="post">
+                                        <input type="hidden" name="wingetId" value="@u.WingetId" />
+                                        <input type="hidden" name="group" value="@Model.GroupId" />
+                                        <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" aria-label="@L["Updates.UpdateNamed", u.Name, u.Clients]">@Ui.Icon("refresh")<span>@L["Updates.Update"]</span></button>
+                                    </form>
+                                }
+                            </div>
+                        </td>
                     </tr>
                 }
             </tbody>

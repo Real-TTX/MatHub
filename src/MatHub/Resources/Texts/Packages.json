@@ -1,4 +1,5 @@
 {
+  "Packages.VersionOf": { "en": "Version {0}", "de": "Version {0}" },
   "Packages.Title": { "en": "Packages", "de": "Pakete" },
   "Packages.One": { "en": "package", "de": "Paket" },
   "Packages.Many": { "en": "packages", "de": "Pakete" },
@@ -67,6 +68,7 @@
   "Assignments.RemoveConfirm": { "en": "Remove the assignment to {0}? The software stays where it is installed.", "de": "Die Zuweisung an {0} entfernen? Die Software bleibt, wo sie installiert ist." },
   "Assignments.Removed": { "en": "Assignment removed.", "de": "Zuweisung entfernt." },
 
+  "Updates.ShowClients": { "en": "Show the clients with the update of {0}", "de": "Die Clients mit dem Update von {0} zeigen" },
   "Updates.Title": { "en": "Updates", "de": "Updates" },
   "Updates.Sub": { "en": "What winget offers on your clients – update one program everywhere, or everything", "de": "Was winget auf deinen Clients anbietet – ein Programm überall aktualisieren, oder alles" },
   "Updates.One": { "en": "program", "de": "Programm" },

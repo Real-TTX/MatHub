@@ -30,7 +30,7 @@ public static class SearchService
                 .Where(c => EF.Functions.ILike(c.Name, s) || EF.Functions.ILike(c.IpAddresses ?? string.Empty, s) || EF.Functions.ILike(c.SerialNumber ?? string.Empty, s)
                             || EF.Functions.ILike(c.LastUser ?? string.Empty, s) || EF.Functions.ILike(c.Tags, s))
                 .OrderBy(c => c.Name).Take(limit).Select(c => new { c.Id, c.Name, c.OperatingSystem, c.LastUser }).ToListAsync(ct);
-            Add(groups, "Search.Clients", clients.Select(c => new SearchItem(c.Name, string.Join(" · ", new[] { c.OperatingSystem, c.LastUser }.Where(x => x is not null)), $"/clients/{c.Id}", "monitor", "client", c.Id)));
+            Add(groups, "Search.Clients", clients.Select(c => new SearchItem(c.Name, string.Join(" · ", new[] { c.OperatingSystem is null ? null : Ui.Os(c.OperatingSystem), c.LastUser }.Where(x => x is not null)), $"/clients/{c.Id}", "monitor", "client", c.Id)));
 
             var found = await AccessRules.Groups(db, actor).AsNoTracking().Where(g => EF.Functions.ILike(g.Name, s)).OrderBy(g => g.Name).Take(limit)
                 .Select(g => new { g.Id, g.Name, g.Description }).ToListAsync(ct);

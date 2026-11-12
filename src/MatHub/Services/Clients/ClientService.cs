@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MatHub.Services.Clients;
 
-public sealed record ClientCriteria(string? Search, string? State, long? GroupId, string? System, string Sort, bool Descending, int Page, int PageSize);
+/// <summary>What the list of clients shows; <paramref name="Update"/>: only the clients winget offers an update of this program (its id) on.</summary>
+public sealed record ClientCriteria(string? Search, string? State, long? GroupId, string? System, string Sort, bool Descending, int Page, int PageSize, string? Update = null);
 
 public sealed record ClientRow(
     long Id, string Name, ClientStatus Status, bool Online, string? OperatingSystem, string? IpAddresses, string? LastUser, DateTime? LastSeen, int Updates, string? AgentVersion);
@@ -17,6 +18,9 @@ public sealed record ClientDetail(Client Client, bool Online, IReadOnlyList<Clie
 
 /// <summary>What a person may change of a client: the description, the tags and the static groups.</summary>
 public sealed record ClientForm(string? Description, string? Tags, IReadOnlyList<long> GroupIds);
+
+/// <summary>The clients an actor reaches in numbers: by state and by operating system (the overview).</summary>
+public sealed record ClientOverview(int Total, int Online, int Offline, int Pending, int Disabled, int WithUpdates, IReadOnlyList<(string System, int Count)> Systems);
 
 public sealed record SoftwareRow(string Name, string? Version, string? Publisher, string? WingetId, string? AvailableVersion);
 
@@ -70,6 +74,12 @@ public static class ClientService
             q = q.Where(x => EF.Functions.ILike(x.OperatingSystem ?? string.Empty, os));
         }
 
+        if (!string.IsNullOrWhiteSpace(c.Update))
+        {
+            var update = c.Update.Trim();
+            q = q.Where(x => db.ClientSoftware.Any(s => s.ClientId == x.Id && s.WingetId == update && s.AvailableVersion != null));
+        }
+
         var matching = await q.CountAsync(ct);
         q = (c.Sort, c.Descending) switch
         {
@@ -90,6 +100,26 @@ public static class ClientService
         return new ClientList(
             rows.Select(x => new ClientRow(x.Id, x.Name, x.Status, IsOnline(x.LastSeenDate), x.OperatingSystem, x.IpAddresses, x.LastUser, x.LastSeenDate, x.UpdatesAvailable, x.AgentVersion)).ToList(),
             total, matching);
+    }
+
+    /// <summary>The numbers of the overview; null without the permission to see clients.</summary>
+    public static async Task<ClientOverview?> OverviewAsync(AppDbContext db, Actor actor, CancellationToken ct = default)
+    {
+        if (!actor.Can(Permission.ClientsView))
+        {
+            return null;
+        }
+
+        var since = DateTime.UtcNow - OnlineWindow;
+        var rows = await AccessRules.Clients(db, actor).AsNoTracking()
+            .Select(c => new { c.Status, Online = c.LastSeenDate > since, c.OperatingSystem, c.UpdatesAvailable })
+            .ToListAsync(ct);
+        var active = rows.Where(r => r.Status == ClientStatus.Active).ToList();
+        var systems = active.Where(r => !string.IsNullOrWhiteSpace(r.OperatingSystem)).GroupBy(r => r.OperatingSystem!)
+            .Select(g => (g.Key, g.Count())).OrderByDescending(x => x.Item2).ThenBy(x => x.Key).ToList();
+        return new ClientOverview(
+            rows.Count, active.Count(r => r.Online), active.Count(r => !r.Online), rows.Count(r => r.Status == ClientStatus.Pending),
+            rows.Count(r => r.Status == ClientStatus.Disabled), active.Count(r => r.UpdatesAvailable > 0), systems);
     }
 
     /// <summary>The operating systems of the clients the actor reaches (the filter of the list).</summary>

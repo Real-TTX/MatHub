@@ -8,6 +8,13 @@
 }
 
 <div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.Items.Count == 0)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("shield", L["Roles.NoMatch"].Value, L["Lists.ChangeTools"].Value, false, null, null, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
     <mh-table caption="@L["Roles.Title"]">
         <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Roles.Permissions"]</th><th scope="col" class="mat-hide-sm">@L["Roles.Scope"]</th><th scope="col" class="mat-num">@L["Users.Title"]</th></tr></thead>
         <tbody>
@@ -22,6 +29,7 @@
             }
         </tbody>
     </mh-table>
+    }
     <p class="mat-hint">@L["Roles.AdminHint"]</p>
     <div class="mat-actions">
         <a class="mat-btn mat-btn--primary" href="/Admin/Roles/Edit">@Ui.Icon("plus")<span>@L["Roles.New"]</span></a>

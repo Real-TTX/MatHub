@@ -16,17 +16,16 @@
     {
         <mh-table caption="@L["Users.Title"]">
             <thead>
-                <tr><th scope="col">@L["Users.Col.User"]</th><th scope="col">@L["Users.Col.Role"]</th><th scope="col">@L["Common.Status"]</th><th scope="col" class="mat-hide-md">@L["Users.Col.LastLogin"]</th><th scope="col" class="mat-hide-sm">@L["Users.AccessRole"]</th><th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th></tr>
+                <tr><th scope="col">@L["Users.Col.User"]</th><th scope="col">@L["Users.Col.Role"]</th><th scope="col">@L["Common.Status"]</th><th scope="col" class="mat-hide-md">@L["Users.Col.LastLogin"]</th><th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th></tr>
             </thead>
             <tbody>
                 @foreach (var u in Model.Items)
                 {
                     <tr>
                         <td data-label="@L["Users.Col.User"]"><div class="mat-table__name"><span class="mat-avatar mat-avatar--sm" aria-hidden="true">@Ui.Initials(u.DisplayName)</span><span><a href="/Admin/Users/Edit?id=@u.Id">@u.DisplayName</a><small class="mat-mono">@u.Email</small></span></div></td>
-                        <td data-label="@L["Users.Col.Role"]"><span class="mat-pill @(u.Role == UserRole.Admin ? "mat-pill--accent" : "mat-pill--plain")">@L[u.Role == UserRole.Admin ? "Common.Role.Admin" : "Common.Role.User"]</span></td>
+                        <td data-label="@L["Users.Col.Role"]">@if (u.Role == UserRole.Admin) { <span class="mat-pill mat-pill--accent">@L["Common.Role.Admin"]</span> } else if (u.AccessRoleName is { } roleName) { <span class="mat-pill mat-pill--plain">@roleName</span> } else { <span class="mat-pill mat-pill--warn">@L["Users.NoRole"]</span> }</td>
                         <td data-label="@L["Common.Status"]">@if (!u.IsActive) { <span class="mat-pill mat-pill--error">@L["Users.Disabled"]</span> } else if (u.Locked) { <span class="mat-pill mat-pill--warn">@L["Users.Locked"]</span> } else { <span class="mat-pill mat-pill--ok">@L["Common.Active"]</span> }</td>
-                        <td data-label="@L["Users.Col.LastLogin"]" class="mat-mono mat-hide-md">@(u.LastLogin is null ? L["Common.Never"].Value : Dates.Stamp(u.LastLogin, Model.Zone))</td>
-                        <td data-label="@L["Users.AccessRole"]" class="mat-hide-sm">@(u.Role == UserRole.Admin ? L["Users.AllPermissions"].Value : u.AccessRoleName ?? L["Users.NoRole"].Value)</td>
+                        <td data-label="@L["Users.Col.LastLogin"]" class="mat-hide-md mh-nowrap">@Ui.When(u.LastLogin, Model.Zone, L["Common.Never"].Value)</td>
                         <td class="mat-table__cell-actions"><div class="mat-table__actions"><a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="/Admin/Users/Edit?id=@u.Id" aria-label="@L["Common.EditNamed", u.DisplayName]" data-tip="@L["Common.Edit"]">@Ui.Icon("edit")</a></div></td>
                     </tr>
                 }

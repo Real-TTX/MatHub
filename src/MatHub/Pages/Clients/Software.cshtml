@@ -1,5 +1,6 @@
 @page "/clients/{id:long}/software"
 @model MatHub.Pages.Clients.SoftwareModel
+@using MatHub.Services.Packages
 @{
     var c = Model.Client;
     ViewData["Title"] = c.Name;
@@ -26,33 +27,33 @@
                     <th scope="col" class="mat-hide-md">@L["Software.Publisher"]</th>
                     <th scope="col" class="mat-hide-sm">@L["Software.WingetId"]</th>
                     <th scope="col">@L["Software.Update"]</th>
-                    @if (Model.CanUpdate)
-                    {
-                        <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th>
-                    }
+                    <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var s in Model.Items)
                 {
                     <tr>
-                        <td data-label="@L["Common.Name"]">@s.Name</td>
+                        <td data-label="@L["Common.Name"]" class="mat-table__primary">@if (s.WingetId is not null && Model.Packages.TryGetValue(s.WingetId, out var packageId)) { <a class="mh-name" href="/packages/edit?id=@packageId">@Ui.Icon("box")@s.Name</a> } else { <span>@s.Name</span> }</td>
                         <td data-label="@L["Software.Version"]" class="mat-mono">@s.Version</td>
                         <td data-label="@L["Software.Publisher"]" class="mat-hide-md">@s.Publisher</td>
                         <td data-label="@L["Software.WingetId"]" class="mat-mono mat-hide-sm">@s.WingetId</td>
                         <td data-label="@L["Software.Update"]" class="mat-table__keep-label">@if (s.AvailableVersion is not null) { <span class="mat-pill mat-pill--accent">@s.AvailableVersion</span> }</td>
-                        @if (Model.CanUpdate)
-                        {
-                            <td class="mat-table__cell-actions">
-                                @if (s.AvailableVersion is not null && s.WingetId is not null)
+                        <td class="mat-table__cell-actions">
+                            <div class="mat-table__actions">
+                                @if (Model.CanUpdate && s.AvailableVersion is not null && s.WingetId is not null)
                                 {
-                                    <form method="post" asp-page-handler="Update" class="mat-table__actions">
+                                    <form method="post" asp-page-handler="Update">
                                         <input type="hidden" name="wingetId" value="@s.WingetId" />
                                         <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["Software.UpdateNamed", s.Name]" data-tip="@L["Software.UpdateOne"]">@Ui.Icon("refresh")</button>
                                     </form>
                                 }
-                            </td>
-                        }
+                                @if (Model.CanMakePackage && s.WingetId is not null && !Model.Packages.ContainsKey(s.WingetId))
+                                {
+                                    <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="@PackageService.NewFromWingetUrl(s.WingetId, s.Name, s.Publisher)" aria-label="@L["Software.MakePackageNamed", s.Name]" data-tip="@L["Software.MakePackage"]">@Ui.Icon("plus")</a>
+                                }
+                            </div>
+                        </td>
                     </tr>
                 }
             </tbody>

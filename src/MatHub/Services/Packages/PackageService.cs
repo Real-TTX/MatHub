@@ -82,6 +82,30 @@ public static class PackageService
     public static async Task<Package?> GetAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
         => actor.Can(Permission.PackagesView) ? await db.Packages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct) : null;
 
+    /// <summary>The packages by their winget id (case does not matter): which program of a client is a package already.</summary>
+    public static async Task<IReadOnlyDictionary<string, long>> ByWingetIdAsync(AppDbContext db, Actor actor, CancellationToken ct = default)
+    {
+        if (!actor.Can(Permission.PackagesView))
+        {
+            return new Dictionary<string, long>();
+        }
+
+        var rows = await db.Packages.AsNoTracking().Where(p => p.WingetId != null).Select(p => new { p.Id, p.WingetId }).ToListAsync(ct);
+        return rows.GroupBy(r => r.WingetId!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The name of a program without the version and the architecture Windows adds ("7-Zip 23.01 (x64)" is "7-Zip").</summary>
+    public static string CleanName(string name)
+    {
+        var n = System.Text.RegularExpressions.Regex.Replace(name.Trim(), @"\s*\((x64|x86|64-bit|32-bit|arm64)[^)]*\)", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        n = System.Text.RegularExpressions.Regex.Replace(n, @"\s+v?\d+(\.\d+)+\S*$", string.Empty);
+        return n.Length == 0 ? name.Trim() : n;
+    }
+
+    /// <summary>The address of a new package filled in from a program a client has (winget id, name, publisher).</summary>
+    public static string NewFromWingetUrl(string wingetId, string name, string? publisher)
+        => $"/packages/edit?winget={Uri.EscapeDataString(wingetId)}&name={Uri.EscapeDataString(name)}" + (string.IsNullOrEmpty(publisher) ? string.Empty : $"&publisher={Uri.EscapeDataString(publisher)}");
+
     public static async Task<IReadOnlyList<(long Id, string Name, PackageKind Kind)>> ChoicesAsync(AppDbContext db, Actor actor, CancellationToken ct = default)
     {
         if (!actor.Can(Permission.PackagesView))

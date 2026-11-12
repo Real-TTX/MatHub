@@ -25,5 +25,16 @@
             <mh-field name="Groups" kind="select" label="@L["Groups.Title"]" value="@Model.Groups" options="Model.GroupChoices" picker="multiple search" optional hint="@L["Jobs.Groups.Hint"]" />
         </div>
     </div>
+    <div class="mat-card">
+        <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("clock")@L["Jobs.When"]</h2></div>
+        <div class="mat-card__body mat-form">
+            <mh-field name="When" kind="radios" label="@L["Jobs.When.Label"]" value="@Model.When" options="Model.WhenChoices" />
+            <div class="mat-cols" data-show-if="When" data-show-value="later">
+                <div class="mat-col-12 mat-col-md-6"><mh-field name="StartDate" kind="date" label="@L["Jobs.StartDate"]" value="@Model.StartDate" required /></div>
+                <div class="mat-col-12 mat-col-md-6"><mh-field name="StartTime" kind="time" label="@L["Jobs.StartTime"]" value="@Model.StartTime" optional hint="@L["Jobs.StartTime.Hint"]" /></div>
+            </div>
+            <p class="mat-hint" data-show-if="When" data-show-value="later">@L["Jobs.When.Hint"]</p>
+        </div>
+    </div>
     <mh-buttons save="@L["Jobs.Start"]" save-icon="play" back="/jobs" />
 </form>

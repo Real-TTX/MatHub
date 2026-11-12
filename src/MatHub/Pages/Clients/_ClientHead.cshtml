@@ -8,10 +8,10 @@
 }
 <div class="mh-client-head">
     <partial name="_ClientState" model="(c.Status, Model.Detail.Online)" />
-    <span class="mh-muted">@c.OperatingSystem</span>
+    <span class="mh-muted">@Ui.Os(c.OperatingSystem)</span>
     @if (c.LastSeenDate is { } seen)
     {
-        <span class="mh-muted">@L["Clients.LastSeenAt", Dates.Stamp(seen, Model.Zone)]</span>
+        <span class="mh-muted">@L["Clients.LastSeenAt", Dates.Ago(seen, Model.Zone)]</span>
     }
     @foreach (var g in Model.Detail.Groups)
     {

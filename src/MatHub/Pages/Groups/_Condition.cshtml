@@ -1,0 +1,38 @@
+@model (int Index, MatHub.Pages.Groups.EditModel.ConditionInput Condition, List<Choice> Fields, List<Choice> Operators, bool ReadOnly)
+@*
+    One condition of a dynamic group: field, operator, value and a button that removes it. Native selects, so a row that the script adds is ready at once;
+    the index -1 is the template (conditions.js numbers the rows before the form is sent).
+*@
+@{
+    var i = Model.Index;
+    var id = i < 0 ? "cond-new" : $"cond-{i}";
+    var c = Model.Condition;
+}
+<li class="mh-condition-row" data-condition>
+    <div class="mat-field">
+        <label class="mat-label" for="@id-field">@L["Groups.RuleField"]</label>
+        <select class="mat-select mat-input" id="@id-field" name="Conditions[@i].Field" data-part="Field" disabled="@Model.ReadOnly">
+            @foreach (var o in Model.Fields)
+            {
+                <option value="@o.Value" selected="@(o.Value == c.Field.ToString())">@o.Label</option>
+            }
+        </select>
+    </div>
+    <div class="mat-field">
+        <label class="mat-label" for="@id-op">@L["Groups.RuleOperator"]</label>
+        <select class="mat-select mat-input" id="@id-op" name="Conditions[@i].Operator" data-part="Operator" disabled="@Model.ReadOnly">
+            @foreach (var o in Model.Operators)
+            {
+                <option value="@o.Value" selected="@(o.Value == c.Operator.ToString())">@o.Label</option>
+            }
+        </select>
+    </div>
+    <div class="mat-field">
+        <label class="mat-label" for="@id-value">@L["Groups.RuleValue"]</label>
+        <input class="mat-input" id="@id-value" name="Conditions[@i].Value" data-part="Value" value="@c.Value" maxlength="200" placeholder="BER-" disabled="@Model.ReadOnly" />
+    </div>
+    @if (!Model.ReadOnly)
+    {
+        <button type="button" class="mat-btn mat-btn--ghost mat-btn--icon mh-condition-row__remove" data-condition-remove aria-label="@L["Groups.RemoveCondition"]" title="@L["Groups.RemoveCondition"]">@Ui.Icon("trash")</button>
+    }
+</li>
