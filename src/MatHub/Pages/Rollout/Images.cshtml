@@ -1,0 +1,46 @@
+@page "/rollout/images"
+@model MatHub.Pages.Rollout.ImagesModel
+@{
+    ViewData["Title"] = L["Images.Title"].Value;
+    ViewData["PageSub"] = L["Images.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Images.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    @if (Model.Items.Count == 0)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("hard-drive", L["Images.Empty"].Value, L["Images.EmptyText"].Value, Model.CanManage, "/rollout/images/edit", L["Images.New"].Value))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Images.Title"]">
+            <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Images.Kind"]</th><th scope="col">@L["Images.Files"]</th></tr></thead>
+            <tbody>
+                @foreach (var i in Model.Items)
+                {
+                    var complete = i.Files.All(f => f.Size is not null);
+                    <tr>
+                        <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/rollout/images/edit?id=@i.Id"><span class="mh-name">@Ui.Icon(i.Kind == BootImageKind.WindowsPe ? "windows" : "linux")@i.Name</span></a></td>
+                        <td data-label="@L["Images.Kind"]"><span class="mat-pill mat-pill--plain">@L["Images.Kind." + i.Kind]</span></td>
+                        <td data-label="@L["Images.Files"]" class="mat-table__keep-label">
+                            @if (complete)
+                            {
+                                <span class="mat-pill mat-pill--ok">@L["Images.Complete", Ui.Bytes(i.Files.Sum(f => f.Size ?? 0))]</span>
+                            }
+                            else
+                            {
+                                <span class="mat-pill mat-pill--warn">@L["Images.Missing", string.Join(", ", i.Files.Where(f => f.Size is null).Select(f => f.File))]</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+    @if (Model.CanManage)
+    {
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" href="/rollout/images/edit">@Ui.Icon("plus")<span>@L["Images.New"]</span></a>
+        </div>
+    }
+</div>

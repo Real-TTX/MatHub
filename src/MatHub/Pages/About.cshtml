@@ -1,0 +1,42 @@
+@page "/About"
+@model MatHub.Pages.AboutModel
+@{
+    ViewData["Title"] = L["About.Title"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["About.Title"].Value, null) };
+    ViewData["Width"] = "narrow";
+}
+
+<div class="mat-card">
+    <div class="mat-card__body mh-about">
+        <div class="mh-about__head">
+            @Ui.Logo("lg")
+            <div>
+                <h2>@Ui.AppName</h2>
+                <p>@L["About.Tagline"]</p>
+            </div>
+        </div>
+        <dl class="mh-dl">
+            <dt>@L["About.Version"]</dt><dd class="mat-mono">@AppInfo.Version</dd>
+            <dt>@L["About.Channel"]</dt><dd>@L["About.Channel." + Model.Channel]</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="mat-card">
+    <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("mathub")@L["About.Access"]</h2></div>
+    <div class="mat-card__body">
+        <dl class="mh-dl">
+            <dt>@L["About.Agents"]</dt><dd class="mat-mono">@(ViewContext.HttpContext.Request.Scheme)://@(ViewContext.HttpContext.Request.Host)/api/agent/v1</dd>
+            <dt>@L["About.Platform"]</dt><dd class="mat-mono">@(ViewContext.HttpContext.Request.Scheme)://@(ViewContext.HttpContext.Request.Host)/api</dd>
+        </dl>
+        <p class="mh-muted">@L["About.Access.Text"]</p>
+    </div>
+</div>
+
+<div class="mat-card">
+    <div class="mat-card__body">
+        <p>@L["About.Family"]</p>
+        <p class="mh-muted">@L["About.Libraries"]</p>
+        <p class="mh-muted">@L["About.Author"]</p>
+    </div>
+</div>

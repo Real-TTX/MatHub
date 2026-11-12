@@ -1,0 +1,19 @@
+@page "/clients/{id:long}/activity"
+@model MatHub.Pages.Clients.ActivityModel
+@{
+    var c = Model.Client;
+    ViewData["Title"] = c.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Clients.Title"].Value, "/clients"), (c.Name, $"/clients/{c.Id}"), (L["Clients.Tab.Activity"].Value, null) };
+    ViewData["Tab"] = "activity";
+}
+
+<partial name="_ClientHead" model="Model" />
+
+@if (Model.Items.Count == 0)
+{
+    <partial name="_Empty" model="@(new EmptyStateModel("activity", L["Activity.Empty"].Value, L["Activity.EmptyText"].Value, false))" />
+}
+else
+{
+    <partial name="_ActivityTable" model="(Model.Items, Model.Zone)" />
+}

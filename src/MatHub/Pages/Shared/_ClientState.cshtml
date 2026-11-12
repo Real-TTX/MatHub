@@ -1,0 +1,22 @@
+@model (ClientStatus Status, bool Online)
+@* The state of a client as a pill, the same everywhere: waiting for approval, switched off, online, offline. *@
+@switch (Model.Status)
+{
+    case ClientStatus.Pending:
+        <span class="mat-pill mat-pill--warn">@L["Clients.State.Pending"]</span>
+        break;
+    case ClientStatus.Disabled:
+        <span class="mat-pill mat-pill--plain">@L["Clients.State.Disabled"]</span>
+        break;
+    default:
+        if (Model.Online)
+        {
+            <span class="mat-pill mat-pill--ok">@L["Clients.State.Online"]</span>
+        }
+        else
+        {
+            <span class="mat-pill mat-pill--plain">@L["Clients.State.Offline"]</span>
+        }
+
+        break;
+}

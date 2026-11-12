@@ -1,0 +1,9 @@
+# MatHub - only the start page is public. Everything else needs an account; the agent and the network boot are for machines.
+User-agent: *
+Allow: /$
+Allow: /llms.txt
+Allow: /favicon.svg
+Allow: /img/
+Disallow: /
+
+# Information for language models: /llms.txt

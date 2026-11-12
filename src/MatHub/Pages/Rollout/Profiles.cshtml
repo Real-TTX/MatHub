@@ -1,0 +1,38 @@
+@page "/rollout/profiles"
+@model MatHub.Pages.Rollout.ProfilesModel
+@{
+    ViewData["Title"] = L["Profiles.Title"].Value;
+    ViewData["PageSub"] = L["Profiles.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Profiles.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    @if (Model.Items.Count == 0)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("layers", L["Profiles.Empty"].Value, L["Profiles.EmptyText"].Value, Model.CanManage, "/rollout/profiles/edit", L["Profiles.New"].Value))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Profiles.Title"]">
+            <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Profiles.Kind"]</th><th scope="col" class="mat-hide-sm">@L["Images.One"]</th><th scope="col" class="mat-hide-md">@L["Profiles.Group"]</th><th scope="col" class="mat-num">@L["Rollout.Open"]</th></tr></thead>
+            <tbody>
+                @foreach (var p in Model.Items)
+                {
+                    <tr>
+                        <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/rollout/profiles/edit?id=@p.Id"><span class="mh-name">@Ui.Icon(JobUi.ProfileIcon(p.Kind))@p.Name</span></a></td>
+                        <td data-label="@L["Profiles.Kind"]"><span class="mat-pill mat-pill--plain">@L["Profiles.Kind." + p.Kind]</span></td>
+                        <td data-label="@L["Images.One"]" class="mat-hide-sm">@(p.ImageName ?? "–")</td>
+                        <td data-label="@L["Profiles.Group"]" class="mat-hide-md">@if (p.GroupName is not null) { <span class="mat-tag" data-colour="@p.GroupColour">@p.GroupName</span> }</td>
+                        <td data-label="@L["Rollout.Open"]" class="mat-num">@p.Tasks</td>
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+    @if (Model.CanManage)
+    {
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" href="/rollout/profiles/edit">@Ui.Icon("plus")<span>@L["Profiles.New"]</span></a>
+        </div>
+    }
+</div>

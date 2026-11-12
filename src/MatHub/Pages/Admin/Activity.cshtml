@@ -1,0 +1,20 @@
+@page "/Admin/Activity"
+@model MatHub.Pages.Admin.ActivityModel
+@{
+    ViewData["Title"] = L["Activity.Title"].Value;
+    ViewData["PageSub"] = L["Activity.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Admin.Title"].Value, null), (L["Activity.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.Items.Count == 0)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("activity", L["Activity.Empty"].Value, L["Activity.EmptyText"].Value, Model.Toolbar.Search is null, null, null, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        <partial name="_ActivityTable" model="(Model.Items, Model.Zone)" />
+    }
+    <partial name="_Pager" model="Model.Pager" />
+</div>

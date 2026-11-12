@@ -1,0 +1,70 @@
+@page "/clients/{id:long}/inventory"
+@model MatHub.Pages.Clients.InventoryModel
+@{
+    var c = Model.Client;
+    ViewData["Title"] = c.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Clients.Title"].Value, "/clients"), (c.Name, $"/clients/{c.Id}"), (L["Clients.Tab.Inventory"].Value, null) };
+    ViewData["Tab"] = "inventory";
+}
+
+<partial name="_ClientHead" model="Model" />
+
+@if (c.LastInventoryDate is null)
+{
+    <partial name="_Empty" model="@(new EmptyStateModel("list-checks", L["Inventory.None"].Value, L["Inventory.NoneText"].Value, false))" />
+}
+else
+{
+    <div class="mat-cols mh-stats">
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("monitor", "mat-stat__icon")<span class="mat-stat__label">@L["Clients.Col.System"]</span><span class="mat-stat__value mh-stat-text">@c.OperatingSystem</span><span class="mat-stat__delta">@c.OsVersion @c.OsBuild @c.Architecture</span></div></div></div>
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("sliders", "mat-stat__icon")<span class="mat-stat__label">@L["Inventory.Processor"]</span><span class="mat-stat__value mh-stat-text">@(c.Processor ?? "–")</span></div></div></div>
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("database", "mat-stat__icon")<span class="mat-stat__label">@L["Inventory.Memory"]</span><span class="mat-stat__value">@(c.MemoryBytes is { } mem ? Ui.Bytes(mem) : "–")</span></div></div></div>
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("hard-drive", "mat-stat__icon")<span class="mat-stat__label">@L["Inventory.Disks"]</span><span class="mat-stat__value">@(c.DiskFreeBytes is { } free ? Ui.Bytes(free) : "–")</span><span class="mat-stat__delta">@L["Inventory.FreeOf", c.DiskTotalBytes is { } total ? Ui.Bytes(total) : "–"]</span></div></div></div>
+    </div>
+
+    <div class="mat-cols mh-mt">
+        <div class="mat-col-12 mat-col-lg-6">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("hard-drive")@L["Inventory.Disks"]</h2></div>
+                <div class="mat-card__body">
+                    <mh-table caption="@L["Inventory.Disks"]">
+                        <thead><tr><th scope="col">@L["Inventory.Drive"]</th><th scope="col" class="mat-hide-sm">@L["Inventory.FileSystem"]</th><th scope="col">@L["Inventory.Used"]</th><th scope="col" class="mat-num">@L["Inventory.Free"]</th></tr></thead>
+                        <tbody>
+                            @foreach (var d in Model.Disks)
+                            {
+                                var used = d.TotalBytes > 0 ? (int)Math.Round((d.TotalBytes - d.FreeBytes) * 100.0 / d.TotalBytes) : 0;
+                                <tr>
+                                    <td data-label="@L["Inventory.Drive"]" class="mat-mono">@d.Name</td>
+                                    <td data-label="@L["Inventory.FileSystem"]" class="mat-hide-sm">@d.FileSystem</td>
+                                    <td data-label="@L["Inventory.Used"]"><div class="mat-meter mat-meter--sm" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@used" aria-label="@L["Inventory.Used"]"><div class="mat-meter__fill" data-value="@used" data-tone="@(used > 90 ? "error" : used > 75 ? "warn" : null)"></div></div></td>
+                                    <td data-label="@L["Inventory.Free"]" class="mat-num mat-mono">@Ui.Bytes(d.FreeBytes) / @Ui.Bytes(d.TotalBytes)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </mh-table>
+                </div>
+            </div>
+        </div>
+        <div class="mat-col-12 mat-col-lg-6">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("network")@L["Inventory.Network"]</h2></div>
+                <div class="mat-card__body">
+                    <mh-table caption="@L["Inventory.Network"]">
+                        <thead><tr><th scope="col">@L["Inventory.Adapter"]</th><th scope="col">@L["Inventory.Mac"]</th><th scope="col">@L["Clients.Col.Address"]</th></tr></thead>
+                        <tbody>
+                            @foreach (var n in Model.Network)
+                            {
+                                <tr>
+                                    <td data-label="@L["Inventory.Adapter"]">@n.Name</td>
+                                    <td data-label="@L["Inventory.Mac"]" class="mat-mono">@n.MacAddress</td>
+                                    <td data-label="@L["Clients.Col.Address"]" class="mat-mono">@string.Join(", ", n.Addresses)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </mh-table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <p class="mat-hint mh-mt">@L["Inventory.From", Dates.Stamp(c.LastInventoryDate, Model.Zone)]</p>
+}

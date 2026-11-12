@@ -1,0 +1,47 @@
+@page "/jobs/runs/{id:long}"
+@model MatHub.Pages.Jobs.RunModel
+@{
+    var r = Model.Run;
+    ViewData["Title"] = Model.ClientName;
+    ViewData["PageSub"] = Model.JobName;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Jobs.Title"].Value, "/jobs"), (Model.JobName, $"/jobs/{r.JobId}"), (Model.ClientName, null) };
+    var busy = r.Status is RunStatus.Queued or RunStatus.Running;
+}
+
+<div class="mat-stack" data-live-target="run" data-live-refresh="@(busy ? "3" : null)">
+    <div class="mat-card">
+        <div class="mat-card__body">
+            <dl class="mh-dl">
+                <dt>@L["Common.Status"]</dt><dd><span class="mat-pill mat-pill--@JobUi.Tone(r.Status)">@L[JobUi.StatusKey(r.Status)]</span></dd>
+                <dt>@L["Clients.One"]</dt><dd><a href="/clients/@r.ClientId">@Model.ClientName</a></dd>
+                <dt>@L["Runs.Started"]</dt><dd>@(r.StartedDate is { } s ? Dates.Stamp(s, Model.Zone) : "–")</dd>
+                <dt>@L["Runs.Finished"]</dt><dd>@(r.FinishedDate is { } f ? Dates.Stamp(f, Model.Zone) : "–")</dd>
+                <dt>@L["Runs.ExitCode"]</dt><dd class="mat-mono">@(r.ExitCode?.ToString() ?? "–")</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="mat-card">
+        <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("terminal")@L["Runs.Output"]</h2>
+            @if (!string.IsNullOrEmpty(r.Output))
+            {
+                <button type="button" class="mat-btn mat-btn--ghost mat-btn--sm" data-copy="#mh-output">@Ui.Icon("copy")<span>@L["Common.Copy"]</span></button>
+            }
+        </div>
+        <div class="mat-card__body">
+            @if (string.IsNullOrEmpty(r.Output))
+            {
+                <p class="mh-muted">@L[busy ? "Runs.Waiting" : "Runs.NoOutput"]</p>
+            }
+            else
+            {
+                <pre class="mat-code mh-output" id="mh-output"><code>@r.Output</code></pre>
+            }
+        </div>
+    </div>
+</div>
+
+<mh-buttons back="@($"/jobs/{r.JobId}")" />
+
+@section Scripts {
+    <script src="~/js/live.js" asp-append-version="true"></script>
+}

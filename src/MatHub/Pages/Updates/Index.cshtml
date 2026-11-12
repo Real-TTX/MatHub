@@ -1,0 +1,54 @@
+@page "/updates"
+@model MatHub.Pages.Updates.IndexModel
+@{
+    ViewData["Title"] = L["Updates.Title"].Value;
+    ViewData["PageSub"] = L["Updates.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Updates.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.List.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("check-circle", L[first ? "Updates.Empty" : "Updates.NoMatch"].Value, L[first ? "Updates.EmptyText" : "Lists.ChangeTools"].Value, false, null, null, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Updates.Title"]">
+            <thead><tr><th scope="col">@L["Updates.Col.Program"]</th><th scope="col" class="mat-hide-sm">@L["Software.WingetId"]</th><th scope="col" class="mat-hide-sm">@L["Updates.Col.Installed"]</th><th scope="col">@L["Updates.Col.Available"]</th><th scope="col" class="mat-num">@L["Updates.Col.Clients"]</th>@if (Model.CanDeploy) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+            <tbody>
+                @foreach (var u in Model.List.Items)
+                {
+                    <tr>
+                        <td data-label="@L["Updates.Col.Program"]"><span class="mh-name">@Ui.Icon("box")@u.Name</span></td>
+                        <td data-label="@L["Software.WingetId"]" class="mat-mono mat-hide-sm">@u.WingetId</td>
+                        <td data-label="@L["Updates.Col.Installed"]" class="mat-mono mat-hide-sm">@u.Installed</td>
+                        <td data-label="@L["Updates.Col.Available"]"><span class="mat-pill mat-pill--accent">@u.Available</span></td>
+                        <td data-label="@L["Updates.Col.Clients"]" class="mat-num mat-table__keep-label">@u.Clients</td>
+                        @if (Model.CanDeploy)
+                        {
+                            <td class="mat-table__cell-actions">
+                                <form method="post" class="mat-table__actions">
+                                    <input type="hidden" name="wingetId" value="@u.WingetId" />
+                                    <input type="hidden" name="group" value="@Model.GroupId" />
+                                    <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" aria-label="@L["Updates.UpdateNamed", u.Name, u.Clients]">@Ui.Icon("refresh")<span>@L["Updates.Update"]</span></button>
+                                </form>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+
+    @if (Model.CanDeploy && Model.List.Items.Count > 0)
+    {
+        <div class="mat-actions">
+            <form method="post">
+                <input type="hidden" name="group" value="@Model.GroupId" />
+                <button type="submit" class="mat-btn mat-btn--primary" data-confirm="@L["Updates.AllConfirm", Model.List.Clients]" data-confirm-ok="@L["Updates.All"]">@Ui.Icon("refresh")<span>@L["Updates.AllCount", Model.List.Clients]</span></button>
+            </form>
+        </div>
+    }
+</div>

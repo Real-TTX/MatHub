@@ -1,0 +1,70 @@
+@page "/clients/{id:long}/software"
+@model MatHub.Pages.Clients.SoftwareModel
+@{
+    var c = Model.Client;
+    ViewData["Title"] = c.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Clients.Title"].Value, "/clients"), (c.Name, $"/clients/{c.Id}"), (L["Clients.Tab.Software"].Value, null) };
+    ViewData["Tab"] = "software";
+}
+
+<partial name="_ClientHead" model="Model" />
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("box", L[first ? "Software.None" : "Software.NoMatch"].Value, L[first ? "Inventory.NoneText" : "Lists.ChangeTools"].Value, false, null, null, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Clients.Tab.Software"]">
+            <thead>
+                <tr>
+                    <th scope="col">@L["Common.Name"]</th>
+                    <th scope="col">@L["Software.Version"]</th>
+                    <th scope="col" class="mat-hide-md">@L["Software.Publisher"]</th>
+                    <th scope="col" class="mat-hide-sm">@L["Software.WingetId"]</th>
+                    <th scope="col">@L["Software.Update"]</th>
+                    @if (Model.CanUpdate)
+                    {
+                        <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.Items)
+                {
+                    <tr>
+                        <td data-label="@L["Common.Name"]">@s.Name</td>
+                        <td data-label="@L["Software.Version"]" class="mat-mono">@s.Version</td>
+                        <td data-label="@L["Software.Publisher"]" class="mat-hide-md">@s.Publisher</td>
+                        <td data-label="@L["Software.WingetId"]" class="mat-mono mat-hide-sm">@s.WingetId</td>
+                        <td data-label="@L["Software.Update"]" class="mat-table__keep-label">@if (s.AvailableVersion is not null) { <span class="mat-pill mat-pill--accent">@s.AvailableVersion</span> }</td>
+                        @if (Model.CanUpdate)
+                        {
+                            <td class="mat-table__cell-actions">
+                                @if (s.AvailableVersion is not null && s.WingetId is not null)
+                                {
+                                    <form method="post" asp-page-handler="Update" class="mat-table__actions">
+                                        <input type="hidden" name="wingetId" value="@s.WingetId" />
+                                        <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["Software.UpdateNamed", s.Name]" data-tip="@L["Software.UpdateOne"]">@Ui.Icon("refresh")</button>
+                                    </form>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+
+    @if (Model.CanUpdate && Model.UpdateCount > 0)
+    {
+        <div class="mat-actions">
+            <form method="post" asp-page-handler="Update">
+                <button type="submit" class="mat-btn mat-btn--primary" data-confirm="@L["Software.UpdateAllConfirm", Model.UpdateCount, c.Name]" data-confirm-ok="@L["Software.UpdateAll"]">@Ui.Icon("refresh")<span>@L["Software.UpdateAllCount", Model.UpdateCount]</span></button>
+            </form>
+        </div>
+    }
+</div>

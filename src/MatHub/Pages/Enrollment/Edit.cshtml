@@ -1,0 +1,32 @@
+@page "/enrollment/edit"
+@model MatHub.Pages.Enrollment.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Enrollment.New"].Value : Model.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Clients.Title"].Value, "/clients"), (L["Enrollment.Title"].Value, "/enrollment"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+    ViewData["Width"] = "narrow";
+}
+
+<form class="mat-form" method="post" novalidate>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-card">
+        <div class="mat-card__body mat-form">
+            <mh-field name="Name" label="@L["Common.Name"]" required value="@Model.Name" maxlength="120" placeholder="@L["Enrollment.Name.Placeholder"]" msg-required="@L["Common.NameRequired"]" />
+            @if (!Model.IsNew)
+            {
+                <mh-field name="Prefix" label="@L["Enrollment.Key"]" value="@(Model.Prefix + "…")" disabled mono hint="@L["Enrollment.Key.Hint"]" />
+            }
+            <mh-field name="GroupId" kind="select" label="@L["Enrollment.Group"]" value="@Model.GroupId" options="Model.Groups" hint="@L["Enrollment.Group.Hint"]" />
+            <mh-field name="AutoApprove" kind="switch" label="@L["Enrollment.AutoApprove"]" value="@Model.AutoApprove.ToString()" hint="@L["Enrollment.AutoApprove.Hint"]" />
+            <div class="mat-cols">
+                <div class="mat-col-12 mat-col-md-6"><mh-field name="Expires" kind="date" label="@L["Enrollment.Expires"]" value="@Model.Expires" optional hint="@L["Enrollment.Expires.Hint"]" /></div>
+                <div class="mat-col-12 mat-col-md-6"><mh-field name="MaxUses" kind="number" label="@L["Enrollment.MaxUses"]" value="@Model.MaxUses" min="0" hint="@L["Enrollment.MaxUses.Hint"]" /></div>
+            </div>
+            <mh-field name="IsActive" kind="switch" label="@L["Common.Active"]" value="@Model.IsActive.ToString()" />
+            @if (!Model.IsNew)
+            {
+                <p class="mat-hint">@L["Enrollment.UsedTimes", Model.UseCount]</p>
+            }
+        </div>
+    </div>
+    <mh-buttons save="@L[Model.IsNew ? "Enrollment.Create" : "Common.Save"]" back="/enrollment" delete-handler="@(Model.IsNew ? null : "Delete")" delete-label="@L["Enrollment.Delete"]" delete-confirm="@L["Enrollment.DeleteConfirm", Model.Name]" />
+</form>

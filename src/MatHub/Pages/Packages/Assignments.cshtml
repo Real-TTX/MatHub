@@ -1,0 +1,68 @@
+@page "/packages/{id:long}/assignments"
+@model MatHub.Pages.Packages.AssignmentsModel
+@{
+    var p = Model.Package;
+    ViewData["Title"] = p.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Packages.Title"].Value, "/packages"), (p.Name, $"/packages/edit?id={p.Id}"), (L["Packages.Tab.Assignments"].Value, null) };
+    ViewData["Tab"] = "assignments";
+}
+
+<partial name="_PackageTabs" model="p.Id" />
+
+<div class="mat-cols">
+    <div class="mat-col-12 mat-col-lg-7">
+        <div class="mat-list">
+            @if (Model.Items.Count == 0)
+            {
+                <partial name="_Empty" model="@(new EmptyStateModel("folder", L["Assignments.Empty"].Value, L["Assignments.EmptyText"].Value, false))" />
+            }
+            else
+            {
+                <mh-table caption="@L["Packages.Tab.Assignments"]">
+                    <thead><tr><th scope="col">@L["Groups.One"]</th><th scope="col">@L["Assignments.Action"]</th><th scope="col">@L["Assignments.State"]</th>@if (Model.CanDeploy) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+                    <tbody>
+                        @foreach (var a in Model.Items)
+                        {
+                            var done = a.Action == AssignmentAction.Install ? a.Installed : a.Members - a.Installed;
+                            var percent = a.Members == 0 ? 100 : (int)Math.Round(done * 100.0 / a.Members);
+                            <tr>
+                                <td data-label="@L["Groups.One"]" class="mat-table__primary"><a href="/groups/edit?id=@a.GroupId"><span class="mh-name">@Ui.Icon("folder", null, a.GroupColour)@a.GroupName</span></a></td>
+                                <td data-label="@L["Assignments.Action"]"><span class="mat-pill @(a.Action == AssignmentAction.Install ? "mat-pill--ok" : "mat-pill--warn")">@L["Assignments." + a.Action]</span></td>
+                                <td data-label="@L["Assignments.State"]" class="mat-table__keep-label">
+                                    <div class="mat-meter mat-meter--sm" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@percent" aria-label="@L["Assignments.State"]"><div class="mat-meter__fill" data-value="@percent"></div></div>
+                                    <small class="mh-muted">@L["Assignments.Done", done, a.Members]</small>
+                                </td>
+                                @if (Model.CanDeploy)
+                                {
+                                    <td class="mat-table__cell-actions">
+                                        <form method="post" asp-page-handler="Remove" class="mat-table__actions">
+                                            <input type="hidden" name="assignment" value="@a.Id" />
+                                            <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["Assignments.RemoveNamed", a.GroupName]" data-tip="@L["Assignments.Remove"]" data-confirm="@L["Assignments.RemoveConfirm", a.GroupName]" data-confirm-ok="@L["Assignments.Remove"]">@Ui.Icon("x")</button>
+                                        </form>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </mh-table>
+            }
+            <p class="mat-hint">@L["Assignments.Hint"]</p>
+        </div>
+    </div>
+    @if (Model.CanDeploy && Model.Groups.Count > 0)
+    {
+        <div class="mat-col-12 mat-col-lg-5">
+            <form class="mat-form" method="post" novalidate>
+                <partial name="_FormSummary" model="ViewData.ModelState" />
+                <div class="mat-card">
+                    <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("plus")@L["Assignments.New"]</h2></div>
+                    <div class="mat-card__body mat-form">
+                        <mh-field name="GroupId" kind="select" label="@L["Groups.One"]" value="@Model.GroupId" options="Model.Groups" picker="search" required placeholder="@L["Assignments.ChooseGroup"]" />
+                        <mh-field name="Action" kind="radios" label="@L["Assignments.Action"]" value="@Model.Action" options="Model.Actions" />
+                    </div>
+                </div>
+                <mh-buttons save="@L["Assignments.Assign"]" save-icon="plus" back="/packages" />
+            </form>
+        </div>
+    }
+</div>

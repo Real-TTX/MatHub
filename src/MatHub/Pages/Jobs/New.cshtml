@@ -1,0 +1,29 @@
+@page "/jobs/new"
+@model MatHub.Pages.Jobs.NewModel
+@{
+    ViewData["Title"] = L["Jobs.New"].Value;
+    ViewData["PageSub"] = L["Jobs.New.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Jobs.Title"].Value, "/jobs"), (L["Jobs.New"].Value, null) };
+    ViewData["Width"] = "narrow";
+}
+
+<form class="mat-form" method="post" novalidate>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-card">
+        <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("play")@L["Jobs.What"]</h2></div>
+        <div class="mat-card__body mat-form">
+            <mh-field name="Kind" kind="select" label="@L["Jobs.Kind"]" value="@Model.Kind" options="Model.Kinds" />
+            <mh-field name="ScriptId" kind="select" label="@L["Scripts.One"]" value="@Model.ScriptId" options="Model.ScriptChoices" picker="search" show-if="Kind" show-value="Script" required placeholder="@L["Jobs.ChooseScript"]" />
+            <mh-field name="PackageId" kind="select" label="@L["Packages.One"]" value="@Model.PackageId" options="Model.PackageChoices" picker="search" show-if="Kind" show-value="PackageInstall,PackageUninstall" required placeholder="@L["Jobs.ChoosePackage"]" />
+            <mh-field name="WingetId" label="@L["Software.WingetId"]" value="@Model.WingetId" show-if="Kind" show-value="WingetUpgrade" optional mono placeholder="Mozilla.Firefox" hint="@L["Jobs.WingetId.Hint"]" />
+        </div>
+    </div>
+    <div class="mat-card">
+        <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("monitor")@L["Jobs.Where"]</h2></div>
+        <div class="mat-card__body mat-form">
+            <mh-field name="Clients" kind="select" label="@L["Clients.Title"]" value="@Model.Clients" options="Model.ClientChoices" picker="multiple search select-all" optional />
+            <mh-field name="Groups" kind="select" label="@L["Groups.Title"]" value="@Model.Groups" options="Model.GroupChoices" picker="multiple search" optional hint="@L["Jobs.Groups.Hint"]" />
+        </div>
+    </div>
+    <mh-buttons save="@L["Jobs.Start"]" save-icon="play" back="/jobs" />
+</form>

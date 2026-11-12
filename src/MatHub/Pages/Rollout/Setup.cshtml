@@ -1,0 +1,97 @@
+@page "/rollout/setup"
+@model MatHub.Pages.Rollout.SetupModel
+@{
+    ViewData["Title"] = L["NetbootSetup.Title"].Value;
+    ViewData["PageSub"] = L["NetbootSetup.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["NetbootSetup.Title"].Value, null) };
+    var host = ViewContext.HttpContext.Request.Host.Host;
+}
+
+<div class="mat-cols">
+    <div class="mat-col-12 mat-col-lg-7">
+        <div class="mat-card">
+            <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("route")@L["NetbootSetup.Chain"]</h2></div>
+            <div class="mat-card__body">
+                <ol class="mh-steps">
+                    <li>@L["NetbootSetup.Step.Dhcp"]</li>
+                    <li>@L["NetbootSetup.Step.Tftp"]</li>
+                    <li>@L["NetbootSetup.Step.Ipxe"]</li>
+                    <li>@L["NetbootSetup.Step.Decide"]</li>
+                    <li>@L["NetbootSetup.Step.Install"]</li>
+                </ol>
+            </div>
+        </div>
+        <div class="mat-card">
+            <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("network")@L["NetbootSetup.Dhcp"]</h2></div>
+            <div class="mat-card__body">
+                <p>@L["NetbootSetup.Dhcp.Text"]</p>
+                <mh-table caption="@L["NetbootSetup.Dhcp"]">
+                    <thead><tr><th scope="col">@L["NetbootSetup.Option"]</th><th scope="col">@L["NetbootSetup.Value"]</th></tr></thead>
+                    <tbody>
+                        <tr><td data-label="@L["NetbootSetup.Option"]">66 · next-server</td><td data-label="@L["NetbootSetup.Value"]" class="mat-mono">@L["NetbootSetup.ServerAddress", host]</td></tr>
+                        <tr><td data-label="@L["NetbootSetup.Option"]">67 · UEFI x64</td><td data-label="@L["NetbootSetup.Value"]" class="mat-mono">ipxe.efi</td></tr>
+                        <tr><td data-label="@L["NetbootSetup.Option"]">67 · BIOS</td><td data-label="@L["NetbootSetup.Value"]" class="mat-mono">undionly.kpxe</td></tr>
+                    </tbody>
+                </mh-table>
+                <details class="mh-details">
+                    <summary>dnsmasq</summary>
+                    <pre class="mat-code"><code>dhcp-match=set:efi-x86_64,option:client-arch,7
+dhcp-match=set:efi-x86_64,option:client-arch,9
+dhcp-boot=tag:efi-x86_64,ipxe.efi,,@host
+dhcp-boot=tag:!efi-x86_64,undionly.kpxe,,@host</code></pre>
+                </details>
+                <details class="mh-details">
+                    <summary>Windows Server DHCP</summary>
+                    <pre class="mat-code"><code>Set-DhcpServerv4OptionValue -OptionId 66 -Value "@host"
+Set-DhcpServerv4OptionValue -OptionId 67 -Value "ipxe.efi"
+# BIOS clients: a policy on the vendor class "PXEClient:Arch:00000" with option 67 = undionly.kpxe</code></pre>
+                </details>
+                <p class="mat-hint">@L["NetbootSetup.Docker"]</p>
+            </div>
+        </div>
+        <details class="mat-card">
+            <summary class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("code")@L["NetbootSetup.Entry"]</h2></summary>
+            <div class="mat-card__body"><pre class="mat-code"><code>@Model.EntryScript</code></pre></div>
+        </details>
+    </div>
+    <div class="mat-col-12 mat-col-lg-5">
+        <div class="mat-card">
+            <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("server")@L["NetbootSetup.State"]</h2></div>
+            <div class="mat-card__body">
+                <dl class="mh-dl">
+                    <dt>TFTP</dt>
+                    <dd>
+                        @if (Model.Tftp.Listening)
+                        {
+                            <span class="mat-pill mat-pill--ok">@L["NetbootSetup.Listening", Model.Tftp.Port]</span>
+                        }
+                        else
+                        {
+                            <span class="mat-pill mat-pill--error">@L["NetbootSetup.NotListening"]</span> <small class="mh-muted">@Model.Tftp.Problem</small>
+                        }
+                    </dd>
+                    <dt>@L["NetbootSetup.Transfers"]</dt><dd>@Model.Tftp.Transfers @if (Model.Tftp.LastFile is not null) { <small class="mh-muted mat-mono">@Model.Tftp.LastFile</small> }</dd>
+                    <dt>HTTP</dt><dd class="mat-mono">@(Model.BootUrl ?? "http://<next-server>:" + Model.HttpPort)</dd>
+                    @foreach (var (file, purpose, there) in Model.Loaders)
+                    {
+                        <dt class="mat-mono">@file</dt>
+                        <dd>@if (there) { <span class="mat-pill mat-pill--ok">@purpose</span> } else { <span class="mat-pill mat-pill--warn">@L["NetbootSetup.Missing"]</span> }</dd>
+                    }
+                    <dt class="mat-mono">wimboot</dt>
+                    <dd>@if (Model.Wimboot) { <span class="mat-pill mat-pill--ok">Windows PE</span> } else { <span class="mat-pill mat-pill--warn">@L["NetbootSetup.Missing"]</span> }</dd>
+                </dl>
+                @if (Me.IsAdmin)
+                {
+                    <p class="mat-hint"><a href="/Admin/System">@L["NetbootSetup.ChangeUrl"]</a></p>
+                }
+            </div>
+        </div>
+        <div class="mat-alert mat-alert--info" role="note">
+            @Ui.Icon("info")
+            <div class="mat-alert__body">
+                <strong class="mat-alert__title">@L["NetbootSetup.Windows.Title"]</strong>
+                <p>@L["NetbootSetup.Windows.Text"]</p>
+            </div>
+        </div>
+    </div>
+</div>

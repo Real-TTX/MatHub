@@ -1,0 +1,14 @@
+{
+  "Data.Title": { "en": "Your data", "de": "Deine Daten" },
+  "Data.Export": { "en": "Export", "de": "Exportieren" },
+  "Data.Export.Text": { "en": "Everything MatHub keeps about you in one JSON file: your account and settings, your role, the jobs you started, your activity and your sessions – without passwords, tokens or keys.", "de": "Alles, was MatHub über dich speichert, in einer JSON-Datei: Konto und Einstellungen, deine Rolle, die Aufträge, die du gestartet hast, deine Aktivität und deine Sitzungen – ohne Passwörter, Tokens oder Schlüssel." },
+  "Data.Export.Button": { "en": "Download (JSON)", "de": "Herunterladen (JSON)" },
+  "Data.Delete": { "en": "Delete account", "de": "Konto löschen" },
+  "Data.Delete.Text": { "en": "Deletes your account for good, with your sessions and your activity. What you made (scripts, packages, jobs) belongs to the installation and stays, without your name. This cannot be undone – download your data first if you want to keep it.", "de": "Löscht dein Konto endgültig, mit deinen Sitzungen und deiner Aktivität. Was du angelegt hast (Skripte, Pakete, Aufträge), gehört der Installation und bleibt, ohne deinen Namen. Das lässt sich nicht rückgängig machen – lade deine Daten vorher herunter, wenn du sie behalten willst." },
+  "Data.Delete.Password": { "en": "Your password", "de": "Dein Passwort" },
+  "Data.Delete.Button": { "en": "Delete account", "de": "Konto löschen" },
+  "Data.Delete.Confirm": { "en": "Delete the account {0} and all its data for good?", "de": "Das Konto {0} und alle seine Daten endgültig löschen?" },
+  "Data.Delete.WrongPassword": { "en": "The password is not right.", "de": "Das Passwort stimmt nicht." },
+  "Data.Delete.LastAdmin": { "en": "You are the last administrator. Make someone else an administrator first.", "de": "Du bist der letzte Administrator. Mach zuerst jemand anderen zum Administrator." },
+  "Data.Delete.Done": { "en": "Your account and its data are deleted.", "de": "Dein Konto und seine Daten sind gelöscht." }
+}

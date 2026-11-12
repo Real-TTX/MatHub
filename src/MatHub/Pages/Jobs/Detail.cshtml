@@ -1,0 +1,75 @@
+@page "/jobs/{id:long}"
+@model MatHub.Pages.Jobs.DetailModel
+@{
+    var job = Model.Detail.Job;
+    ViewData["Title"] = job.Name;
+    ViewData["PageSub"] = L["Jobs.Kind." + job.Kind].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Jobs.Title"].Value, "/jobs"), (job.Name, null) };
+    var runs = Model.Detail.Runs;
+}
+
+<div class="mat-stack" data-live-target="job" data-live-refresh="@(Model.Busy ? "4" : null)">
+    <div class="mat-cols mh-stats">
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("monitor", "mat-stat__icon")<span class="mat-stat__label">@L["Clients.Title"]</span><span class="mat-stat__value">@runs.Count</span></div></div></div>
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("check-circle", "mat-stat__icon")<span class="mat-stat__label">@L["Runs.Status.Succeeded"]</span><span class="mat-stat__value">@runs.Count(r => r.Status == RunStatus.Succeeded)</span></div></div></div>
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("x-circle", "mat-stat__icon")<span class="mat-stat__label">@L["Runs.Status.Failed"]</span><span class="mat-stat__value">@runs.Count(r => r.Status == RunStatus.Failed)</span></div></div></div>
+        <div class="mat-col-12 mat-col-md-6 mat-col-lg-3"><div class="mat-card mh-stat-card"><div class="mat-card__body mat-stat">@Ui.Icon("clock", "mat-stat__icon")<span class="mat-stat__label">@L["Jobs.State.Open"]</span><span class="mat-stat__value">@runs.Count(r => r.Status is RunStatus.Queued or RunStatus.Running)</span></div></div></div>
+    </div>
+
+    <mh-table caption="@L["Jobs.Runs"]">
+        <thead><tr><th scope="col">@L["Clients.One"]</th><th scope="col">@L["Common.Status"]</th><th scope="col" class="mat-hide-sm">@L["Runs.Started"]</th><th scope="col" class="mat-hide-md">@L["Runs.Finished"]</th><th scope="col" class="mat-num mat-hide-sm">@L["Runs.ExitCode"]</th><th scope="col" class="mat-hide-md">@L["Runs.Output"]</th></tr></thead>
+        <tbody>
+            @foreach (var r in runs)
+            {
+                <tr>
+                    <td data-label="@L["Clients.One"]" class="mat-table__primary"><a href="/jobs/runs/@r.Id"><span class="mh-name">@Ui.Icon("monitor")@r.ClientName</span></a></td>
+                    <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.Tone(r.Status)">@L[JobUi.StatusKey(r.Status)]</span></td>
+                    <td data-label="@L["Runs.Started"]" class="mat-mono mat-hide-sm">@(r.Started is { } s ? Dates.Stamp(s, Model.Zone) : "–")</td>
+                    <td data-label="@L["Runs.Finished"]" class="mat-mono mat-hide-md">@(r.Finished is { } f ? Dates.Stamp(f, Model.Zone) : "–")</td>
+                    <td data-label="@L["Runs.ExitCode"]" class="mat-num mat-mono mat-hide-sm">@r.ExitCode</td>
+                    <td data-label="@L["Runs.Output"]" class="mat-mono mat-hide-md mh-output-line">@(r.Output?.Trim().Split('\n').LastOrDefault())</td>
+                </tr>
+            }
+        </tbody>
+    </mh-table>
+</div>
+
+<div class="mat-cols mh-mt">
+    <div class="mat-col-12 mat-col-lg-8">
+        @if (Model.Detail.ScriptText is { Length: > 0 } text)
+        {
+            <details class="mat-card">
+                <summary class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("code")@L["Jobs.Payload"]</h2></summary>
+                <div class="mat-card__body"><pre class="mat-code mh-preview"><code>@text</code></pre></div>
+            </details>
+        }
+    </div>
+    <div class="mat-col-12 mat-col-lg-4">
+        <div class="mat-card">
+            <div class="mat-card__body">
+                <dl class="mh-dl">
+                    <dt>@L["Jobs.Col.Created"]</dt><dd>@Dates.Stamp(job.CreateDate, Model.Zone)</dd>
+                    <dt>@L["Jobs.Col.By"]</dt><dd>@(Model.Detail.CreatedBy ?? L["Jobs.Origin." + job.Origin].Value)</dd>
+                    <dt>@L["Jobs.Timeout"]</dt><dd>@L["Common.Minutes", job.TimeoutSeconds / 60]</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mat-btn-row mh-btn-row">
+    @if (Model.CanRetry)
+    {
+        <form method="post" asp-page-handler="Retry"><button type="submit" class="mat-btn mat-btn--primary">@Ui.Icon("refresh")<span>@L["Jobs.Retry"]</span></button></form>
+    }
+    <a class="mat-btn mat-btn--secondary" href="/jobs">@Ui.Icon("back")<span>@L["Common.Back"]</span></a>
+    @if (Model.CanCancel)
+    {
+        <span class="mat-btn-row__spacer"></span>
+        <form method="post" asp-page-handler="Cancel"><button type="submit" class="mat-btn mat-btn--danger" data-confirm="@L["Jobs.CancelConfirm"]" data-confirm-ok="@L["Jobs.Cancel"]">@Ui.Icon("stop")<span>@L["Jobs.Cancel"]</span></button></form>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/live.js" asp-append-version="true"></script>
+}

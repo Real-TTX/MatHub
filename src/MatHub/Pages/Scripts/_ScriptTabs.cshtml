@@ -1,0 +1,9 @@
+@model long
+@* The areas of a script (an entity with several areas has tabs): General (name, editor, language, time) and the editor of the script itself. *@
+@{
+    var active = ViewData["Tab"] as string ?? "general";
+}
+<mh-tabs label="@L["Scripts.Tabs"]">
+    <mh-tab href="/scripts/edit?id=@Model" active="@(active == "general")">@L["Scripts.Tab.General"]</mh-tab>
+    <mh-tab href="/scripts/@Model/code" active="@(active == "code")">@L["Scripts.Tab.Script"]</mh-tab>
+</mh-tabs>

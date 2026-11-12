@@ -1,0 +1,46 @@
+@model (IReadOnlyList<MatHub.Services.Jobs.JobRow> Items, string Zone)
+@* The one table of jobs: the list of jobs, the start page and the tab of a client. The progress is the share of runs that ended. *@
+<mh-table caption="@L["Jobs.Title"]">
+    <thead>
+        <tr>
+            <th scope="col">@L["Jobs.Col.Job"]</th>
+            <th scope="col">@L["Common.Status"]</th>
+            <th scope="col" class="mat-hide-sm">@L["Jobs.Col.Progress"]</th>
+            <th scope="col" class="mat-hide-md">@L["Jobs.Col.By"]</th>
+            <th scope="col" class="mat-hide-sm">@L["Jobs.Col.Created"]</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var j in Model.Items)
+        {
+            var done = j.Succeeded + j.Failed + j.Cancelled;
+            var percent = j.Total == 0 ? 0 : (int)Math.Round(done * 100.0 / j.Total);
+            <tr>
+                <td data-label="@L["Jobs.Col.Job"]" class="mat-table__primary"><a href="/jobs/@j.Id"><span class="mh-name">@Ui.Icon(JobUi.Icon(j.Kind))@j.Name</span></a></td>
+                <td data-label="@L["Common.Status"]">
+                    @if (j.Queued + j.Running > 0)
+                    {
+                        <span class="mat-pill mat-pill--busy">@L["Jobs.State.Running", done, j.Total]</span>
+                    }
+                    else if (j.Failed > 0)
+                    {
+                        <span class="mat-pill mat-pill--error">@L["Jobs.State.FailedCount", j.Failed, j.Total]</span>
+                    }
+                    else if (j.Succeeded == 0)
+                    {
+                        <span class="mat-pill mat-pill--plain">@L["Jobs.State.Cancelled"]</span>
+                    }
+                    else
+                    {
+                        <span class="mat-pill mat-pill--ok">@L["Jobs.State.Done"]</span>
+                    }
+                </td>
+                <td data-label="@L["Jobs.Col.Progress"]" class="mat-hide-sm">
+                    <div class="mat-meter mat-meter--sm" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@percent" aria-label="@L["Jobs.Col.Progress"]"><div class="mat-meter__fill" data-value="@percent" data-tone="@(j.Failed > 0 ? "error" : null)"></div></div>
+                </td>
+                <td data-label="@L["Jobs.Col.By"]" class="mat-hide-md">@(j.CreatedBy ?? L["Jobs.Origin." + j.Origin].Value)</td>
+                <td data-label="@L["Jobs.Col.Created"]" class="mat-mono mat-hide-sm">@Dates.Stamp(j.Created, Model.Zone)</td>
+            </tr>
+        }
+    </tbody>
+</mh-table>

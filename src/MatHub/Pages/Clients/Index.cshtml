@@ -1,0 +1,77 @@
+@page "/clients"
+@model MatHub.Pages.Clients.IndexModel
+@{
+    ViewData["Title"] = L["Clients.Title"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Clients.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+
+    @if (Model.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("monitor", L[first ? "Clients.Empty" : "Clients.NoMatch"].Value, L[first ? "Clients.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanEnroll, "/enrollment", L["Clients.Enroll"].Value, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        @* a job for several clients: the checks of the rows go to "Run" (MatUi data-selectable, the bulk bar shows while something is ticked) *@
+        <form method="get" action="/jobs/new" class="mat-stack" data-selectable>
+            @if (Model.CanRun)
+            {
+                <div class="mat-bulk" data-bulk-bar hidden role="status">
+                    <span class="mat-bulk__count">@Html.Raw(L["Clients.Selected", "<strong data-bulk-count>0</strong>"].Value)</span>
+                    <button type="submit" class="mat-btn mat-btn--primary mat-btn--sm">@Ui.Icon("play")<span>@L["Clients.RunOnSelected"]</span></button>
+                </div>
+            }
+            <mh-table caption="@L["Clients.Title"]">
+                <thead>
+                    <tr>
+                        @if (Model.CanRun)
+                        {
+                            <th scope="col" class="mat-table__select"><input type="checkbox" data-select-all aria-label="@L["Clients.SelectAll"]" /></th>
+                        }
+                        <th scope="col">@L["Common.Name"]</th>
+                        <th scope="col">@L["Common.Status"]</th>
+                        <th scope="col" class="mat-hide-sm">@L["Clients.Col.System"]</th>
+                        <th scope="col" class="mat-hide-md">@L["Clients.Col.Address"]</th>
+                        <th scope="col" class="mat-hide-md">@L["Clients.Col.User"]</th>
+                        <th scope="col" class="mat-hide-sm">@L["Clients.Col.LastSeen"]</th>
+                        <th scope="col" class="mat-num">@L["Clients.Col.Updates"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model.Items)
+                    {
+                        <tr>
+                            @if (Model.CanRun)
+                            {
+                                <td data-label="@L["Common.Select"]" class="mat-table__select"><input type="checkbox" name="client" value="@c.Id" data-select-row aria-label="@L["Common.SelectNamed", c.Name]" disabled="@(c.Status != ClientStatus.Active)" /></td>
+                            }
+                            <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/clients/@c.Id"><span class="mh-name">@Ui.Icon("monitor")@c.Name</span></a></td>
+                            <td data-label="@L["Common.Status"]"><partial name="_ClientState" model="(c.Status, c.Online)" /></td>
+                            <td data-label="@L["Clients.Col.System"]" class="mat-hide-sm">@c.OperatingSystem</td>
+                            <td data-label="@L["Clients.Col.Address"]" class="mat-mono mat-hide-md">@c.IpAddresses?.Split(',')[0]</td>
+                            <td data-label="@L["Clients.Col.User"]" class="mat-hide-md">@c.LastUser</td>
+                            <td data-label="@L["Clients.Col.LastSeen"]" class="mat-mono mat-hide-sm">@(c.LastSeen is null ? L["Common.Never"].Value : Dates.Stamp(c.LastSeen, Model.Zone))</td>
+                            <td data-label="@L["Clients.Col.Updates"]" class="mat-num mat-table__keep-label">@if (c.Updates > 0) { <a class="mat-pill mat-pill--accent" href="/clients/@c.Id/software?updates=1">@c.Updates</a> } else { <span class="mh-muted">0</span> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </mh-table>
+        </form>
+    }
+
+    <partial name="_Pager" model="Model.Pager" />
+
+    <div class="mat-actions">
+        @if (Model.CanEnroll)
+        {
+            <a class="mat-btn mat-btn--primary" href="/enrollment">@Ui.Icon("plus")<span>@L["Clients.Enroll"]</span></a>
+        }
+        @if (Model.CanRun)
+        {
+            <a class="mat-btn mat-btn--secondary" href="/jobs/new">@Ui.Icon("play")<span>@L["Jobs.New"]</span></a>
+        }
+    </div>
+</div>

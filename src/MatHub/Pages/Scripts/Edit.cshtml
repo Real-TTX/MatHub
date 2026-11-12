@@ -1,0 +1,60 @@
+@page "/scripts/edit"
+@model MatHub.Pages.Scripts.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Scripts.New"].Value : Model.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Scripts.Title"].Value, "/scripts"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+    ViewData["Tab"] = "general";
+}
+
+@if (!Model.IsNew)
+{
+    <partial name="_ScriptTabs" model="Model.Id!.Value" />
+}
+
+<div class="mat-cols">
+    <div class="mat-col-12 mat-col-lg-7">
+        <form class="mat-form" method="post" novalidate>
+            <partial name="_FormSummary" model="ViewData.ModelState" />
+            <div class="mat-card">
+                <div class="mat-card__body mat-form">
+                    <mh-field name="Name" label="@L["Common.Name"]" required value="@Model.Name" maxlength="120" msg-required="@L["Common.NameRequired"]" disabled="@(!Model.CanEdit)" />
+                    <mh-field name="Description" kind="textarea" label="@L["Common.Description"]" value="@Model.Description" maxlength="1000" rows="2" optional disabled="@(!Model.CanEdit)" />
+                    <mh-field name="Category" label="@L["Scripts.Category"]" value="@Model.Category" maxlength="60" optional placeholder="@L["Scripts.Category.Placeholder"]" disabled="@(!Model.CanEdit)" />
+                    <mh-field name="Editor" kind="radios" label="@L["Scripts.Editor"]" value="@Model.Editor" options="Model.Editors" disabled="@(!Model.CanEdit)" hint="@(Model.IsNew ? null : L["Scripts.Editor.Change"].Value)" />
+                    @* the language: only for code, the visual editors write PowerShell *@
+                    <mh-field name="Language" kind="radios" label="@L["Scripts.Language"]" value="@Model.Language" options="Model.Languages" show-if="Editor" show-value="Code" disabled="@(!Model.CanEdit)" />
+                    <mh-field name="TimeoutMinutes" kind="number" label="@L["Scripts.Timeout"]" value="@Model.TimeoutMinutes" min="1" max="1440" hint="@L["Scripts.Timeout.Hint"]" disabled="@(!Model.CanEdit)" />
+                </div>
+            </div>
+            @if (Model.CanEdit)
+            {
+                <mh-buttons save="@L[Model.IsNew ? "Scripts.CreateAndEdit" : "Common.Save"]" back="/scripts" delete-handler="@(Model.IsNew ? null : "Delete")" delete-label="@L["Scripts.Delete"]" delete-confirm="@L["Scripts.DeleteConfirm", Model.Name]" />
+            }
+            else
+            {
+                <mh-buttons back="/scripts" />
+            }
+        </form>
+    </div>
+    @if (!Model.IsNew)
+    {
+        <div class="mat-col-12 mat-col-lg-5">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("play")@L["Clients.Actions"]</h2></div>
+                <div class="mat-card__body">
+                    <div class="mat-btn-row mat-btn-row--plain">
+                        <a class="mat-btn mat-btn--secondary" href="/scripts/@Model.Id/code">@Ui.Icon(JobUi.EditorIcon(Model.Editor))<span>@L["Scripts.OpenEditor"]</span></a>
+                        @if (Model.CanRun)
+                        {
+                            <a class="mat-btn mat-btn--primary" href="/jobs/new?script=@Model.Id">@Ui.Icon("play")<span>@L["Scripts.Run"]</span></a>
+                        }
+                        @if (Model.CanEdit)
+                        {
+                            <form method="post" asp-page-handler="Duplicate" asp-route-id="@Model.Id"><button type="submit" class="mat-btn mat-btn--ghost">@Ui.Icon("copy")<span>@L["Scripts.Duplicate"]</span></button></form>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

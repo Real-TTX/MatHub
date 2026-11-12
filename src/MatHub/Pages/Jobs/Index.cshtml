@@ -1,0 +1,32 @@
+@page "/jobs"
+@model MatHub.Pages.Jobs.IndexModel
+@{
+    ViewData["Title"] = L["Jobs.Title"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Jobs.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    <div class="mat-stack" data-live-target="jobs" data-live-refresh="@(Model.Busy ? "5" : null)">
+    @if (Model.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("activity", L[first ? "Jobs.Empty" : "Jobs.NoMatch"].Value, L[first ? "Jobs.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanRun, "/jobs/new", L["Jobs.New"].Value, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        <partial name="_JobTable" model="(Model.Items, Model.Zone)" />
+    }
+    <partial name="_Pager" model="Model.Pager" />
+    </div>
+    @if (Model.CanRun)
+    {
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" href="/jobs/new">@Ui.Icon("play")<span>@L["Jobs.New"]</span></a>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/live.js" asp-append-version="true"></script>
+}

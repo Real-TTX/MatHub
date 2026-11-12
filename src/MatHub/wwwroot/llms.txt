@@ -1,0 +1,25 @@
+# MatHub
+
+> MatHub is a self-hosted client management for Windows computers: an agent on every computer reports its inventory and installed software, MatHub installs, updates and removes software (winget packages, MSI and EXE installers, scripts), runs scripts written as code, put together from blocks or drawn as a flow, and installs new computers over the network (PXE/iPXE with Windows PE and an answer file MatHub writes). Who may do what is set by roles with permissions, for all clients or for groups. It is a Progressive Web App and part of the Mat family (sign-in through MatIdentity, mail through MatSMTP, a shell through Mattiverse).
+
+Everything except the start page needs an account. The interface is available in English and German.
+
+## What a person can do
+
+- See every client: online or not, operating system, hardware, disks, network, the last user, the installed programs and the updates winget offers.
+- Enroll computers: an enrollment key and one line in an elevated PowerShell install the agent as a Windows service; keys can put new clients into a group or wait for an approval.
+- Group clients by hand or by a rule (name, operating system, domain, manufacturer, model, address, tag).
+- Keep software where it belongs: assign a package to a group (install or remove), and MatHub makes the jobs, checks the result in the inventory and installs updates by itself (winget).
+- Update programs everywhere with one click: the updates page lists every program with an update and on how many clients.
+- Write scripts (PowerShell, cmd, bash) in a code editor, from blocks, or as a flow with branches, and run them on clients and groups; every run keeps its output.
+- Install computers over the network: a TFTP server and iPXE are built in; a task names the MAC address, the computer name and a profile (Windows setup from a share, Linux with an answer file, or an iPXE script of your own).
+- Sign in locally or through MatIdentity; MatIdentity can give the roles and permissions of MatHub.
+
+## Machine interfaces
+
+- [Platform definition](/api): the Mat platform contract (state, settings, actions, health), with a key or a token of MatIdentity.
+- The agent protocol is under /api/agent/v1 (for the MatHub agent only).
+
+## Links
+
+- [Start page](/)

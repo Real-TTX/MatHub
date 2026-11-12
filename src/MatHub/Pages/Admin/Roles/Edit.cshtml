@@ -1,0 +1,55 @@
+@page "/Admin/Roles/Edit"
+@model MatHub.Pages.Admin.Roles.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Roles.New"].Value : Model.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Admin.Title"].Value, null), (L["Roles.Title"].Value, "/Admin/Roles"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+}
+
+<form class="mat-form" method="post" novalidate>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-cols">
+        <div class="mat-col-12 mat-col-lg-5">
+            <div class="mat-card">
+                <div class="mat-card__body mat-form">
+                    <mh-field name="Name" label="@L["Common.Name"]" required value="@Model.Name" maxlength="120" msg-required="@L["Common.NameRequired"]" />
+                    <mh-field name="Description" kind="textarea" label="@L["Common.Description"]" value="@Model.Description" rows="3" maxlength="1000" optional />
+                    @if (Model.Key is not null)
+                    {
+                        <p class="mat-hint">@L["Roles.BuiltIn.Hint", Model.Key]</p>
+                    }
+                </div>
+            </div>
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("monitor")@L["Roles.Scope"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="Scope" kind="radios" label="@L["Roles.Reaches"]" value="@Model.Scope" options="Model.Scopes" />
+                    <mh-field name="Groups" kind="select" label="@L["Groups.Title"]" value="@Model.Groups" options="Model.GroupChoices" picker="multiple search" show-if="Scope" show-value="groups" required hint="@L["Roles.Groups.Hint"]" />
+                </div>
+            </div>
+        </div>
+        <div class="mat-col-12 mat-col-lg-7">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("shield")@L["Roles.Permissions"]</h2></div>
+                <div class="mat-card__body">
+                    @foreach (var area in Model.Areas)
+                    {
+                        <fieldset class="mat-fieldset mh-permissions">
+                            <legend class="mat-legend">@L["Permission.Area." + area.Key]</legend>
+                            <div class="mat-checks">
+                                @foreach (var p in area)
+                                {
+                                    var id = "perm-" + p;
+                                    <label class="mat-check" for="@id">
+                                        <input type="checkbox" id="@id" name="Permissions" value="@p" checked="@Model.Permissions.Contains(p)" />
+                                        <span class="mat-check__text"><strong>@L["Permission." + p]</strong><small class="mat-muted">@L["Permission." + p + ".Hint"]</small></span>
+                                    </label>
+                                }
+                            </div>
+                        </fieldset>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <mh-buttons save="@L[Model.IsNew ? "Common.Create" : "Common.Save"]" back="/Admin/Roles" delete-handler="@(Model.IsNew || Model.Key is not null ? null : "Delete")" delete-label="@L["Roles.Delete"]" delete-confirm="@L["Roles.DeleteConfirm", Model.Name]" />
+</form>

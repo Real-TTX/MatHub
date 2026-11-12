@@ -1,0 +1,38 @@
+@page "/groups"
+@model MatHub.Pages.Groups.IndexModel
+@{
+    ViewData["Title"] = L["Groups.Title"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Groups.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("folder", L[first ? "Groups.Empty" : "Groups.NoMatch"].Value, L[first ? "Groups.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanManage, "/groups/edit", L["Groups.New"].Value, Model.Toolbar.UrlReset()))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Groups.Title"]">
+            <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Groups.Kind"]</th><th scope="col" class="mat-hide-sm">@L["Groups.Rule"]</th><th scope="col" class="mat-num">@L["Groups.Members"]</th></tr></thead>
+            <tbody>
+                @foreach (var g in Model.Items)
+                {
+                    <tr>
+                        <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/groups/edit?id=@g.Id"><span class="mh-name">@Ui.Icon("folder", null, g.Colour)@g.Name</span></a>@if (g.Description is not null) { <small class="mh-muted mh-block-line">@g.Description</small> }</td>
+                        <td data-label="@L["Groups.Kind"]"><span class="mat-pill @(g.Kind == GroupKind.Dynamic ? "mat-pill--info" : "mat-pill--plain")">@L["Groups.Kind." + g.Kind]</span></td>
+                        <td data-label="@L["Groups.Rule"]" class="mat-hide-sm">@(g.Rule ?? "–")</td>
+                        <td data-label="@L["Groups.Members"]" class="mat-num mat-table__keep-label"><a href="/clients?group=@g.Id">@g.Members</a></td>
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+    @if (Model.CanManage)
+    {
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" href="/groups/edit">@Ui.Icon("plus")<span>@L["Groups.New"]</span></a>
+        </div>
+    }
+</div>

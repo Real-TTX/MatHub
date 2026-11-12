@@ -1,0 +1,32 @@
+@page "/Admin/Users/Edit"
+@model MatHub.Pages.Admin.Users.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Users.New"].Value : Model.DisplayName;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Admin.Title"].Value, null), (L["Users.Title"].Value, "/Admin/Users"), (Model.IsNew ? L["Common.New"].Value : Model.DisplayName, null) };
+    ViewData["Width"] = "narrow";
+}
+
+<form class="mat-form" method="post" novalidate>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-card">
+        <div class="mat-card__body mat-form">
+            <mh-field name="DisplayName" label="@L["Account.Name"]" required value="@Model.DisplayName" maxlength="120" msg-required="@L["Account.Name.Required"]" />
+            <mh-field name="Email" kind="email" label="@L["Account.Email"]" required value="@Model.Email" autocomplete="off" msg-required="@L["Account.Login.Email.Required"]" />
+            <mh-field name="Role" kind="radios" label="@L["Users.Col.Role"]" value="@Model.Role" options="Model.Roles" />
+            <mh-field name="IsActive" kind="switch" label="@L["Users.CanSignIn"]" value="@Model.IsActive.ToString()" />
+            <mh-field name="AccessRoleId" kind="select" label="@L["Users.AccessRole"]" value="@Model.AccessRoleId" options="Model.AccessRoles" show-if="Role" show-value="User" hint="@L["Users.AccessRole.Hint"]" />
+            @if (Model.IdentityPermissions.Count > 0)
+            {
+                <div class="mat-field">
+                    <span class="mat-label">@L["Users.IdentityPermissions"]</span>
+                    <div class="mat-chips">@foreach (var p in Model.IdentityPermissions) { <span class="mat-tag">@L["Permission." + p]</span> }</div>
+                    <span class="mat-hint">@L["Users.IdentityPermissions.Hint"]</span>
+                </div>
+            }
+            <mh-field name="Password" kind="password" label="@L[Model.IsNew ? "Account.Password" : "Password.New"]" required="@Model.IsNew" optional="@(!Model.IsNew)" autocomplete="new-password"
+                      hint="@(Model.IsNew ? L["Account.Password.Hint", PasswordService.MinLength].Value : L["Users.Password.Hint"].Value)" />
+        </div>
+    </div>
+    <mh-buttons save="@L[Model.IsNew ? "Users.Create" : "Common.Save"]" back="/Admin/Users" delete-handler="@(Model.IsNew || Model.IsSelf ? null : "Delete")" delete-label="@L["Users.Delete"]"
+                delete-confirm="@L["Users.DeleteConfirm", Model.DisplayName]" />
+</form>

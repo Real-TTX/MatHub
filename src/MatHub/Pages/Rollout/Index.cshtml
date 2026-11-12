@@ -1,0 +1,48 @@
+@page "/rollout"
+@model MatHub.Pages.Rollout.IndexModel
+@{
+    ViewData["Title"] = L["Rollout.Tasks"].Value;
+    ViewData["PageSub"] = L["Rollout.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Rollout.Tasks"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    <div class="mat-stack" data-live-target="rollout" data-live-refresh="@(Model.Busy ? "10" : null)">
+        @if (Model.Items.Count == 0)
+        {
+            var first = Model.Toolbar.Total == 0;
+            <partial name="_Empty" model="@(new EmptyStateModel("server", L[first ? "Rollout.Empty" : "Rollout.NoMatch"].Value, L[first ? "Rollout.EmptyText" : "Lists.ChangeTools"].Value, first && Model.CanManage, "/rollout/tasks/edit", L["Rollout.New"].Value, Model.Toolbar.UrlReset()))" />
+        }
+        else
+        {
+            <mh-table caption="@L["Rollout.Tasks"]">
+                <thead><tr><th scope="col">@L["Rollout.HostName"]</th><th scope="col">@L["Common.Status"]</th><th scope="col" class="mat-hide-sm">@L["Rollout.Mac"]</th><th scope="col" class="mat-hide-md">@L["Profiles.One"]</th><th scope="col" class="mat-hide-sm">@L["Rollout.Booted"]</th><th scope="col" class="mat-hide-md">@L["Clients.One"]</th></tr></thead>
+                <tbody>
+                    @foreach (var t in Model.Items)
+                    {
+                        <tr>
+                            <td data-label="@L["Rollout.HostName"]" class="mat-table__primary"><a href="/rollout/tasks/edit?id=@t.Id"><span class="mh-name">@Ui.Icon("server")@t.HostName</span></a></td>
+                            <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.RolloutTone(t.Status)">@L["Rollout.Status." + t.Status]</span></td>
+                            <td data-label="@L["Rollout.Mac"]" class="mat-mono mat-hide-sm">@t.MacAddress</td>
+                            <td data-label="@L["Profiles.One"]" class="mat-hide-md">@t.ProfileName</td>
+                            <td data-label="@L["Rollout.Booted"]" class="mat-mono mat-hide-sm">@(t.Booted is { } b ? Dates.Stamp(b, Model.Zone) : "–")</td>
+                            <td data-label="@L["Clients.One"]" class="mat-hide-md">@if (t.ClientId is { } cid) { <a href="/clients/@cid">@L["Rollout.OpenClient"]</a> } else { <span class="mh-muted">–</span> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </mh-table>
+        }
+    </div>
+    @if (Model.CanManage)
+    {
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" href="/rollout/tasks/edit">@Ui.Icon("plus")<span>@L["Rollout.New"]</span></a>
+            <a class="mat-btn mat-btn--secondary" href="/rollout/devices">@Ui.Icon("network")<span>@L["Devices.Title"]</span></a>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/live.js" asp-append-version="true"></script>
+}

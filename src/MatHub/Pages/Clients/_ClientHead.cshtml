@@ -1,0 +1,30 @@
+@model MatHub.Pages.Clients.ClientPageModel
+@*
+    The head of every tab of a client: the tabs (UI rule: an entity with several areas has tabs, each a page of its own) and, above them, the state of the client.
+*@
+@{
+    var active = ViewData["Tab"] as string ?? "general";
+    var c = Model.Client;
+}
+<div class="mh-client-head">
+    <partial name="_ClientState" model="(c.Status, Model.Detail.Online)" />
+    <span class="mh-muted">@c.OperatingSystem</span>
+    @if (c.LastSeenDate is { } seen)
+    {
+        <span class="mh-muted">@L["Clients.LastSeenAt", Dates.Stamp(seen, Model.Zone)]</span>
+    }
+    @foreach (var g in Model.Detail.Groups)
+    {
+        <a class="mat-tag" data-colour="@g.Colour" href="/clients?group=@g.Id">@g.Name</a>
+    }
+</div>
+<mh-tabs label="@L["Clients.Tabs"]">
+    <mh-tab href="/clients/@c.Id" active="@(active == "general")">@L["Clients.Tab.General"]</mh-tab>
+    <mh-tab href="/clients/@c.Id/inventory" active="@(active == "inventory")">@L["Clients.Tab.Inventory"]</mh-tab>
+    <mh-tab href="/clients/@c.Id/software" active="@(active == "software")">@L["Clients.Tab.Software"]</mh-tab>
+    @if (Model.CanSeeJobs)
+    {
+        <mh-tab href="/clients/@c.Id/jobs" active="@(active == "jobs")">@L["Clients.Tab.Jobs"]</mh-tab>
+    }
+    <mh-tab href="/clients/@c.Id/activity" active="@(active == "activity")">@L["Clients.Tab.Activity"]</mh-tab>
+</mh-tabs>

@@ -1,0 +1,17 @@
+#!ipxe
+# Built into the boot loaders of MatHub (ipxe.efi, snponly.efi, undionly.kpxe): get an address, then load MatHub's first script from the TFTP server
+# that handed out this loader (it says where MatHub answers over HTTP). Without an answer the computer boots from its disk.
+dhcp || goto again
+chain tftp://${next-server}/mathub.ipxe || goto failed
+exit
+
+:again
+sleep 3
+dhcp || goto failed
+chain tftp://${next-server}/mathub.ipxe || goto failed
+exit
+
+:failed
+echo MatHub: no answer from the boot server. Booting from the disk in 10 seconds.
+sleep 10
+exit

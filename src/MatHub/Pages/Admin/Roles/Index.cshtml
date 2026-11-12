@@ -1,0 +1,29 @@
+@page "/Admin/Roles"
+@model MatHub.Pages.Admin.Roles.IndexModel
+@using MatHub.Services.Access
+@{
+    ViewData["Title"] = L["Roles.Title"].Value;
+    ViewData["PageSub"] = L["Roles.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Admin.Title"].Value, null), (L["Roles.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <mh-table caption="@L["Roles.Title"]">
+        <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Roles.Permissions"]</th><th scope="col" class="mat-hide-sm">@L["Roles.Scope"]</th><th scope="col" class="mat-num">@L["Users.Title"]</th></tr></thead>
+        <tbody>
+            @foreach (var r in Model.Items)
+            {
+                <tr>
+                    <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/Admin/Roles/Edit?id=@r.Id"><span class="mh-name">@Ui.Icon("shield")@r.Name</span></a>@if (r.Key is not null) { <small class="mh-muted mh-block-line">@L["Roles.BuiltIn", r.Key]</small> }</td>
+                    <td data-label="@L["Roles.Permissions"]">@L["Roles.PermissionCount", r.Permissions, Permission.All.Count]</td>
+                    <td data-label="@L["Roles.Scope"]" class="mat-hide-sm">@(r.AllClients ? L["Roles.AllClients"].Value : L["Roles.GroupCount", r.Groups].Value)</td>
+                    <td data-label="@L["Users.Title"]" class="mat-num">@r.Users</td>
+                </tr>
+            }
+        </tbody>
+    </mh-table>
+    <p class="mat-hint">@L["Roles.AdminHint"]</p>
+    <div class="mat-actions">
+        <a class="mat-btn mat-btn--primary" href="/Admin/Roles/Edit">@Ui.Icon("plus")<span>@L["Roles.New"]</span></a>
+    </div>
+</div>

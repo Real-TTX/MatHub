@@ -1,0 +1,41 @@
+@page "/clients/{id:long}/jobs"
+@model MatHub.Pages.Clients.JobsModel
+@{
+    var c = Model.Client;
+    ViewData["Title"] = c.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Clients.Title"].Value, "/clients"), (c.Name, $"/clients/{c.Id}"), (L["Clients.Tab.Jobs"].Value, null) };
+    ViewData["Tab"] = "jobs";
+}
+
+<partial name="_ClientHead" model="Model" />
+
+<div class="mat-list">
+    @if (Model.Runs.Count == 0)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("activity", L["Runs.None"].Value, L["Runs.NoneText"].Value, Model.CanRun, $"/jobs/new?client={c.Id}", L["Clients.Run"].Value))" />
+    }
+    else
+    {
+        <mh-table caption="@L["Clients.Tab.Jobs"]">
+            <thead><tr><th scope="col">@L["Jobs.Col.Job"]</th><th scope="col">@L["Common.Status"]</th><th scope="col" class="mat-hide-sm">@L["Runs.Started"]</th><th scope="col" class="mat-hide-md">@L["Runs.Finished"]</th><th scope="col" class="mat-num mat-hide-sm">@L["Runs.ExitCode"]</th></tr></thead>
+            <tbody>
+                @foreach (var r in Model.Runs)
+                {
+                    <tr>
+                        <td data-label="@L["Jobs.Col.Job"]" class="mat-table__primary"><a href="/jobs/runs/@r.Id"><span class="mh-name">@Ui.Icon(JobUi.Icon(r.Kind))@r.JobName</span></a></td>
+                        <td data-label="@L["Common.Status"]"><span class="mat-pill mat-pill--@JobUi.Tone(r.Status)">@L[JobUi.StatusKey(r.Status)]</span></td>
+                        <td data-label="@L["Runs.Started"]" class="mat-mono mat-hide-sm">@(r.Started is { } s ? Dates.Stamp(s, Model.Zone) : "–")</td>
+                        <td data-label="@L["Runs.Finished"]" class="mat-mono mat-hide-md">@(r.Finished is { } f ? Dates.Stamp(f, Model.Zone) : "–")</td>
+                        <td data-label="@L["Runs.ExitCode"]" class="mat-num mat-mono mat-hide-sm">@r.ExitCode</td>
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+    @if (Model.CanRun)
+    {
+        <div class="mat-actions">
+            <a class="mat-btn mat-btn--primary" href="/jobs/new?client=@c.Id">@Ui.Icon("play")<span>@L["Clients.Run"]</span></a>
+        </div>
+    }
+</div>

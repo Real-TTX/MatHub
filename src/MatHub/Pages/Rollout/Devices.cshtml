@@ -1,0 +1,60 @@
+@page "/rollout/devices"
+@model MatHub.Pages.Rollout.DevicesModel
+@{
+    ViewData["Title"] = L["Devices.Title"].Value;
+    ViewData["PageSub"] = L["Devices.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Devices.Title"].Value, null) };
+}
+
+<div class="mat-list">
+    <partial name="_Toolbar" model="Model.Toolbar" />
+    @if (Model.Items.Count == 0)
+    {
+        var first = Model.Toolbar.Total == 0;
+        <partial name="_Empty" model="@(new EmptyStateModel("network", L[first ? "Devices.Empty" : "Devices.NoMatch"].Value, L[first ? "Devices.EmptyText" : "Lists.ChangeTools"].Value, false, null, null, Model.Toolbar.UrlReset()))" />
+        @if (first)
+        {
+            <p class="mat-hint"><a href="/rollout/setup">@L["NetbootSetup.Title"]</a></p>
+        }
+    }
+    else
+    {
+        <mh-table caption="@L["Devices.Title"]">
+            <thead><tr><th scope="col">@L["Rollout.Mac"]</th><th scope="col" class="mat-hide-sm">@L["Devices.Model"]</th><th scope="col" class="mat-hide-md">@L["Clients.Serial"]</th><th scope="col" class="mat-hide-md">@L["Clients.Col.Address"]</th><th scope="col">@L["Devices.LastBoot"]</th><th scope="col">@L["Common.Status"]</th>@if (Model.CanManage) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+            <tbody>
+                @foreach (var d in Model.Items)
+                {
+                    <tr>
+                        <td data-label="@L["Rollout.Mac"]" class="mat-mono">@d.MacAddress <small class="mh-muted">@d.Platform</small></td>
+                        <td data-label="@L["Devices.Model"]" class="mat-hide-sm">@string.Join(" ", new[] { d.Manufacturer, d.Product }.Where(x => !string.IsNullOrWhiteSpace(x)))</td>
+                        <td data-label="@L["Clients.Serial"]" class="mat-mono mat-hide-md">@d.SerialNumber</td>
+                        <td data-label="@L["Clients.Col.Address"]" class="mat-mono mat-hide-md">@d.IpAddress</td>
+                        <td data-label="@L["Devices.LastBoot"]" class="mat-mono">@Dates.Stamp(d.LastBoot, Model.Zone)</td>
+                        <td data-label="@L["Common.Status"]">
+                            @if (d.ClientId is { } cid)
+                            {
+                                <a class="mat-pill mat-pill--ok" href="/clients/@cid">@d.ClientName</a>
+                            }
+                            @if (d.TaskStatus is { } ts)
+                            {
+                                <span class="mat-pill mat-pill--@JobUi.RolloutTone(ts)">@L["Rollout.Status." + ts]</span>
+                            }
+                        </td>
+                        @if (Model.CanManage)
+                        {
+                            <td class="mat-table__cell-actions">
+                                <div class="mat-table__actions">
+                                    <a class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" href="/rollout/tasks/edit?mac=@d.MacAddress" aria-label="@L["Devices.RollOutNamed", d.MacAddress]" data-tip="@L["Devices.RollOut"]">@Ui.Icon("rocket")</a>
+                                    <form method="post" asp-page-handler="Delete">
+                                        <input type="hidden" name="device" value="@d.Id" />
+                                        <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["Devices.ForgetNamed", d.MacAddress]" data-tip="@L["Devices.Forget"]" data-confirm="@L["Devices.ForgetConfirm", d.MacAddress]" data-confirm-ok="@L["Devices.Forget"]">@Ui.Icon("trash")</button>
+                                    </form>
+                                </div>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    }
+</div>

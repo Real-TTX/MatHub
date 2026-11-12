@@ -1,0 +1,61 @@
+@page "/rollout/tasks/edit"
+@model MatHub.Pages.Rollout.TaskEditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Rollout.New"].Value : Model.HostName;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Rollout.Tasks"].Value, "/rollout"), (Model.IsNew ? L["Common.New"].Value : Model.HostName, null) };
+    ViewData["Width"] = "narrow";
+    var task = Model.Current;
+}
+
+@if (task is not null)
+{
+    <div class="mat-card">
+        <div class="mat-card__body">
+            <dl class="mh-dl">
+                <dt>@L["Common.Status"]</dt><dd><span class="mat-pill mat-pill--@JobUi.RolloutTone(task.Status)">@L["Rollout.Status." + task.Status]</span></dd>
+                <dt>@L["Common.Created"]</dt><dd>@Dates.Stamp(task.CreateDate, Model.Zone)</dd>
+                <dt>@L["Rollout.Booted"]</dt><dd>@(task.BootedDate is { } b ? Dates.Stamp(b, Model.Zone) : "–")</dd>
+                <dt>@L["Rollout.Completed"]</dt><dd>@(task.CompletedDate is { } c ? Dates.Stamp(c, Model.Zone) : "–")</dd>
+                @if (task.ClientId is { } cid)
+                {
+                    <dt>@L["Clients.One"]</dt><dd><a href="/clients/@cid">@L["Rollout.OpenClient"]</a></dd>
+                }
+            </dl>
+            <p class="mat-hint">@L["Rollout.Status." + task.Status + ".Hint"]</p>
+            @if (Model.CanManage && task.Status != RolloutStatus.Waiting)
+            {
+                <form method="post" asp-page-handler="Again" asp-route-id="@task.Id">
+                    <button type="submit" class="mat-btn mat-btn--secondary" data-confirm="@L["Rollout.Again.Confirm", task.HostName]" data-confirm-ok="@L["Rollout.Again"]">@Ui.Icon("refresh")<span>@L["Rollout.Again"]</span></button>
+                </form>
+            }
+        </div>
+    </div>
+}
+
+<form class="mat-form" method="post" novalidate>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-card">
+        <div class="mat-card__body mat-form">
+            <mh-field name="Mac" label="@L["Rollout.Mac"]" required value="@Model.Mac" mono placeholder="00:1a:2b:3c:4d:5e" hint="@L["Rollout.Mac.Hint"]" disabled="@(!Model.CanManage)" />
+            <mh-field name="HostName" label="@L["Rollout.HostName"]" required value="@Model.HostName" maxlength="15" mono placeholder="PC-0042" hint="@L["Rollout.HostName.Hint"]" disabled="@(!Model.CanManage)" />
+            <mh-field name="ProfileId" kind="select" label="@L["Profiles.One"]" required value="@Model.ProfileId" options="Model.Profiles" placeholder="@L["Rollout.ChooseProfile"]" disabled="@(!Model.CanManage)" />
+            @if (Model.Profiles.Count == 0)
+            {
+                <p class="mat-hint">@L["Rollout.NoProfiles"] <a href="/rollout/profiles/edit">@L["Profiles.New"]</a></p>
+            }
+        </div>
+    </div>
+    @if (Model.CanManage)
+    {
+        <mh-buttons save="@L[Model.IsNew ? "Rollout.Create" : "Common.Save"]" back="/rollout" delete-handler="@(Model.IsNew ? null : "Delete")" delete-label="@L["Rollout.Delete"]" delete-confirm="@L["Rollout.DeleteConfirm", Model.HostName]">
+            @if (task is { Status: RolloutStatus.Waiting or RolloutStatus.Installing })
+            {
+                <button type="submit" class="mat-btn mat-btn--ghost" formnovalidate formaction="?id=@task.Id&handler=Cancel">@Ui.Icon("stop")<span>@L["Rollout.Cancel"]</span></button>
+            }
+        </mh-buttons>
+    }
+    else
+    {
+        <mh-buttons back="/rollout" />
+    }
+</form>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="mat-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <!-- The icons only MatHub has, drawn like the toolkit's (24 x 24, a line of 2, round ends; the colour is the text colour). -->
+  <symbol id="mat-i-mathub" viewBox="0 0 24 24"><rect x='2.5' y='3' width='6' height='4.5' rx='1'/><rect x='15.5' y='3' width='6' height='4.5' rx='1'/><rect x='2.5' y='16.5' width='6' height='4.5' rx='1'/><rect x='15.5' y='16.5' width='6' height='4.5' rx='1'/><circle cx='12' cy='12' r='3'/><path d='M8.5 7.5 10 9.8M15.5 7.5 14 9.8M8.5 16.5 10 14.2M15.5 16.5 14 14.2'/></symbol>
+  <symbol id="mat-i-power" viewBox="0 0 24 24"><path d='M12 3v8'/><path d='M6.3 6.8a8 8 0 1 0 11.4 0'/></symbol>
+  <symbol id="mat-i-blocks" viewBox="0 0 24 24"><rect x='4' y='3.5' width='16' height='4.5' rx='1.2'/><rect x='4' y='10' width='16' height='4.5' rx='1.2'/><rect x='4' y='16.5' width='10' height='4.5' rx='1.2'/></symbol>
+  <symbol id="mat-i-flow" viewBox="0 0 24 24"><rect x='9' y='2.5' width='6' height='4.5' rx='1'/><path d='M12 7v3'/><path d='M12 10l4 3.5-4 3.5-4-3.5z'/><path d='M8 13.5H5v4M16 13.5h3v4'/><rect x='2.5' y='17.5' width='5' height='4' rx='1'/><rect x='16.5' y='17.5' width='5' height='4' rx='1'/></symbol>
+  <symbol id="mat-i-windows" viewBox="0 0 24 24"><path d='M3.5 5.5 10.5 4.5v7h-7zM13 4.2l7.5-1v8.3H13zM3.5 13h7v6.5l-7-1zM13 13h7.5v8l-7.5-1z'/></symbol>
+  <symbol id="mat-i-linux" viewBox="0 0 24 24"><path d='M12 3c-2.2 0-3.5 1.8-3.5 4.2 0 1.6.4 2.5-.8 4.3C6.4 13.4 5 15.5 5.8 18c.7 2 3 3 6.2 3s5.5-1 6.2-3c.8-2.5-.6-4.6-1.9-6.5-1.2-1.8-.8-2.7-.8-4.3C15.5 4.8 14.2 3 12 3z'/><circle cx='10.5' cy='8' r='.6'/><circle cx='13.5' cy='8' r='.6'/></symbol>
+</svg>

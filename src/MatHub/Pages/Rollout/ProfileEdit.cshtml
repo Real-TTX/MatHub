@@ -1,0 +1,81 @@
+@page "/rollout/profiles/edit"
+@model MatHub.Pages.Rollout.ProfileEditModel
+@{
+    ViewData["Title"] = Model.IsNew ? L["Profiles.New"].Value : Model.Name;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Profiles.Title"].Value, "/rollout/profiles"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+    var ro = !Model.CanManage;
+}
+
+<form class="mat-form" method="post" novalidate>
+    <partial name="_FormSummary" model="ViewData.ModelState" />
+    <div class="mat-cols">
+        <div class="mat-col-12 mat-col-lg-6">
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("layers")@L["Profiles.General"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="Name" label="@L["Common.Name"]" required value="@Model.Name" maxlength="120" msg-required="@L["Common.NameRequired"]" disabled="@ro" />
+                    <mh-field name="Description" kind="textarea" label="@L["Common.Description"]" value="@Model.Description" rows="2" maxlength="1000" optional disabled="@ro" />
+                    <mh-field name="Kind" kind="radios" label="@L["Profiles.Kind"]" value="@Model.Kind" options="Model.Kinds" disabled="@ro" />
+                    <mh-field name="BootImageId" kind="select" label="@L["Images.One"]" value="@Model.BootImageId" options="Model.Images" show-if="Kind" show-value="Windows,Linux" hint="@L["Profiles.Image.Hint"]" disabled="@ro" />
+                </div>
+            </div>
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("mathub")@L["Profiles.After"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="InstallAgent" kind="switch" label="@L["Profiles.InstallAgent"]" value="@Model.InstallAgent.ToString()" hint="@L["Profiles.InstallAgent.Hint"]" disabled="@ro" />
+                    <mh-field name="GroupId" kind="select" label="@L["Profiles.Group"]" value="@Model.GroupId" options="Model.Groups" hint="@L["Profiles.Group.Hint"]" disabled="@ro" />
+                </div>
+            </div>
+        </div>
+        <div class="mat-col-12 mat-col-lg-6">
+            @* Windows: setup from a share, MatHub writes the answer file *@
+            <div class="mat-card" data-show-if="Kind" data-show-value="Windows">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("windows")@L["Profiles.Windows"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="SourcePath" label="@L["Profiles.SourcePath"]" value="@Model.SourcePath" mono placeholder="\\fileserver\deploy\win11" required hint="@L["Profiles.SourcePath.Hint"]" disabled="@ro" />
+                    <div class="mat-cols">
+                        <div class="mat-col-12 mat-col-md-6"><mh-field name="SourceUser" label="@L["Profiles.SourceUser"]" value="@Model.SourceUser" autocomplete="off" optional placeholder="DOMAIN\deploy" disabled="@ro" /></div>
+                        <div class="mat-col-12 mat-col-md-6"><mh-field name="SourcePassword" kind="password" label="@L["Profiles.SourcePassword"]" autocomplete="new-password" optional hint="@(Model.HasSourcePassword ? L["Profiles.Password.Keep"].Value : null)" disabled="@ro" /></div>
+                    </div>
+                    <div class="mat-cols">
+                        <div class="mat-col-12 mat-col-md-4"><mh-field name="ImageIndex" kind="number" label="@L["Profiles.ImageIndex"]" value="@Model.ImageIndex" min="1" max="99" hint="@L["Profiles.ImageIndex.Hint"]" disabled="@ro" /></div>
+                        <div class="mat-col-12 mat-col-md-8"><mh-field name="ProductKey" label="@L["Profiles.ProductKey"]" value="@Model.ProductKey" mono optional placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" disabled="@ro" /></div>
+                    </div>
+                    <div class="mat-cols">
+                        <div class="mat-col-12 mat-col-md-4"><mh-field name="Locale" label="@L["Profiles.Locale"]" value="@Model.Locale" mono placeholder="de-DE" disabled="@ro" /></div>
+                        <div class="mat-col-12 mat-col-md-8"><mh-field name="TimeZone" label="@L["Profiles.TimeZone"]" value="@Model.TimeZone" placeholder="W. Europe Standard Time" disabled="@ro" /></div>
+                    </div>
+                    <mh-field name="AdminPassword" kind="password" label="@L["Profiles.AdminPassword"]" autocomplete="new-password" required="@(!Model.HasAdminPassword)" optional="@Model.HasAdminPassword" hint="@(Model.HasAdminPassword ? L["Profiles.Password.Keep"].Value : L["Profiles.AdminPassword.Hint"].Value)" disabled="@ro" />
+                    <details class="mh-details">
+                        <summary>@L["Profiles.OwnAnswerFile"]</summary>
+                        <mh-field id="AnswerFileWindows" name="AnswerFile" kind="textarea" label="@L["Profiles.AnswerFile"]" value="@Model.AnswerFile" mono rows="10" optional hint="@L["Profiles.AnswerFile.Windows.Hint"]" disabled="@ro" />
+                    </details>
+                </div>
+            </div>
+
+            @* Linux: an answer file for the installer *@
+            <div class="mat-card" data-show-if="Kind" data-show-value="Linux">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("linux")@L["Profiles.Linux"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field id="AnswerFileLinux" name="AnswerFile" kind="textarea" label="@L["Profiles.AnswerFile"]" value="@Model.AnswerFile" mono rows="12" optional hint="@L["Profiles.AnswerFile.Linux.Hint"]" disabled="@ro" />
+                </div>
+            </div>
+
+            @* Custom: an iPXE script *@
+            <div class="mat-card" data-show-if="Kind" data-show-value="Custom">
+                <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("code")@L["Profiles.Custom"]</h2></div>
+                <div class="mat-card__body mat-form">
+                    <mh-field name="IpxeScript" kind="textarea" label="@L["Profiles.IpxeScript"]" value="@Model.IpxeScript" mono rows="12" required placeholder="#!ipxe&#10;kernel {server}/boot/images/1/kernel&#10;boot" hint="@L["Profiles.IpxeScript.Hint"]" disabled="@ro" />
+                </div>
+            </div>
+        </div>
+    </div>
+    @if (Model.CanManage)
+    {
+        <mh-buttons save="@L[Model.IsNew ? "Common.Create" : "Common.Save"]" back="/rollout/profiles" delete-handler="@(Model.IsNew ? null : "Delete")" delete-label="@L["Profiles.Delete"]" delete-confirm="@L["Profiles.DeleteConfirm", Model.Name]" />
+    }
+    else
+    {
+        <mh-buttons back="/rollout/profiles" />
+    }
+</form>

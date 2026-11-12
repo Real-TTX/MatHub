@@ -1,0 +1,84 @@
+@page "/scripts/{id:long}/code"
+@model MatHub.Pages.Scripts.CodeModel
+@{
+    var s = Model.Script;
+    ViewData["Title"] = s.Name;
+    ViewData["PageSub"] = L["Scripts.Editor." + s.Editor + ".Hint"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Scripts.Title"].Value, "/scripts"), (s.Name, $"/scripts/edit?id={s.Id}"), (L["Scripts.Tab.Script"].Value, null) };
+    ViewData["Tab"] = "code";
+    ViewData["Width"] = "wide";
+    var language = s.Language.ToString().ToLowerInvariant();
+}
+
+<partial name="_ScriptTabs" model="s.Id" />
+
+@if (Model.Errors.Count > 0)
+{
+    <div class="mat-alert mat-alert--warning" role="status" data-compile-errors>
+        @Ui.Icon("alert")
+        <div class="mat-alert__body">
+            <strong class="mat-alert__title">@L["Scripts.Errors"]</strong>
+            <ul class="mat-alert__list">@foreach (var e in Model.Errors) { <li>@e</li> }</ul>
+        </div>
+    </div>
+}
+
+<form class="mat-form" method="post" novalidate data-script-form>
+    @switch (s.Editor)
+    {
+        case ScriptEditor.Code:
+            @* the code editor: a real textarea (it posts and works without the script); editors.js lays the highlighting and the line numbers under it *@
+            <div class="mh-code" data-code-editor data-language="@language">
+                <label class="mat-sr-only" for="Code">@L["Scripts.Tab.Script"]</label>
+                <textarea class="mh-code__input" id="Code" name="Code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" readonly="@(!Model.CanEdit)">@Model.Code</textarea>
+            </div>
+            break;
+
+        case ScriptEditor.Blocks:
+            <div class="mh-editor" data-block-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
+                <input type="hidden" name="ModelJson" value="@Model.ModelJson" data-model />
+                <div class="mh-editor__main">
+                    <ol class="mh-blocks" data-blocks aria-label="@L["Blocks.List"]"></ol>
+                    <div class="mh-blocks__add" data-add-block hidden="@(!Model.CanEdit)"></div>
+                </div>
+                <aside class="mh-editor__side">
+                    <div class="mat-card">
+                        <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("code")@L["Scripts.Preview"]</h2></div>
+                        <div class="mat-card__body"><pre class="mat-code mh-preview" data-preview><code>@s.Content</code></pre><ul class="mh-preview__errors" data-preview-errors></ul></div>
+                    </div>
+                </aside>
+            </div>
+            break;
+
+        default:
+            <div class="mh-editor mh-editor--flow" data-flow-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
+                <input type="hidden" name="ModelJson" value="@Model.ModelJson" data-model />
+                <div class="mh-flow">
+                    <div class="mh-flow__palette" data-palette aria-label="@L["Flow.Palette"]"></div>
+                    <div class="mh-flow__canvas" data-canvas tabindex="0" aria-label="@L["Flow.Canvas"]"></div>
+                    <div class="mh-flow__props" data-props aria-live="polite"></div>
+                </div>
+                <details class="mat-card mh-flow__preview">
+                    <summary class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("code")@L["Scripts.Preview"]</h2></summary>
+                    <div class="mat-card__body"><pre class="mat-code mh-preview" data-preview><code>@s.Content</code></pre><ul class="mh-preview__errors" data-preview-errors></ul></div>
+                </details>
+            </div>
+            break;
+    }
+
+    <div class="mat-btn-row mh-btn-row">
+        @if (Model.CanEdit)
+        {
+            <button type="submit" class="mat-btn mat-btn--primary">@Ui.Icon("save")<span>@L["Common.Save"]</span></button>
+        }
+        <a class="mat-btn mat-btn--secondary" href="/scripts/edit?id=@s.Id">@Ui.Icon("back")<span>@L["Common.Back"]</span></a>
+        @if (Model.CanRun)
+        {
+            <a class="mat-btn mat-btn--ghost" href="/jobs/new?script=@s.Id" data-run-link>@Ui.Icon("play")<span>@L["Scripts.Run"]</span></a>
+        }
+    </div>
+</form>
+
+@section Scripts {
+    <script type="module" src="~/js/editors.js" asp-append-version="true"></script>
+}

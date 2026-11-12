@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MatHub/MatHub.csproj" />
+    <Project Path="src/MatHub.Agent/MatHub.Agent.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MatHub.Tests/MatHub.Tests.csproj" />
+  </Folder>
+</Solution>

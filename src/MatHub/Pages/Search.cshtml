@@ -1,0 +1,32 @@
+@page "/search"
+@model MatHub.Pages.SearchModel
+@{
+    ViewData["Title"] = L["Search.Title"].Value;
+    ViewData["PageSub"] = string.IsNullOrEmpty(Model.Query) ? null : L["Search.For", Model.Query].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Search.Title"].Value, null) };
+    ViewData["SearchText"] = Model.Query;
+}
+
+@if (Model.Groups.Count == 0)
+{
+    <partial name="_Empty" model="@(new EmptyStateModel("search", L[string.IsNullOrEmpty(Model.Query) ? "Search.Start" : "Search.None"].Value, L["Search.Hint"].Value, false))" />
+}
+else
+{
+    <div class="mat-stack">
+        @foreach (var g in Model.Groups)
+        {
+            <div class="mat-card">
+                <div class="mat-card__head"><h2 class="mat-card__title">@g.Name <span class="mat-badge">@g.Items.Count</span></h2></div>
+                <div class="mat-card__body">
+                    <ul class="mat-itemlist">
+                        @foreach (var i in g.Items)
+                        {
+                            <li class="mat-item"><a class="mat-item__main" href="@i.Href"><span class="mat-item__lead">@Ui.Icon(i.Icon)</span><span class="mat-item__body"><span class="mat-item__title">@i.Title</span>@if (!string.IsNullOrEmpty(i.Text)) { <span class="mat-item__text">@i.Text</span> }</span></a></li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+    </div>
+}

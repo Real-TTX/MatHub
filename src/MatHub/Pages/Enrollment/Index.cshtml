@@ -1,0 +1,101 @@
+@page "/enrollment"
+@model MatHub.Pages.Enrollment.IndexModel
+@using MatHub.Services.Agent
+@{
+    ViewData["Title"] = L["Enrollment.Title"].Value;
+    ViewData["PageSub"] = L["Enrollment.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Clients.Title"].Value, "/clients"), (L["Enrollment.Title"].Value, null) };
+}
+
+@if (Model.NewKey is { } key)
+{
+    <div class="mat-alert mat-alert--success" role="status">
+        @Ui.Icon("key")
+        <div class="mat-alert__body">
+            <strong class="mat-alert__title">@L["Enrollment.NewKey.Title"]</strong>
+            <p>@L["Enrollment.NewKey.Text"]</p>
+            <div class="mh-copyrow">
+                <input class="mat-input mat-mono" id="mh-new-key" value="@key" readonly aria-label="@L["Enrollment.Key"]" />
+                <button type="button" class="mat-btn mat-btn--secondary" data-copy="#mh-new-key">@Ui.Icon("copy")<span>@L["Common.Copy"]</span></button>
+            </div>
+            <p class="mh-mt">@L["Enrollment.NewKey.Command"]</p>
+            <pre class="mat-code mh-command" id="mh-new-command"><code>@AgentFiles.InstallCommand(Model.Server, key)</code></pre>
+            <div class="mat-alert__actions"><button type="button" class="mat-btn mat-btn--primary mat-btn--sm" data-copy="#mh-new-command">@Ui.Icon("copy")<span>@L["Enrollment.CopyCommand"]</span></button></div>
+        </div>
+    </div>
+}
+
+<div class="mat-cols">
+    <div class="mat-col-12 mat-col-lg-7">
+        <div class="mat-list">
+            @if (Model.Keys.Count == 0)
+            {
+                <partial name="_Empty" model="@(new EmptyStateModel("key", L["Enrollment.Empty"].Value, L["Enrollment.EmptyText"].Value, true, "/enrollment/edit", L["Enrollment.New"].Value))" />
+            }
+            else
+            {
+                <mh-table caption="@L["Enrollment.Keys"]">
+                    <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["Common.Status"]</th><th scope="col" class="mat-hide-sm">@L["Enrollment.Group"]</th><th scope="col" class="mat-num">@L["Enrollment.Uses"]</th></tr></thead>
+                    <tbody>
+                        @foreach (var k in Model.Keys)
+                        {
+                            <tr>
+                                <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/enrollment/edit?id=@k.Id"><span class="mh-name">@Ui.Icon("key")@k.Name</span></a><small class="mh-muted mat-mono mh-block-line">@k.Prefix…</small></td>
+                                <td data-label="@L["Common.Status"]">
+                                    @if (k.Usable)
+                                    {
+                                        <span class="mat-pill mat-pill--ok">@L["Common.Active"]</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="mat-pill mat-pill--plain">@L["Enrollment.NotUsable"]</span>
+                                    }
+                                    @if (!k.AutoApprove)
+                                    {
+                                        <span class="mat-pill mat-pill--warn">@L["Enrollment.NeedsApproval"]</span>
+                                    }
+                                </td>
+                                <td data-label="@L["Enrollment.Group"]" class="mat-hide-sm">@if (k.GroupName is not null) { <span class="mat-tag" data-colour="@k.GroupColour">@k.GroupName</span> } else { <span class="mh-muted">–</span> }</td>
+                                <td data-label="@L["Enrollment.Uses"]" class="mat-num mat-table__keep-label">@k.UseCount@(k.MaxUses > 0 ? " / " + k.MaxUses : string.Empty)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </mh-table>
+            }
+            <div class="mat-actions">
+                <a class="mat-btn mat-btn--primary" href="/enrollment/edit">@Ui.Icon("plus")<span>@L["Enrollment.New"]</span></a>
+            </div>
+        </div>
+    </div>
+    <div class="mat-col-12 mat-col-lg-5">
+        <div class="mat-card">
+            <div class="mat-card__head"><h2 class="mat-card__title">@Ui.Icon("windows")@L["Enrollment.Install"]</h2></div>
+            <div class="mat-card__body">
+                @if (!Model.Agent.Available)
+                {
+                    <div class="mat-alert mat-alert--warning" role="status">@Ui.Icon("alert")<div class="mat-alert__body">@L["Enrollment.NoAgent"]</div></div>
+                }
+                <ol class="mh-steps">
+                    <li>@L["Enrollment.Step1"]</li>
+                    <li>@L["Enrollment.Step2"]</li>
+                </ol>
+                <pre class="mat-code mh-command" id="mh-command"><code>@AgentFiles.InstallCommand(Model.Server, null)</code></pre>
+                <div class="mat-btn-row mat-btn-row--plain">
+                    <button type="button" class="mat-btn mat-btn--secondary" data-copy="#mh-command">@Ui.Icon("copy")<span>@L["Enrollment.CopyCommand"]</span></button>
+                    @if (Model.Agent.Available)
+                    {
+                        <a class="mat-btn mat-btn--ghost" href="/agent/@AgentFiles.FileName" download>@Ui.Icon("download")<span>@L["Enrollment.Download"]</span></a>
+                    }
+                </div>
+                <p class="mat-hint">@L["Enrollment.Manual", "mathub-agent.exe install --server " + Model.Server + " --key <KEY>"]</p>
+                @if (Model.Agent.Available)
+                {
+                    <dl class="mh-dl">
+                        <dt>@L["System.AgentVersion"]</dt><dd class="mat-mono">@Model.Agent.Version</dd>
+                        <dt>SHA-256</dt><dd class="mat-mono mh-wrap">@Model.Agent.Sha256</dd>
+                    </dl>
+                }
+            </div>
+        </div>
+    </div>
+</div>

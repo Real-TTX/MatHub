@@ -1,0 +1,121 @@
+@model (MenuModel Menu, string Area)
+@inject CurrentUser Me
+@using MatHub.Services.Access
+@*
+    The menus (SHELL-01 .. SHELL-19): one panel per menu of the switcher at the foot (SHELL-15), the one of the page shown.
+    - hub:      Run (the main action), overview, clients, groups, enrollment; software (packages, updates); automation (scripts, jobs); rollout
+    - settings: profile, password, my data
+    - admin:    users, roles, connections, activity, system (administrators only)
+    Every item is shown only with its permission: the business layer checks again.
+*@
+@{
+    var m = Model.Menu;
+    var path = Context.Request.Path.Value ?? "/";
+
+    bool Under(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    string Cls(bool active) => "mat-nav__item" + (active ? " is-active" : string.Empty);
+    string Cur(bool active) => active ? "page" : null!;
+    string Badge(int n) => n > 99 ? "99+" : n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    var canRun = Me.Can(Permission.ScriptsRun) || Me.Can(Permission.PackagesDeploy);
+    var rolloutPaths = Under("/rollout");
+}
+<nav class="mat-nav__scroll" aria-label="@L["Shell.Area.Hub"]" data-nav-panel="hub" hidden="@(Model.Area != "hub")">
+    <ul class="mat-nav__list">
+        @if (canRun)
+        {
+            <li><a class="mat-nav__item mat-nav__item--primary" href="/jobs/new">@Ui.Icon("play")<span>@L["Jobs.New"]</span></a></li>
+        }
+        <li><a class="@Cls(path == "/")" href="/" aria-current="@Cur(path == "/")">@Ui.Icon("dashboard")<span>@L["Dashboard.Title"]</span></a></li>
+        @if (Me.Can(Permission.ClientsView))
+        {
+            <li>
+                <a class="@Cls(Under("/clients"))" href="/clients" aria-current="@Cur(Under("/clients"))">@Ui.Icon("monitor")<span>@L["Clients.Title"]</span>
+                    @if (m.Pending > 0)
+                    {
+                        <span class="mat-nav__badge mat-nav__badge--warn">@Badge(m.Pending)<span class="mat-sr-only"> @L["Clients.State.Pending"]</span></span>
+                    }
+                </a>
+            </li>
+            <li><a class="@Cls(Under("/groups"))" href="/groups" aria-current="@Cur(Under("/groups"))">@Ui.Icon("folder")<span>@L["Groups.Title"]</span></a></li>
+        }
+        @if (Me.Can(Permission.ClientsEnroll))
+        {
+            <li><a class="@Cls(Under("/enrollment"))" href="/enrollment" aria-current="@Cur(Under("/enrollment"))">@Ui.Icon("key")<span>@L["Enrollment.Title"]</span></a></li>
+        }
+
+        @if (Me.Can(Permission.PackagesView))
+        {
+            <li class="mat-nav__group" role="presentation">@L["Shell.Group.Software"]</li>
+            <li><a class="@Cls(Under("/packages"))" href="/packages" aria-current="@Cur(Under("/packages"))">@Ui.Icon("box")<span>@L["Packages.Title"]</span></a></li>
+            @if (Me.Can(Permission.ClientsView))
+            {
+                <li>
+                    <a class="@Cls(Under("/updates"))" href="/updates" aria-current="@Cur(Under("/updates"))">@Ui.Icon("refresh")<span>@L["Updates.Title"]</span>
+                        @if (m.ClientsWithUpdates > 0)
+                        {
+                            <span class="mat-nav__badge mat-nav__badge--accent">@Badge(m.ClientsWithUpdates)<span class="mat-sr-only"> @L["Updates.ClientsWithUpdates"]</span></span>
+                        }
+                    </a>
+                </li>
+            }
+        }
+
+        @if (Me.Can(Permission.ScriptsView) || Me.Can(Permission.JobsView))
+        {
+            <li class="mat-nav__group" role="presentation">@L["Shell.Group.Automation"]</li>
+            @if (Me.Can(Permission.ScriptsView))
+            {
+                <li><a class="@Cls(Under("/scripts"))" href="/scripts" aria-current="@Cur(Under("/scripts"))">@Ui.Icon("terminal")<span>@L["Scripts.Title"]</span></a></li>
+            }
+            @if (Me.Can(Permission.JobsView))
+            {
+                <li>
+                    <a class="@Cls(Under("/jobs") && path != "/jobs/new")" href="/jobs" aria-current="@Cur(Under("/jobs") && path != "/jobs/new")">@Ui.Icon("activity")<span>@L["Jobs.Title"]</span>
+                        @if (m.OpenRuns > 0)
+                        {
+                            <span class="mat-nav__badge mat-nav__badge--plain">@Badge(m.OpenRuns)<span class="mat-sr-only"> @L["Jobs.State.Open"]</span></span>
+                        }
+                    </a>
+                </li>
+            }
+        }
+
+        @if (Me.Can(Permission.RolloutView))
+        {
+            <li class="mat-nav__group" role="presentation">@L["Shell.Group.Rollout"]</li>
+            <li>
+                <a class="@Cls(path.Equals("/rollout", StringComparison.OrdinalIgnoreCase) || Under("/rollout/tasks"))" href="/rollout" aria-current="@Cur(path.Equals("/rollout", StringComparison.OrdinalIgnoreCase) || Under("/rollout/tasks"))">@Ui.Icon("server")<span>@L["Rollout.Tasks"]</span>
+                    @if (m.RolloutsOpen > 0)
+                    {
+                        <span class="mat-nav__badge mat-nav__badge--plain">@Badge(m.RolloutsOpen)<span class="mat-sr-only"> @L["Rollout.Open"]</span></span>
+                    }
+                </a>
+            </li>
+            <li><a class="@Cls(Under("/rollout/devices"))" href="/rollout/devices" aria-current="@Cur(Under("/rollout/devices"))">@Ui.Icon("network")<span>@L["Devices.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/rollout/profiles"))" href="/rollout/profiles" aria-current="@Cur(Under("/rollout/profiles"))">@Ui.Icon("layers")<span>@L["Profiles.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/rollout/images"))" href="/rollout/images" aria-current="@Cur(Under("/rollout/images"))">@Ui.Icon("hard-drive")<span>@L["Images.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/rollout/setup"))" href="/rollout/setup" aria-current="@Cur(Under("/rollout/setup"))">@Ui.Icon("info")<span>@L["NetbootSetup.Title"]</span></a></li>
+        }
+    </ul>
+</nav>
+
+<nav class="mat-nav__scroll" aria-label="@L["Settings.Title"]" data-nav-panel="settings" hidden="@(Model.Area != "settings")">
+    <ul class="mat-nav__list">
+        <li><a class="@Cls(path.Equals("/Account", StringComparison.OrdinalIgnoreCase))" href="/Account" aria-current="@Cur(path.Equals("/Account", StringComparison.OrdinalIgnoreCase))">@Ui.Icon("user")<span>@L["Settings.Profile"]</span></a></li>
+        <li><a class="@Cls(Under("/Account/Password"))" href="/Account/Password" aria-current="@Cur(Under("/Account/Password"))">@Ui.Icon("lock")<span>@L["Password.Title"]</span></a></li>
+        <li><a class="@Cls(Under("/Account/Data"))" href="/Account/Data" aria-current="@Cur(Under("/Account/Data"))">@Ui.Icon("database")<span>@L["Data.Title"]</span></a></li>
+    </ul>
+</nav>
+
+@if (Me.IsAdmin)
+{
+    <nav class="mat-nav__scroll" aria-label="@L["Admin.Title"]" data-nav-panel="admin" hidden="@(Model.Area != "admin")">
+        <ul class="mat-nav__list">
+            <li><a class="@Cls(Under("/Admin/Users"))" href="/Admin/Users" aria-current="@Cur(Under("/Admin/Users"))">@Ui.Icon("user-circle")<span>@L["Users.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/Admin/Roles"))" href="/Admin/Roles" aria-current="@Cur(Under("/Admin/Roles"))">@Ui.Icon("shield")<span>@L["Roles.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/Admin/Connections"))" href="/Admin/Connections" aria-current="@Cur(Under("/Admin/Connections"))">@Ui.Icon("plug")<span>@L["Connections.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/Admin/Activity"))" href="/Admin/Activity" aria-current="@Cur(Under("/Admin/Activity"))">@Ui.Icon("activity")<span>@L["Activity.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/Admin/System"))" href="/Admin/System" aria-current="@Cur(Under("/Admin/System"))">@Ui.Icon("settings")<span>@L["System.Title"]</span></a></li>
+        </ul>
+    </nav>
+}

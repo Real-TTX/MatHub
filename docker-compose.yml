@@ -1,0 +1,41 @@
+# MatHub - Release (branch main, image :latest)
+#   docker compose up -d        ->  http://localhost:4910
+# The first account that registers is the administrator. No variable is needed: MatHub does its whole job without them.
+# Ports: 4910 the pages, the agents and the HTTP part of the network boot; 69/udp the TFTP server of the network boot.
+# Mattiverse connects the rest by itself (see README); without it, these are optional under "environment:" of web:
+#   MAT_PUBLIC_URL                public address (the agents and mails use it); fixed on Administration -> System while set
+#   MAT_FRAME_ANCESTORS           origins that may show MatHub in a frame (Mattiverse)
+#   MATIDENTITY_*, MATSMTP_*      sign-in through MatIdentity, mail through MatSMTP
+name: mathub
+
+services:
+  web:
+    image: ghcr.io/real-ttx/mathub:latest
+    restart: unless-stopped
+    ports:
+      - "4910:4910"
+      - "69:4969/udp"
+    volumes:
+      - web-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mathub
+      POSTGRES_USER: mathub
+      POSTGRES_PASSWORD: mathub
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mathub -d mathub"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  web-data:
+  db-data:
