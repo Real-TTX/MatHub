@@ -403,11 +403,41 @@ public sealed class HubTests
         Assert.Equal(test.Id, job.PackageVersionId);
         Assert.Equal(it.Id, Assert.Single(job.Runs).ClientId);
 
-        // without a pilot group there is no test
-        var bare = await PackageWithVersionAsync(t, "1.0");
-        var another = (await PackageVersions.CreateAsync(t.Db, Admin, bare.Id, "2.0", "upload")).Value!;
-        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, another.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "2.0"), null, null);
-        Assert.False((await PackageVersions.SetStatusAsync(t.Db, Admin, another.Id, VersionStatus.Testing)).Ok);
+        // without a pilot group a version in test goes to nobody by itself
+        var bare = await PackageWithVersionAsync(t, "10.2");
+        await PackageService.AssignAsync(t.Db, Admin, bare.Id, all.Id, AssignmentAction.Install);
+        var another = (await PackageVersions.CreateAsync(t.Db, Admin, bare.Id, "11.0", "upload")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, another.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "11.0"), null, null);
+        Assert.True((await PackageVersions.SetStatusAsync(t.Db, Admin, another.Id, VersionStatus.Testing)).Ok);
+        await Planner.RunOnceAsync(t.Db);
+        Assert.False(await t.Db.Jobs.AnyAsync(j => j.PackageVersionId == another.Id));
+    }
+
+    [DbFact]
+    public async Task A_job_takes_the_approved_version_or_the_one_in_test_never_a_new_one()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-1", "m-1");
+        var package = await PackageWithVersionAsync(t, "10.2");
+        var fresh = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "11.0", "catalog")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, fresh.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "11.0"), null, null);
+        JobRequest Install(long? version, JobKind kind = JobKind.PackageInstall) => new(kind, null, package.Id, null, [client.Id], [], PackageVersionId: version);
+
+        Assert.Equal("10.2", (await t.Db.PackageVersions.FindAsync((await JobService.CreateAsync(t.Db, Admin, Install(null))).Value!.PackageVersionId))!.Version);
+        Assert.False((await JobService.CreateAsync(t.Db, Admin, Install(fresh.Id))).Ok);
+        Assert.True((await PackageVersions.SetStatusAsync(t.Db, Admin, fresh.Id, VersionStatus.Testing)).Ok);
+        Assert.Equal(fresh.Id, (await JobService.CreateAsync(t.Db, Admin, Install(fresh.Id))).Value!.PackageVersionId);
+
+        // retired: no install, but an uninstall removes what is still there
+        var old = await t.Db.PackageVersions.AsNoTracking().SingleAsync(v => v.Version == "10.2");
+        Assert.True((await PackageVersions.SetStatusAsync(t.Db, Admin, fresh.Id, VersionStatus.Approved)).Ok);
+        Assert.False((await JobService.CreateAsync(t.Db, Admin, Install(old.Id))).Ok);
+        Assert.True((await JobService.CreateAsync(t.Db, Admin, Install(old.Id, JobKind.PackageUninstall))).Ok);
+
+        // the choices of a job: the approved version, the one in test as a choice of its own
+        var choices = await PackageVersions.JobChoicesAsync(t.Db, Admin);
+        Assert.Equal([package.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)], choices.Select(c => c.Value));
+        Assert.Equal((package.Id, (long?)fresh.Id), JobVersionChoice.Parse(package.Id + "@" + fresh.Id));
     }
 
     [DbFact]

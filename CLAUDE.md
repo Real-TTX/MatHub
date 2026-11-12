@@ -105,8 +105,9 @@ creates it first, clients check the server is the installed agent. A culture set
 behind its random token; its share password is in `mathub-setup.cmd` (say so: a read-only account).
 
 **Software**: a package is the software, its versions carry installers per platform; only an approved version is distributed (a version in test to the
-pilot group of the package); new versions of the catalog are prepared, never approved by MatHub itself (the user's decision); no path may install an unapproved
-version (no winget upgrade as a job or a step any more – the enum stays for old jobs). Versions are compared like winget (`WingetCatalog.CompareVersions`);
+pilot group of the package, and by a job of a person to the computers they choose: Jobs/New offers it as `package@version`, `JobVersionChoice`); new versions
+of the catalog are prepared, never approved by MatHub itself (the user's decision); no path may install a New or Retired version (`JobService.VersionForAsync`;
+an uninstall may take a Retired one) (no winget upgrade as a job or a step any more – the enum stays for old jobs). Versions are compared like winget (`WingetCatalog.CompareVersions`);
 "latest" (packages from before the versions) is no version: installed is enough (`PackageVersions.Comparable`).
 
 **Agent**: polling only (no open port on the client); jobs one after the other; scripts as files in the agent's own folder (deleted after the run); winget as

@@ -13,6 +13,22 @@ public sealed record InstallerForm(
 /// <summary>A version for the pages: its installers and how many clients have it.</summary>
 public sealed record VersionView(PackageVersion Version, IReadOnlyList<PackageInstaller> Installers, string? ApprovedBy, int Clients);
 
+/// <summary>A choice of a job: a package with its approved version (<paramref name="VersionId"/> null) or with its version in test.</summary>
+public sealed record JobVersionChoice(long PackageId, string Package, long? VersionId, string? Version, VersionStatus? Status)
+{
+    /// <summary>The value of the choice: <c>7</c> (the approved version of package 7) or <c>7@12</c> (its version 12).</summary>
+    public string Value => VersionId is { } v ? FormattableString.Invariant($"{PackageId}@{v}") : FormattableString.Invariant($"{PackageId}");
+
+    /// <summary>Reads a value back: the package and the version asked for.</summary>
+    public static (long? Package, long? Version) Parse(string? value)
+    {
+        var parts = (value ?? string.Empty).Split('@', 2, StringSplitOptions.TrimEntries);
+        var package = long.TryParse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : (long?)null;
+        var version = parts.Length == 2 && long.TryParse(parts[1], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (long?)null;
+        return (package, version);
+    }
+}
+
 /// <summary>
 /// The versions of the packages (static business layer). A version is New (uploaded, or found in the catalog), in Test (the pilot group of the package gets it),
 /// Approved (every assignment gets it: one approved version per package, the one before is retired) or Retired (kept for the way back). Each version has its
@@ -60,6 +76,34 @@ public static class PackageVersions
     }
 
     /// <summary>The approved version of a package and the one in test (each may be missing), with their installers.</summary>
+    /// <summary>
+    /// What a job may install, package by package: its approved version (<c>VersionId</c> null: the job takes the approved one when it is made) and a version in
+    /// test of its own (to try it on computers of one's choice). A package without both is listed without a version (the job says why it cannot run).
+    /// </summary>
+    public static async Task<IReadOnlyList<JobVersionChoice>> JobChoicesAsync(AppDbContext db, Actor actor, CancellationToken ct = default)
+    {
+        if (!actor.Can(Permission.PackagesView))
+        {
+            return [];
+        }
+
+        var packages = await db.Packages.AsNoTracking().OrderBy(p => p.Name).Select(p => new { p.Id, p.Name }).ToListAsync(ct);
+        var current = await db.PackageVersions.AsNoTracking().Where(v => v.Status == VersionStatus.Approved || v.Status == VersionStatus.Testing)
+            .OrderByDescending(v => v.Id).Select(v => new { v.Id, v.PackageId, v.Version, v.Status }).ToListAsync(ct);
+        var list = new List<JobVersionChoice>();
+        foreach (var p in packages)
+        {
+            var approved = current.FirstOrDefault(v => v.PackageId == p.Id && v.Status == VersionStatus.Approved);
+            list.Add(new JobVersionChoice(p.Id, p.Name, null, approved?.Version, approved is null ? null : VersionStatus.Approved));
+            if (current.FirstOrDefault(v => v.PackageId == p.Id && v.Status == VersionStatus.Testing) is { } testing)
+            {
+                list.Add(new JobVersionChoice(p.Id, p.Name, testing.Id, testing.Version, VersionStatus.Testing));
+            }
+        }
+
+        return list;
+    }
+
     public static async Task<(PackageVersion? Approved, PackageVersion? Testing)> CurrentAsync(AppDbContext db, long packageId, CancellationToken ct = default)
     {
         var current = await db.PackageVersions.AsNoTracking().Include(v => v.Installers)
@@ -212,11 +256,6 @@ public static class PackageVersions
         if (status is VersionStatus.Approved or VersionStatus.Testing && version.Installers.Count == 0)
         {
             return Outcome<PackageVersion>.Fail(Localization.Text.T("Versions.Error.NoInstaller"));
-        }
-
-        if (status == VersionStatus.Testing && version.Package.PilotGroupId is null)
-        {
-            return Outcome<PackageVersion>.Fail(Localization.Text.T("Versions.Error.NoPilot"));
         }
 
         var others = await db.PackageVersions.Where(v => v.PackageId == version.PackageId && v.Id != version.Id && v.Status == status).ToListAsync(ct);

@@ -58,12 +58,14 @@ public static class JobService
     };
 
     /// <summary>
-    /// The version a job of a package installs: the one asked for, else the approved one (a version in test only when it is asked for: the pilot group gets it
-    /// through the planner).
+    /// The version a job of a package takes: the one asked for, else the approved one. Asked for, an install may take the approved version or the one in test
+    /// (the pilot group gets it through the planner, a person may try it on computers of their choice) – never a new one nobody looked at, nor a retired one;
+    /// an uninstall may also take a retired version (it removes what is still there).
     /// </summary>
-    public static async Task<PackageVersion?> VersionForAsync(AppDbContext db, long packageId, long? versionId, CancellationToken ct)
+    public static async Task<PackageVersion?> VersionForAsync(AppDbContext db, long packageId, long? versionId, CancellationToken ct, bool uninstall = false)
         => versionId is { } id
-            ? await db.PackageVersions.AsNoTracking().Include(v => v.Installers).FirstOrDefaultAsync(v => v.Id == id && v.PackageId == packageId && v.Status != VersionStatus.Retired, ct)
+            ? await db.PackageVersions.AsNoTracking().Include(v => v.Installers).FirstOrDefaultAsync(v => v.Id == id && v.PackageId == packageId
+                && (v.Status == VersionStatus.Approved || v.Status == VersionStatus.Testing || (uninstall && v.Status == VersionStatus.Retired)), ct)
             : (await PackageVersions.CurrentAsync(db, packageId, ct)).Approved;
 
     /// <summary>Makes a job for the clients and groups of the request that the actor reaches. Fails when nothing can run or no client is left.</summary>
@@ -109,10 +111,10 @@ public static class JobService
                 }
 
                 var uninstall = request.Kind == JobKind.PackageUninstall;
-                var version = await VersionForAsync(db, package.Id, request.PackageVersionId, ct);
+                var version = await VersionForAsync(db, package.Id, request.PackageVersionId, ct, uninstall);
                 if (version is null)
                 {
-                    return Outcome<Job>.Fail(Localization.Text.T("Versions.Error.NoneApproved"));
+                    return Outcome<Job>.Fail(Localization.Text.T(request.PackageVersionId is null ? "Versions.Error.NoneApproved" : "Versions.Error.NotForJobs"));
                 }
 
                 if (PackageVersions.Template(version, uninstall) is not { } packageJob)

@@ -97,9 +97,13 @@
             <div class="mat-card__body mh-version__actions">
                 @if (Model.CanDeploy)
                 {
-                    @if (s == VersionStatus.New && p.PilotGroupId is not null)
+                    @if (s == VersionStatus.New)
                     {
-                        <form method="post" asp-page-handler="Status" asp-route-id="@p.Id" asp-route-version="@v.Version.Id" asp-route-status="Testing"><button type="submit" class="mat-btn mat-btn--secondary">@Ui.Icon("activity")<span>@L["Versions.Test"]</span></button></form>
+                        <form method="post" asp-page-handler="Status" asp-route-id="@p.Id" asp-route-version="@v.Version.Id" asp-route-status="Testing"><button type="submit" class="mat-btn mat-btn--secondary">@Ui.Icon("activity")<span>@L[p.PilotGroupId is null ? "Versions.TestAlone" : "Versions.Test"]</span></button></form>
+                    }
+                    @if (s == VersionStatus.Testing)
+                    {
+                        <a class="mat-btn mat-btn--secondary" href="/jobs/new?package=@p.Id&version=@v.Version.Id">@Ui.Icon("play")<span>@L["Versions.TryOn"]</span></a>
                     }
                     @if (s is VersionStatus.New or VersionStatus.Testing or VersionStatus.Retired)
                     {

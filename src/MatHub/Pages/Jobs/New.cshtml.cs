@@ -15,7 +15,8 @@ namespace MatHub.Pages.Jobs;
 /// <summary>
 /// Run something on clients: a script, an install or an uninstall of a package, updates (winget), an inventory, a restart. The targets are clients and groups;
 /// only what the person may do and the clients they reach can be chosen (and the business layer checks it again). Other pages lead here with a choice made:
-/// <c>?script=</c>, <c>?package=</c>, <c>?client=</c> (also several), <c>?group=</c>.
+/// <c>?script=</c>, <c>?package=</c> (+ <c>&version=</c>: its version in test), <c>?client=</c> (also several), <c>?group=</c>.
+/// A package is chosen with its version: the approved one, or the one in test (<see cref="JobVersionChoice"/>).
 /// </summary>
 public sealed class NewModel(AppDbContext db) : AppPageModel
 {
@@ -73,7 +74,9 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
         else if (long.TryParse(q["package"], out var package))
         {
             Kind = q["action"] == "uninstall" ? JobKind.PackageUninstall : JobKind.PackageInstall;
-            PackageId = package.ToString(CultureInfo.InvariantCulture);
+            // a version only when it is one of the choices (the one in test), else the approved one
+            var asked = long.TryParse(q["version"], out var version) ? new JobVersionChoice(package, string.Empty, version, null, null).Value : null;
+            PackageId = asked is not null && PackageChoices.Any(c => c.Value == asked) ? asked : package.ToString(CultureInfo.InvariantCulture);
         }
         else if (long.TryParse(q["sequence"], out var sequence))
         {
@@ -121,15 +124,17 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
             }
         }
 
+        var (package, version) = JobVersionChoice.Parse(PackageId);
         var request = new JobRequest(
             Kind,
             long.TryParse(ScriptId, out var s) ? s : null,
-            long.TryParse(PackageId, out var p) ? p : null,
+            package,
             Kind == JobKind.WingetUpgrade ? WingetId : null,
             Ids(Clients),
             Ids(Groups),
             notBefore,
-            long.TryParse(SequenceId, out var q) ? q : null);
+            long.TryParse(SequenceId, out var q) ? q : null,
+            version);
         var outcome = await JobService.CreateAsync(db, Me.Actor, request, ct: HttpContext.RequestAborted);
         if (!outcome.Ok)
         {
@@ -154,7 +159,15 @@ public sealed class NewModel(AppDbContext db) : AppPageModel
             .Select(k => new Choice(k.ToString(), Text.T("Jobs.Kind." + k), Text.T("Jobs.Kind." + k + ".Hint")))
             .ToList();
         ScriptChoices = (await ScriptService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name)).ToList();
-        PackageChoices = (await PackageService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name, Text.T("Packages.Kind." + x.Kind))).ToList();
+        PackageChoices = (await PackageVersions.JobChoicesAsync(db, actor, ct)).Select(x => new Choice(
+            x.Value,
+            x.VersionId is null ? x.Package : Text.T("Jobs.PackageVersion", x.Package, x.Version!),
+            x.Status switch
+            {
+                VersionStatus.Approved => Text.T("Versions.ApprovedIs", PackageVersions.Show(x.Version)),
+                VersionStatus.Testing => Text.T("Jobs.PackageVersion.Testing"),
+                _ => Text.T("Versions.NoneApproved"),
+            })).ToList();
         SequenceChoices = (await SequenceService.ChoicesAsync(db, actor, ct)).Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name)).ToList();
         ClientChoices = (await ClientService.ChoicesAsync(db, actor, ct))
             .Select(x => new Choice(x.Id.ToString(CultureInfo.InvariantCulture), x.Name, Text.T(x.Online ? "Clients.State.Online" : "Clients.State.Offline"))).ToList();

@@ -26,6 +26,8 @@
   "Jobs.Kind.System": { "en": "System", "de": "System" },
   "Jobs.ChooseScript": { "en": "Choose a script", "de": "Skript wählen" },
   "Jobs.ChoosePackage": { "en": "Choose a package", "de": "Paket wählen" },
+  "Jobs.PackageVersion": { "en": "{0} {1}", "de": "{0} {1}" },
+  "Jobs.PackageVersion.Testing": { "en": "In test – tried on the computers you choose", "de": "Im Test – auf den Computern ausprobiert, die du wählst" },
   "Jobs.WingetId.Hint": { "en": "Empty: every update winget offers.", "de": "Leer: jedes Update, das winget anbietet." },
   "Jobs.Groups.Hint": { "en": "Every active member of these groups gets the job too.", "de": "Jedes aktive Mitglied dieser Gruppen bekommt den Auftrag auch." },
   "Jobs.Start": { "en": "Start", "de": "Starten" },
