@@ -113,7 +113,11 @@ public static class JobService
                 job.ScriptId = script.Id;
                 job.Language = script.Language;
                 job.TimeoutSeconds = script.TimeoutSeconds;
-                template = new AgentJob { Kind = JobKinds.Script, Language = LanguageOf(script.Language), Script = script.Content, TimeoutSeconds = script.TimeoutSeconds };
+                template = new AgentJob
+                {
+                    Kind = JobKinds.Script, Language = LanguageOf(script.Language), Script = script.Content, TimeoutSeconds = script.TimeoutSeconds,
+                    Files = await ScriptFileService.ForJobAsync(db, script.Id, ct),
+                };
                 break;
             case JobKind.PackageInstall:
             case JobKind.PackageUninstall:

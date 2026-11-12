@@ -9,7 +9,7 @@ namespace MatHub.Services.Scripts;
 /// <summary>A field of a block: what the editor shows and what the compiler reads (<c>values[Name]</c>).</summary>
 /// <param name="Kind">
 /// text, number, select, textarea, bool ("true" or empty), secret (the name of a <see cref="MatHub.Data.Secret"/>), variable (the name of a variable the step fills),
-/// fields (the fields and pages of a dialog, as JSON).
+/// fields (the fields and pages of a dialog, as JSON), file (a path; <c>./name</c> is a file of the script, chosen from its files).
 /// </param>
 /// <param name="Default">What a new block has in the field.</param>
 public sealed record BlockField(string Name, string Kind = "text", bool Required = true, IReadOnlyList<string>? Options = null, string? Placeholder = null, string? Default = null);
@@ -104,17 +104,17 @@ public static partial class ScriptBlocks
         new("winget-install", "software", "download", [new("id", Placeholder: "Mozilla.Firefox")]),
         new("winget-uninstall", "software", "trash", [new("id", Placeholder: "Mozilla.Firefox")]),
         new("winget-upgrade", "software", "refresh", [new("id", Required: false, Placeholder: "Mozilla.Firefox")]),
-        new("msi", "software", "archive", [new("path", Placeholder: @"\\server\software\app.msi"), new("arguments", Required: false, Placeholder: "ALLUSERS=1")]),
-        new("program", "software", "play", [new("path", Placeholder: @"C:\Tools\setup.exe"), new("arguments", Required: false, Placeholder: "/S")]),
+        new("msi", "software", "archive", [new("path", "file", Placeholder: @"./app.msi"), new("arguments", Required: false, Placeholder: "ALLUSERS=1")]),
+        new("program", "software", "play", [new("path", "file", Placeholder: @"./setup.exe"), new("arguments", Required: false, Placeholder: "/S")]),
         new("uninstall-program", "software", "trash", [new("name", Placeholder: "Adobe Acrobat Reader")]),
 
         // files
         new("download", "files", "download", [new("url", Placeholder: "https://example.com/file.zip"), new("path", Placeholder: @"C:\Temp\file.zip")]),
         new("folder", "files", "folder", [new("path", Placeholder: @"C:\Company")]),
-        new("copy", "files", "copy", [new("source", Placeholder: @"\\server\share\template"), new("target", Placeholder: @"C:\Company\template")]),
+        new("copy", "files", "copy", [new("source", "file", Placeholder: @"./settings.xml"), new("target", Placeholder: @"%ProgramData%\Company\settings.xml")]),
         new("delete", "files", "trash", [new("path", Placeholder: @"C:\Temp\old")]),
         new("write-file", "files", "file", [new("path", Placeholder: @"C:\Company\info.txt"), new("content", "textarea", Required: false)]),
-        new("unzip", "files", "archive", [new("source", Placeholder: @"C:\Temp\tool.zip"), new("target", Placeholder: @"C:\Tools\tool")]),
+        new("unzip", "files", "archive", [new("source", "file", Placeholder: @"./tool.zip"), new("target", Placeholder: @"C:\Tools\tool")]),
         new("replace-text", "files", "file-text", [new("path", Placeholder: @"C:\App\app.ini"), new("find", Placeholder: "Server=old"), new("replace", Required: false, Placeholder: "Server=new")]),
         new("shortcut", "files", "link", [
             new("path", Placeholder: @"C:\Users\Public\Desktop\Intranet.lnk"), new("target", Placeholder: @"C:\Program Files\App\app.exe"),
@@ -248,12 +248,28 @@ public static partial class ScriptBlocks
     }
 
     /// <summary>
-    /// A value as a PowerShell expression: a quoted string, or, when it names variables (<c>{{name}}</c>), the quoted parts joined with the variables
-    /// (<c>('BER-' + [string]$MatHubVars['serial'])</c>). A name is letters, digits and _ only, so nothing else of the text becomes code.
+    /// A value as a PowerShell expression (see <see cref="Text"/>): <c>./name</c> at its start is a file of the script (in the folder the run downloads them to),
+    /// <c>%ProgramData%</c> and the other variables of Windows are put in on the computer.
     /// </summary>
     public static string Expression(string? value)
     {
         value ??= string.Empty;
+        var file = value.StartsWith("./", StringComparison.Ordinal) || value.StartsWith(@".\", StringComparison.Ordinal);
+        var expression = Text(file ? value[2..] : value);
+        if (file)
+        {
+            expression = $"(Join-Path $MatHubFiles {expression})";
+        }
+
+        return WindowsVariableRegex().IsMatch(value) ? $"([Environment]::ExpandEnvironmentVariables({expression}))" : expression;
+    }
+
+    /// <summary>
+    /// A text as a PowerShell expression: a quoted string, or, when it names variables (<c>{{name}}</c>), the quoted parts joined with the variables
+    /// (<c>('BER-' + [string]$MatHubVars['serial'])</c>). A name is letters, digits and _ only, so nothing else of the text becomes code.
+    /// </summary>
+    private static string Text(string value)
+    {
         var matches = VariableRegex().Matches(value);
         if (matches.Count == 0)
         {
@@ -323,6 +339,8 @@ public static partial class ScriptBlocks
 
         # the variables of the script ({{name}} in a value); a dialog and "Set a variable" fill them
         $MatHubVars = @{}
+        # the files of the script: the folder of the run (./name in a field)
+        $MatHubFiles = if ($env:MATHUB_FILES) { $env:MATHUB_FILES } else { (Get-Location).Path }
         $MatHubVars['computer'] = $env:COMPUTERNAME
         $MatHubVars['date'] = (Get-Date).ToString('yyyy-MM-dd')
         try {
@@ -561,6 +579,9 @@ public static partial class ScriptBlocks
 
     [GeneratedRegex(@"\{\{\s*([A-Za-z][A-Za-z0-9_]{0,39})\s*\}\}")]
     private static partial Regex VariableRegex();
+
+    [GeneratedRegex(@"%[A-Za-z_][A-Za-z0-9_()]*%")]
+    private static partial Regex WindowsVariableRegex();
 
     [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9_]{0,39}$")]
     private static partial Regex VariableNameRegex();

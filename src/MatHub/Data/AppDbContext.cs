@@ -47,6 +47,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
 
     public DbSet<RolloutTask> RolloutTasks => Set<RolloutTask>();
 
+    public DbSet<ScriptFile> ScriptFiles => Set<ScriptFile>();
+
     public DbSet<Secret> Secrets => Set<Secret>();
 
     public DbSet<Sequence> Sequences => Set<Sequence>();
@@ -220,6 +222,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Origin).HasMaxLength(20);
             e.Property(x => x.Steps).HasColumnType("jsonb");
+        });
+
+        b.Entity<ScriptFile>(e =>
+        {
+            e.ToTable("ScriptFile");
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Sha256).HasMaxLength(64);
+            e.HasIndex(x => new { x.ScriptId, x.Name }).IsUnique();
+            e.HasOne(x => x.Script).WithMany().HasForeignKey(x => x.ScriptId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Secret>(e =>

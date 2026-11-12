@@ -1,0 +1,72 @@
+@page "/scripts/{id:long}/files"
+@model MatHub.Pages.Scripts.FilesModel
+@{
+    var s = Model.Script;
+    ViewData["Title"] = s.Name;
+    ViewData["PageSub"] = L["ScriptFiles.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Scripts.Title"].Value, "/scripts"), (s.Name, $"/scripts/edit?id={s.Id}"), (L["Scripts.Tab.Files"].Value, null) };
+    ViewData["Tab"] = "files";
+}
+
+<partial name="_ScriptTabs" model="s.Id" />
+
+<div class="mat-cols">
+    <div class="mat-col-12 mat-col-lg-8">
+        @if (Model.Files.Count == 0)
+        {
+            <partial name="_Empty" model="@(new EmptyStateModel("paperclip", L["ScriptFiles.Empty"].Value, L["ScriptFiles.EmptyText"].Value, false, null, null, null))" />
+        }
+        else
+        {
+            <mh-table caption="@L["Scripts.Tab.Files"]">
+                <thead><tr><th scope="col">@L["Common.Name"]</th><th scope="col">@L["ScriptFiles.InScript"]</th><th scope="col" class="mat-num mat-hide-sm">@L["ScriptFiles.Size"]</th><th scope="col" class="mat-hide-md">@L["Common.Updated"]</th>@if (Model.CanEdit) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+                <tbody>
+                    @foreach (var f in Model.Files)
+                    {
+                        <tr>
+                            <td data-label="@L["Common.Name"]" class="mat-table__primary"><span class="mh-name">@Ui.Icon("file")@f.Name</span></td>
+                            <td data-label="@L["ScriptFiles.InScript"]"><code class="mh-code-name">./@f.Name</code></td>
+                            <td data-label="@L["ScriptFiles.Size"]" class="mat-num mat-hide-sm mh-nowrap">@Ui.Bytes(f.Size)</td>
+                            <td data-label="@L["Common.Updated"]" class="mat-hide-md mh-nowrap">@Ui.When(f.UpdateDate, Model.Zone)</td>
+                            @if (Model.CanEdit)
+                            {
+                                <td class="mat-table__cell-actions">
+                                    <form method="post" asp-page-handler="Delete" asp-route-file="@f.Id" class="mat-table__actions">
+                                        <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["ScriptFiles.Delete", f.Name]" data-tip="@L["Common.Delete"]" data-confirm="@L["ScriptFiles.DeleteConfirm", f.Name]" data-confirm-ok="@L["Common.Delete"]">@Ui.Icon("trash")</button>
+                                    </form>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </mh-table>
+        }
+        @if (Model.CanEdit)
+        {
+            <form method="post" enctype="multipart/form-data" class="mat-card mh-upload" asp-page-handler="Upload">
+                <div class="mat-card__body">
+                    <label class="mat-label" for="Upload">@L["ScriptFiles.Add"]</label>
+                    <div class="mh-upload__row">
+                        <input class="mat-input" type="file" id="Upload" name="Upload" multiple />
+                        <button type="submit" class="mat-btn mat-btn--primary">@Ui.Icon("upload")<span>@L["ScriptFiles.Upload"]</span></button>
+                    </div>
+                    <p class="mat-hint">@L["ScriptFiles.Add.Hint"]</p>
+                </div>
+            </form>
+        }
+    </div>
+    <div class="mat-col-12 mat-col-lg-4">
+        <section class="mat-card" aria-labelledby="files-use">
+            <div class="mat-card__head"><h2 class="mat-card__title" id="files-use">@Ui.Icon("info")@L["ScriptFiles.How"]</h2></div>
+            <div class="mat-card__body">
+                <ul class="mh-checklist">
+                    <li>@Ui.Icon("download")<span>@L["ScriptFiles.How.Download"]</span></li>
+                    <li>@Ui.Icon("paperclip")<span>@L["ScriptFiles.How.Fields"]</span></li>
+                    <li>@Ui.Icon("code")<span>@L["ScriptFiles.How.Code"]</span></li>
+                    <li>@Ui.Icon("tag")<span>@L["ScriptFiles.How.Windows"]</span></li>
+                </ul>
+                <pre class="mat-code mh-mt"><code>Copy-Item (Join-Path $env:MATHUB_FILES 'settings.xml') "$env:ProgramData\Contoso\" -Force</code></pre>
+            </div>
+        </section>
+    </div>
+</div>

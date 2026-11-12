@@ -58,7 +58,7 @@ src/MatHub
   Services/Deployments/      Planner (+ PlannerService, every minute): makes the assignments true (install, uninstall, auto-update), waits for the next inventory
   Services/Scripts/          ScriptBlocks (THE catalog of actions + the compilers of blocks and flows, the prelude: $MatHubVars, Invoke-MatHubDialog, Get-MatHubSecret;
                              BlocksToFlow), ScriptSteps (the PowerShell of each action and check; dialogs as UiDialog JSON), ScriptTemplates, ScriptService,
-                             SecretService (DataProtection; ResolveAsync for a run), ScriptTester (a test from the editor on the person's computer, User.TestClientId;
+                             ScriptFiles (ScriptFileStore /data/scripts/{id}/, ScriptFileService: uploads, the files of a job, AllowedAsync), SecretService (DataProtection; ResolveAsync for a run), ScriptTester (a test from the editor on the person's computer, User.TestClientId;
                              trial runs: CompileBlocks/CompileFlow(dryRun) say what an action would do – DryRunSafe runs as it is – code is only parsed),
                              ScriptEndpoints (/live/scripts/compile, /live/scripts/{id}/test, /live/runs/{id})
   Services/Rollout/          RolloutService (images, profiles, tasks, devices), BootService (iPXE scripts, winpeshl.ini, mathub-setup.cmd, autounattend.xml), BootEndpoints (/boot/*),
@@ -68,7 +68,7 @@ src/MatHub
   Platform/                  MatHubPlatform (definition, state, settings, actions, health), MatHubIdentityUsers
   Controls/                  ONE code base per control: <mh-field>, <mh-buttons>, <mh-table>, <mh-tabs>/<mh-tab>, <mh-stats>/<mh-stat> (a row of numbers)
   Pages/                     Index (landing; _Dashboard = the overview), Clients/ (list + tabs General, Inventory, Software, Jobs, Activity), Groups/, Enrollment/, Packages/ (+ Assignments),
-                             Updates/, Scripts/ (Edit = General + templates, Code = the editor of its kind), Secrets/, Sequences/ (+ _Step), Kiosk/, Jobs/ (Index, New = now or later, Detail, Run), Groups/_Condition (a row of a rule), Rollout/ (Index = tasks, TaskEdit, Devices,
+                             Updates/, Scripts/ (Edit = General + templates, Code = the editor of its kind, Files), Secrets/, Sequences/ (+ _Step), Kiosk/, Jobs/ (Index, New = now or later, Detail, Run), Groups/_Condition (a row of a rule), Rollout/ (Index = tasks, TaskEdit, Devices,
                              Profiles/ProfileEdit, Images/ImageEdit, Setup), Admin/ (Users, Roles, Connections, Activity, System), Account/, Search, About
   wwwroot/js/                editors.js (code editor with toolbar/search/snippets, block editor, flow editor with zoom; the searchable palette, the field editor of dialogs),
                              scripttest.js (the test card of the editor), sequence.js (the steps of a sequence), kiosk.js (the preview of an offer), conditions.js (the rows of a group rule), live.js (refreshes running jobs), util.js, offline.js, pwa.js, zone.js, autosubmit.js
@@ -94,7 +94,7 @@ tools/                       logo.js, logo-png.js
 what the actor may not do. Something an actor does not reach answers 404 (`Outcome.Denied`). Administrators may do everything; users have one `AccessRole`
 (permissions, all clients or groups) plus what MatIdentity adds (`User.IdentityPermissions`). The agent API has no cookie: `X-MatHub-Client` + `X-MatHub-Key`,
 compared in constant time; a removed client gets 401, a switched-off one 403. Script values of the visual editors become single-quoted PowerShell strings
-(`ScriptBlocks.Quote`, also the typographic quotes); `{{name}}` in a value becomes `[string]$MatHubVars['name']` (names are letters, digits, _); only the
+(`ScriptBlocks.Quote`, also the typographic quotes); `{{name}}` in a value becomes `[string]$MatHubVars['name']` (names are letters, digits, _), `./name` a file of the script (`Join-Path $MatHubFiles`, the folder the agent runs the script in: `MATHUB_FILES`), `%VAR%` is expanded on the computer – every expression is in parentheses (an argument of a command); only the
 block "PowerShell" and the check "PowerShell is true" are code by intent. A new action: an entry in `ScriptBlocks.Types`, its PowerShell in `ScriptSteps`, its
 texts (`Blocks.Type/Hint/Field/Option.*`); `ScriptTests` compiles every action. Secrets reach only the run whose script names them (`SecretsIn`), as
 environment variables; the agent masks their values. The kiosk pipe: every signed-in user may use it (it offers what the kiosk shows anyway); the service

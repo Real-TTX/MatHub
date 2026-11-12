@@ -35,7 +35,7 @@
             break;
 
         case ScriptEditor.Blocks:
-            <div class="mh-editor" data-block-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-secrets="@Model.SecretsJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
+            <div class="mh-editor" data-block-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-secrets="@Model.SecretsJson" data-files="@Model.FilesJson" data-script="@s.Id" data-readonly="@(!Model.CanEdit ? "true" : null)">
                 <input type="hidden" name="ModelJson" value="@Model.ModelJson" data-model />
                 <div class="mh-editor__main">
                     <ol class="mh-blocks" data-blocks aria-label="@L["Blocks.List"]"></ol>
@@ -52,7 +52,7 @@
             break;
 
         default:
-            <div class="mh-editor mh-editor--flow" data-flow-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-secrets="@Model.SecretsJson" data-readonly="@(!Model.CanEdit ? "true" : null)">
+            <div class="mh-editor mh-editor--flow" data-flow-editor data-catalog="@Model.CatalogJson" data-categories="@Model.CategoriesJson" data-secrets="@Model.SecretsJson" data-files="@Model.FilesJson" data-script="@s.Id" data-readonly="@(!Model.CanEdit ? "true" : null)">
                 <input type="hidden" name="ModelJson" value="@Model.ModelJson" data-model />
                 <div class="mh-flow">
                     <div class="mh-flow__palette" data-palette aria-label="@L["Flow.Palette"]"></div>

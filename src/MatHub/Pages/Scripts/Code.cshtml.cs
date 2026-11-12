@@ -64,6 +64,9 @@ public sealed class CodeModel(AppDbContext db) : AppPageModel
     /// <summary>The names of the secrets a step can use (their values never come into the page).</summary>
     public string SecretsJson { get; private set; } = "[]";
 
+    /// <summary>The names of the files of the script (./name in a field).</summary>
+    public string FilesJson { get; private set; } = "[]";
+
     public async Task<IActionResult> OnGetAsync()
     {
         if (!await LoadAsync())
@@ -73,6 +76,7 @@ public sealed class CodeModel(AppDbContext db) : AppPageModel
 
         Code = Script.Content;
         SecretsJson = JsonSerializer.Serialize(await SecretService.NamesAsync(db, Me.Actor, HttpContext.RequestAborted), Json);
+        FilesJson = JsonSerializer.Serialize((await ScriptFileService.ListAsync(db, Me.Actor, Id, HttpContext.RequestAborted)).Select(f => f.Name), Json);
         if (CanTest)
         {
             TestClients = (await Services.Clients.ClientService.ChoicesAsync(db, Me.Actor, HttpContext.RequestAborted)).OrderByDescending(c => c.Online).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();

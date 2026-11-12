@@ -7,7 +7,7 @@
      next steps too, so it works with the keyboard and on a phone).
    The visual editors keep their model in the hidden field ModelJson; the server compiles it on save. While a person works, /live/scripts/compile shows the
    PowerShell it becomes. Every text a person typed goes into the page as text, never as markup. */
-import { t, el, icon, uid, request, debounce } from './util.js';
+import { t, el, icon, uid, request, debounce, token } from './util.js';
 
 // ------------------------------------------------------------------------------------------------------------------------- highlighting
 const KEYWORDS = {
@@ -73,6 +73,7 @@ const SNIPPETS = {
     ['try', "try {\n    |\n}\ncatch {\n    Write-Error $_\n    exit 1\n}"],
     ['function', "function |Name {\n    param([string]$Value)\n    \n}"],
     ['registry', "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\|' -Name 'Name' -Value 'Value'"],
+    ['files', "New-Item -ItemType Directory -Force -Path \"$env:ProgramData\\Contoso\" | Out-Null\nCopy-Item -Path (Join-Path $env:MATHUB_FILES '|settings.xml') -Destination \"$env:ProgramData\\Contoso\\\" -Force"],
     ['service', "Restart-Service -Name '|' -Force"],
     ['file', "if (Test-Path -Path '|') {\n    \n}"],
     ['output', "Write-Output \"|\""],
@@ -383,6 +384,9 @@ function catalogOf(root) {
     byId: Object.fromEntries(types.map(x => [x.id, x])),
     categories: JSON.parse(root.dataset.categories || '{}'),
     secrets: JSON.parse(root.dataset.secrets || '[]'),
+    files: JSON.parse(root.dataset.files || '[]'),
+    scriptId: root.dataset.script || null,
+    model: null,
     fieldKinds: JSON.parse(root.dataset.fieldKinds || '{}'),
   };
 }
@@ -486,10 +490,94 @@ function fieldInputs(type, values, readonly, onChange, idPrefix, catalog) {
     }
     input.addEventListener('input', () => { values[f.name] = input.value; onChange(); });
     input.addEventListener('change', () => { values[f.name] = input.value; onChange(); });
+    // text for the computer (not code, not a number): a menu puts in a file of the script, a variable of the script or one of Windows
+    const insertable = !readonly && catalog && (f.kind === 'text' || f.kind === 'file' || (f.kind === 'textarea' && PLAIN_FIELDS.includes(f.name)));
+    const control = insertable ? el('div', { class: 'mh-insert-wrap' }, input, insertMenu(input, f, catalog)) : input;
     return el('div', { class: 'mat-field' + (f.kind === 'textarea' ? ' mat-field--full' : '') },
       el('label', { class: 'mat-label', for: id }, f.label, f.required ? null : el('span', { class: 'mat-opt', text: ' (' + t('Editors.Optional') + ')' })),
-      input);
+      control);
   });
+}
+
+const WINDOWS_VARIABLES = ['%ProgramData%', '%ProgramFiles%', '%ProgramFiles(x86)%', '%SystemRoot%', '%SystemDrive%', '%PUBLIC%', '%TEMP%', '%ComputerName%'];
+const MATHUB_VARIABLES = ['computer', 'user', 'domain', 'serial', 'date', 'answer'];
+
+/** The variables the script fills itself: "Set a variable", the answer of a question, the fields of a form. */
+function scriptVariables(catalog) {
+  const names = new Set();
+  const model = catalog.model || {};
+  const steps = [...(model.blocks || []), ...(model.nodes || [])];
+  for (const step of steps) {
+    const v = step.values || {};
+    if (step.type === 'set-variable' || step.type === 'ui-question') { if (v.variable) names.add(v.variable); }
+    if (step.type === 'ui-form') { try { for (const field of JSON.parse(v.fields || '[]')) if (field.name && field.kind !== 'page' && field.kind !== 'info') names.add(field.name); } catch { /* not yet a list */ } }
+  }
+  if (names.has('restartNeeded') || steps.some(x => ['windows-update', 'windows-feature', 'rename-computer', 'domain-join'].includes(x.type))) names.add('restartNeeded');
+  return [...names].filter(n => !MATHUB_VARIABLES.includes(n));
+}
+
+/** Uploads a file to the script from the editor; answers its name. */
+async function uploadFile(file, catalog) {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await fetch('/live/scripts/' + catalog.scriptId + '/files', { method: 'POST', body, headers: { RequestVerificationToken: token() }, credentials: 'same-origin' });
+  if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || t('Editors.UploadFailed'));
+  const data = await response.json();
+  if (!catalog.files.includes(data.name)) catalog.files.push(data.name);
+  return data.name;
+}
+
+/** The menu beside a field: files of the script (a file field takes the file as its whole value), variables of the script and of MatHub, variables of Windows. */
+function insertMenu(input, field, catalog) {
+  const isFile = field.kind === 'file';
+  const label = isFile ? t('Editors.ChooseFile') : t('Editors.Insert');
+  const button = el('button', { type: 'button', class: 'mat-btn mat-btn--ghost mat-btn--icon mh-insert__open', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-label': label, 'data-tip': label + ': ' + t('Editors.InsertHint') },
+    icon(isFile ? 'paperclip' : 'tag'));
+  const pop = el('div', { class: 'mh-insert', hidden: true, role: 'menu' });
+  const put = text => {
+    if (isFile && text.startsWith('./')) {
+      input.value = text;
+    } else {
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? start;
+      input.value = input.value.slice(0, start) + text + input.value.slice(end);
+      input.setSelectionRange?.(start + text.length, start + text.length);
+    }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    close();
+    input.focus();
+  };
+  const item = (text, hint) => el('button', { type: 'button', class: 'mh-insert__item', role: 'menuitem', onclick: () => put(text) }, el('code', { text }), hint ? el('span', { class: 'mh-insert__hint', text: hint }) : null);
+  const group = (title, ...items) => items.length ? el('div', { class: 'mh-insert__group' }, el('span', { class: 'mh-insert__title', text: title }), ...items) : null;
+  const render = () => {
+    const upload = el('input', { type: 'file', hidden: true });
+    upload.addEventListener('change', async () => {
+      if (!upload.files?.length) return;
+      status.textContent = t('Editors.Uploading');
+      try { put('./' + await uploadFile(upload.files[0], catalog)); } catch (e) { status.textContent = e.message; }
+    });
+    const status = el('span', { class: 'mh-insert__status' });
+    pop.replaceChildren(
+      group(t('Editors.Files'), ...catalog.files.map(name => item('./' + name)),
+        catalog.scriptId ? el('button', { type: 'button', class: 'mh-insert__item mh-insert__upload', onclick: () => upload.click() }, icon('upload'), el('span', { text: t('Editors.UploadFile') })) : null,
+        upload, status),
+      group(t('Editors.ScriptVariables'), ...scriptVariables(catalog).map(n => item('{{' + n + '}}'))),
+      group(t('Editors.MatHubVariables'), ...MATHUB_VARIABLES.map(n => item('{{' + n + '}}', t('Editors.Var.' + n)))),
+      group(t('Editors.WindowsVariables'), ...WINDOWS_VARIABLES.map(v => item(v))));
+  };
+  const outside = e => { if (!pop.contains(e.target) && e.target !== button && !button.contains(e.target)) close(); };
+  const key = e => { if (e.key === 'Escape') { close(); button.focus(); } };
+  function close() { pop.hidden = true; button.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', key); }
+  button.addEventListener('click', () => {
+    if (!pop.hidden) { close(); return; }
+    render();
+    pop.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', key);
+    pop.querySelector('button')?.focus();
+  });
+  return el('div', { class: 'mh-insert-anchor' }, button, pop);
 }
 
 const FIELD_KINDS = ['text', 'password', 'choice', 'check', 'number', 'multiline', 'info', 'page'];
@@ -587,6 +675,7 @@ function blockEditor(root) {
   const readonly = root.dataset.readonly === 'true';
   const model = readModel(root);
   model.blocks ??= [];
+  catalog.model = model;
   const input = root.querySelector('[data-model]');
   const list = root.querySelector('[data-blocks]');
   const add = root.querySelector('[data-add-block]');
@@ -690,6 +779,7 @@ function flowEditor(root) {
   const readonly = root.dataset.readonly === 'true';
   const model = readModel(root);
   model.nodes ??= [];
+  catalog.model = model;
   model.edges ??= [];
   if (!model.nodes.some(n => n.type === 'start')) model.nodes.unshift({ id: 'start', type: 'start', values: {}, x: 60, y: 40 });
   const input = root.querySelector('[data-model]');

@@ -389,6 +389,20 @@ public sealed class Script : SoftEntity
     public int TimeoutSeconds { get; set; } = 600;
 }
 
+/// <summary>A file of a script (an XML, a configuration, a small installer): the agent downloads it into the folder the script runs in (<c>./name</c>).</summary>
+public sealed class ScriptFile : Entity
+{
+    public long ScriptId { get; set; }
+
+    public Script? Script { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public long Size { get; set; }
+
+    public string Sha256 { get; set; } = string.Empty;
+}
+
 // ==== Packages ========================================================================================================================
 
 public enum PackageKind

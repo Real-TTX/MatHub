@@ -44,6 +44,22 @@ public static class ScriptEndpoints
             return outcome.Ok ? Results.Ok(View(outcome.Value!)) : Results.BadRequest(new { error = outcome.Error });
         });
 
+        // a file for the script, from the field of an action
+        app.MapPost("/live/scripts/{id:long}/files", async (long id, HttpContext http, CurrentUser me, IAntiforgery anti, AppDbContext db, ScriptFileStore store) =>
+        {
+            await anti.ValidateRequestAsync(http);
+            var form = await http.Request.ReadFormAsync(http.RequestAborted);
+            if (form.Files.Count == 0)
+            {
+                return Results.BadRequest(new { error = Localization.Text.T("ScriptFiles.Error.None") });
+            }
+
+            var file = form.Files[0];
+            await using var stream = file.OpenReadStream();
+            var outcome = await ScriptFileService.UploadAsync(db, me.Actor, store, id, file.FileName, stream, http.RequestAborted);
+            return outcome.NotAllowed ? Results.NotFound() : outcome.Ok ? Results.Ok(new { name = outcome.Value!.Name }) : Results.BadRequest(new { error = outcome.Error });
+        }).WithMetadata(new Microsoft.AspNetCore.Mvc.DisableRequestSizeLimitAttribute());
+
         app.MapGet("/live/runs/{runId:long}", async (long runId, CurrentUser me, AppDbContext db, HttpContext http) =>
             await ScriptTester.StateAsync(db, me.Actor, runId, http.RequestAborted) is { } state ? Results.Ok(View(state)) : Results.NotFound());
     }

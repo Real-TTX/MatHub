@@ -59,6 +59,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MailService>());
 // The agent that MatHub hands out, the installers of the packages, the files of the network boot; the planner of the assignments and the TFTP server.
 builder.Services.AddSingleton<AgentFiles>();
 builder.Services.AddSingleton<PackageFiles>();
+builder.Services.AddSingleton<MatHub.Services.Scripts.ScriptFileStore>();
 builder.Services.AddSingleton<NetbootFiles>();
 builder.Services.AddSingleton<TftpServerInfo>();
 builder.Services.AddHostedService<PlannerService>();

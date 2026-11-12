@@ -9,6 +9,7 @@ using MatHub.Services.Kiosk;
 using MatHub.Services.Packages;
 using MatHub.Services.Scripts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MatHub.Tests;
 
@@ -274,6 +275,35 @@ public sealed class HubTests
         var runner = new Actor(7, false, new HashSet<string> { Permission.ScriptsView, Permission.ScriptsRun, Permission.JobsView }, true, []);
         Assert.True((await ScriptTester.StartAsync(t.Db, runner, script.Id, new ScriptTest(client.Id, true, "x", null))).NotAllowed);
         Assert.True((await ScriptTester.StartAsync(t.Db, runner, script.Id, new ScriptTest(client.Id, true, null, null))).Ok);
+    }
+
+    [DbFact]
+    public async Task The_files_of_a_script_go_with_its_run_and_only_to_that_run()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var store = new ScriptFileStore(new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["DataDirectory"] = Path.Combine(Path.GetTempPath(), "mathub-test-" + Guid.NewGuid().ToString("N")) }).Build());
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-FILES", "m-files");
+        var script = await ScriptAsync(t, "With a file", "Copy-Item (Join-Path $env:MATHUB_FILES 'settings.xml') C:\\Temp");
+        var other = await ScriptAsync(t, "Without", "Write-Output 1");
+        var uploaded = await ScriptFileService.UploadAsync(t.Db, Admin, store, script.Id, "C:\\fakepath\\settings.xml", new MemoryStream("<a/>"u8.ToArray()));
+        Assert.True(uploaded.Ok, uploaded.Error);
+        Assert.Equal("settings.xml", uploaded.Value!.Name);
+        Assert.True(File.Exists(store.PathOf(script.Id, "settings.xml")));
+
+        await JobService.CreateAsync(t.Db, Admin, new JobRequest(JobKind.Script, other.Id, null, null, [client.Id], []));
+        var first = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 1));
+        Assert.Null(first.Files);
+        Assert.False(await ScriptFileService.AllowedAsync(t.Db, client.Id, uploaded.Value));
+
+        await JobService.CreateAsync(t.Db, Admin, new JobRequest(JobKind.Script, script.Id, null, null, [client.Id], []));
+        var job = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5));
+        var file = Assert.Single(job.Files!);
+        Assert.Equal("settings.xml", file.Name);
+        Assert.Equal(uploaded.Value.Sha256, file.Sha256);
+        Assert.True(await ScriptFileService.AllowedAsync(t.Db, client.Id, uploaded.Value));
+        await JobService.CompleteAsync(t.Db, client.Id, job.RunId, new RunResult { Succeeded = true });
+        Assert.False(await ScriptFileService.AllowedAsync(t.Db, client.Id, uploaded.Value));
     }
 
     [DbFact]

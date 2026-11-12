@@ -38,6 +38,9 @@ public sealed record JobStep
 
     /// <summary>The installer of this package may be downloaded while the step runs.</summary>
     public long? PackageId { get; init; }
+
+    /// <summary>The files of this script may be downloaded while the step runs.</summary>
+    public long? ScriptId { get; init; }
 }
 
 public sealed record SequenceRow(long Id, string Name, string? Description, string? Category, int Steps, DateTime Updated, int Runs);
@@ -300,8 +303,12 @@ public static class SequenceService
 
                     result.Add(new JobStep
                     {
-                        Name = script.Name, Kind = step.Kind, ContinueOnError = step.ContinueOnError,
-                        Template = new AgentJob { Kind = JobKinds.Script, Language = JobService.LanguageOf(script.Language), Script = script.Content, TimeoutSeconds = script.TimeoutSeconds },
+                        Name = script.Name, Kind = step.Kind, ContinueOnError = step.ContinueOnError, ScriptId = script.Id,
+                        Template = new AgentJob
+                        {
+                            Kind = JobKinds.Script, Language = JobService.LanguageOf(script.Language), Script = script.Content, TimeoutSeconds = script.TimeoutSeconds,
+                            Files = await Scripts.ScriptFileService.ForJobAsync(db, script.Id, ct),
+                        },
                     });
                     break;
                 case SequenceStepKind.PackageInstall:

@@ -341,3 +341,26 @@ html.mh-code-full { overflow: hidden; }
 .mh-test__output { max-height: 50vh; overflow: auto; white-space: pre-wrap; margin: 0; }
 .mh-test__output[hidden] { display: none; }
 @media (max-width: 700px) { .mh-test__hint { display: none; } }
+
+/* ---- The insert menu beside a field: files of the script, variables -------------------------------------------------------------- */
+.mh-insert-wrap { display: flex; gap: var(--mat-space-1); align-items: flex-start; }
+.mh-insert-wrap > .mat-input, .mh-insert-wrap > .mat-textarea { flex: 1 1 auto; min-width: 0; }
+.mh-insert-anchor { position: relative; flex: none; }
+.mh-insert__open { height: var(--mat-control-h); }
+.mh-insert {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 40; width: min(22rem, 80vw); max-height: 22rem; overflow: auto; padding: var(--mat-space-2);
+  background: var(--mat-surface); border: 1px solid var(--mat-border); border-radius: var(--mat-radius); box-shadow: var(--mat-shadow-lg, 0 8px 24px rgb(0 0 0 / .16));
+  display: grid; gap: var(--mat-space-2);
+}
+.mh-insert[hidden] { display: none; }
+.mh-insert__group { display: grid; gap: 2px; }
+.mh-insert__title { padding: var(--mat-space-1) var(--mat-space-2) 0; font-size: var(--mat-fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--mat-text-muted); }
+.mh-insert__item { display: flex; align-items: baseline; gap: var(--mat-space-2); width: 100%; padding: var(--mat-space-1) var(--mat-space-2); border: 0; border-radius: var(--mat-radius-sm); background: none; color: var(--mat-text); text-align: left; cursor: pointer; font: inherit; }
+.mh-insert__item:hover, .mh-insert__item:focus-visible { background: var(--mat-surface-2); outline: none; }
+.mh-insert__item code { font-size: var(--mat-fs-sm); color: var(--mat-accent-text, var(--mat-accent)); background: none; padding: 0; }
+.mh-insert__hint { font-size: var(--mat-fs-xs); color: var(--mat-text-muted); }
+.mh-insert__upload { align-items: center; font-size: var(--mat-fs-sm); }
+.mh-insert__status { padding: 0 var(--mat-space-2); font-size: var(--mat-fs-xs); color: var(--mat-text-muted); }
+.mh-upload { margin-top: var(--mat-space-4); }
+.mh-upload__row { display: flex; gap: var(--mat-space-2); flex-wrap: wrap; align-items: center; }
+.mh-upload__row .mat-input { flex: 1 1 16rem; }

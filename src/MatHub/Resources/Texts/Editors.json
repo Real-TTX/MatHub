@@ -91,5 +91,22 @@
   "Js.Editors.Port.false": { "en": "If no", "de": "Wenn nein" },
   "Js.Editors.Port.error": { "en": "On an error", "de": "Bei einem Fehler" },
   "Js.Editors.ChooseTestClient": { "en": "Choose the computer to test on first.", "de": "Wähle zuerst den Computer zum Testen." },
-  "Js.Editors.TestFailed": { "en": "The test could not be started.", "de": "Der Test konnte nicht gestartet werden." }
+  "Js.Editors.TestFailed": { "en": "The test could not be started.", "de": "Der Test konnte nicht gestartet werden." },
+  "Js.Editors.Insert": { "en": "Insert", "de": "Einfügen" },
+  "Js.Editors.ChooseFile": { "en": "Choose a file", "de": "Datei wählen" },
+  "Js.Editors.InsertHint": { "en": "A file of the script, a variable of the script, of MatHub or of Windows", "de": "Eine Datei des Skripts, eine Variable des Skripts, von MatHub oder von Windows" },
+  "Js.Editors.Files": { "en": "Files of the script", "de": "Dateien des Skripts" },
+  "Js.Editors.UploadFile": { "en": "Upload a file …", "de": "Datei hochladen …" },
+  "Js.Editors.Uploading": { "en": "Uploading …", "de": "Wird hochgeladen …" },
+  "Js.Editors.UploadFailed": { "en": "The upload did not work.", "de": "Das Hochladen hat nicht geklappt." },
+  "Js.Editors.ScriptVariables": { "en": "Variables of the script", "de": "Variablen des Skripts" },
+  "Js.Editors.MatHubVariables": { "en": "Variables of MatHub", "de": "Variablen von MatHub" },
+  "Js.Editors.WindowsVariables": { "en": "Variables of Windows (on the computer)", "de": "Variablen von Windows (auf dem Computer)" },
+  "Js.Editors.Var.computer": { "en": "name of the computer", "de": "Name des Computers" },
+  "Js.Editors.Var.user": { "en": "who is signed in", "de": "wer angemeldet ist" },
+  "Js.Editors.Var.domain": { "en": "domain", "de": "Domäne" },
+  "Js.Editors.Var.serial": { "en": "serial number", "de": "Seriennummer" },
+  "Js.Editors.Var.date": { "en": "today (2026-11-12)", "de": "heute (2026-11-12)" },
+  "Js.Editors.Var.answer": { "en": "answer of the last dialog", "de": "Antwort des letzten Dialogs" },
+  "Js.Code.Snippet.files": { "en": "Copy a file of the script", "de": "Datei des Skripts kopieren" }
 }

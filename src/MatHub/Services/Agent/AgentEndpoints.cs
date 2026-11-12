@@ -134,6 +134,24 @@ public static class AgentEndpoints
             return started.Ok ? Results.Ok(new KioskStarted { RunId = started.Value }) : started.NotAllowed ? Results.NotFound() : Results.Problem(started.Error, statusCode: 409);
         });
 
+        // a file of a script, only for an agent that runs the script now
+        api.MapGet("/files/{id:long}", async (long id, HttpContext http, AppDbContext db, MatHub.Services.Scripts.ScriptFileStore store, CancellationToken ct) =>
+        {
+            var (client, denied) = await AuthenticateAsync(http, db, ct);
+            if (client is null)
+            {
+                return denied!;
+            }
+
+            var file = await db.ScriptFiles.AsNoTracking().FirstOrDefaultAsync(f => f.Id == id, ct);
+            if (file is null || !await MatHub.Services.Scripts.ScriptFileService.AllowedAsync(db, client.Id, file, ct) || !File.Exists(store.PathOf(file.ScriptId, file.Name)))
+            {
+                return Results.NotFound();
+            }
+
+            return Results.File(store.PathOf(file.ScriptId, file.Name), "application/octet-stream", file.Name, enableRangeProcessing: true);
+        });
+
         api.MapGet("/runs/{runId:long}", async (long runId, HttpContext http, AppDbContext db, CancellationToken ct) =>
         {
             var (client, denied) = await AuthenticateAsync(http, db, ct);

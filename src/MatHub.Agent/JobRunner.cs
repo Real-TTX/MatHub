@@ -21,7 +21,7 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
         {
             return job.Kind switch
             {
-                JobKinds.Script => Mask(await ScriptAsync(job.Language, job.Script ?? string.Empty, timeout, ct, job.Secrets), job.Secrets),
+                JobKinds.Script => Mask(await ScriptAsync(job, timeout, ct), job.Secrets),
                 JobKinds.WingetInstall => await WingetAsync(["install", "--id", Need(job.Arguments), "--exact", "--silent", "--scope", "machine", "--accept-package-agreements"], timeout, ct, retryWithoutScope: true),
                 JobKinds.WingetUpgrade => string.IsNullOrWhiteSpace(job.Arguments)
                     ? await WingetAsync(["upgrade", "--all", "--silent", "--accept-package-agreements"], timeout, ct)
@@ -67,18 +67,59 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
         return result with { Output = output };
     }
 
-    private static async Task<RunResult> ScriptAsync(string language, string script, TimeSpan timeout, CancellationToken ct, IReadOnlyDictionary<string, string>? secrets = null)
+    /// <summary>
+    /// A script runs in a folder of its own (in the data folder of the agent: only SYSTEM and the administrators): the script and its files, downloaded and checked
+    /// first. The folder is its working directory and <c>MATHUB_FILES</c>; it is deleted afterwards.
+    /// </summary>
+    private async Task<RunResult> ScriptAsync(AgentJob job, TimeSpan timeout, CancellationToken ct)
     {
-        var dir = Path.Combine(AgentInfo.DataDirectory, "run");
+        var language = job.Language;
+        var script = job.Script ?? string.Empty;
+        var secrets = job.Secrets;
+        var dir = Path.Combine(AgentInfo.DataDirectory, "run", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        var name = Path.Combine(dir, Guid.NewGuid().ToString("N"));
+        var name = Path.Combine(dir, "script");
+        try
+        {
+            foreach (var file in job.Files ?? [])
+            {
+                var target = Path.Combine(dir, Path.GetFileName(file.Name));
+                await client.DownloadAsync(file.Url, target, ct);
+                if (!string.IsNullOrEmpty(file.Sha256))
+                {
+                    await using var stream = File.OpenRead(target);
+                    var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct));
+                    if (!string.Equals(hash, file.Sha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new RunResult { Succeeded = false, Output = $"The file {file.Name} does not match (SHA-256 {hash}, expected {file.Sha256})." };
+                    }
+                }
+            }
 
+            return await RunScriptAsync(language, script, dir, name, timeout, ct, secrets);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // a process that still holds a file: the next start of the agent clears the folder
+            }
+        }
+    }
+
+    private static async Task<RunResult> RunScriptAsync(string language, string script, string dir, string name, TimeSpan timeout, CancellationToken ct, IReadOnlyDictionary<string, string>? secrets)
+    {
         // what a script finds: winget, the agent (its dialogs: mathub-agent ask), and the secrets it names (only in its own environment)
         var environment = new Dictionary<string, string>
         {
             ["MATHUB_WINGET"] = Winget.Locate() ?? string.Empty,
             ["MATHUB_AGENT"] = AgentInfo.Version,
             ["MATHUB_AGENT_EXE"] = Environment.ProcessPath ?? string.Empty,
+            ["MATHUB_FILES"] = dir,
         };
         foreach (var (key, value) in secrets ?? new Dictionary<string, string>())
         {
@@ -87,41 +128,25 @@ public sealed class JobRunner(AgentClient client, ILogger<JobRunner> logger)
                 environment["MATHUB_SECRET_" + key] = value;
             }
         }
-        try
+
+        switch (language)
         {
-            switch (language)
-            {
-                case "cmd":
-                    // cmd reads and writes in the code page of the console: the script switches it to UTF-8 first (written without a byte order mark)
-                    var cmd = name + ".cmd";
-                    var batch = "@chcp 65001 >nul\r\n" + script.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
-                    await File.WriteAllTextAsync(cmd, batch, new UTF8Encoding(false), ct);
-                    return Result(await ProcessRunner.RunAsync(Path.Combine(Environment.SystemDirectory, "cmd.exe"), ["/d", "/c", cmd], timeout, ct, environment), [0]);
-                case "bash":
-                    var sh = name + ".sh";
-                    await File.WriteAllTextAsync(sh, script.Replace("\r\n", "\n", StringComparison.Ordinal), new UTF8Encoding(false), ct);
-                    return Result(await ProcessRunner.RunAsync("bash", [sh], timeout, ct, environment), [0]);
-                default:
-                    // Windows PowerShell reads a script without a byte order mark in the code page of the system: UTF-8 with the mark keeps umlauts
-                    var ps1 = name + ".ps1";
-                    var wrapped = "[Console]::OutputEncoding = [Text.Encoding]::UTF8\r\n$ProgressPreference = 'SilentlyContinue'\r\n" + script.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
-                    await File.WriteAllTextAsync(ps1, wrapped, new UTF8Encoding(true), ct);
-                    return Result(await ProcessRunner.RunAsync(PowerShell.Path, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ps1], timeout, ct, environment), [0]);
-            }
-        }
-        finally
-        {
-            foreach (var file in Directory.GetFiles(dir, Path.GetFileName(name) + ".*"))
-            {
-                try
-                {
-                    File.Delete(file);
-                }
-                catch (IOException)
-                {
-                    // a process that still holds it: the next start of the agent clears the folder
-                }
-            }
+            case "cmd":
+                // cmd reads and writes in the code page of the console: the script switches it to UTF-8 first (written without a byte order mark)
+                var cmd = name + ".cmd";
+                var batch = "@chcp 65001 >nul\r\n" + script.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
+                await File.WriteAllTextAsync(cmd, batch, new UTF8Encoding(false), ct);
+                return Result(await ProcessRunner.RunAsync(Path.Combine(Environment.SystemDirectory, "cmd.exe"), ["/d", "/c", cmd], timeout, ct, environment, dir), [0]);
+            case "bash":
+                var sh = name + ".sh";
+                await File.WriteAllTextAsync(sh, script.Replace("\r\n", "\n", StringComparison.Ordinal), new UTF8Encoding(false), ct);
+                return Result(await ProcessRunner.RunAsync("bash", [sh], timeout, ct, environment, dir), [0]);
+            default:
+                // Windows PowerShell reads a script without a byte order mark in the code page of the system: UTF-8 with the mark keeps umlauts
+                var ps1 = name + ".ps1";
+                var wrapped = "[Console]::OutputEncoding = [Text.Encoding]::UTF8\r\n$ProgressPreference = 'SilentlyContinue'\r\n" + script.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
+                await File.WriteAllTextAsync(ps1, wrapped, new UTF8Encoding(true), ct);
+                return Result(await ProcessRunner.RunAsync(PowerShell.Path, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ps1], timeout, ct, environment, dir), [0]);
         }
     }
 

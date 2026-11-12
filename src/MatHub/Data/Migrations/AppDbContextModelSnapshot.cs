@@ -1173,6 +1173,50 @@ namespace MatHub.Data.Migrations
                     b.ToTable("Script", (string)null);
                 });
 
+            modelBuilder.Entity("MatHub.Data.ScriptFile", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("CreateUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<long>("ScriptId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("UpdateUserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScriptId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ScriptFile", (string)null);
+                });
+
             modelBuilder.Entity("MatHub.Data.Secret", b =>
                 {
                     b.Property<long>("Id")
@@ -1599,6 +1643,17 @@ namespace MatHub.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Profile");
+                });
+
+            modelBuilder.Entity("MatHub.Data.ScriptFile", b =>
+                {
+                    b.HasOne("MatHub.Data.Script", "Script")
+                        .WithMany()
+                        .HasForeignKey("ScriptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Script");
                 });
 
             modelBuilder.Entity("MatHub.Data.User", b =>

@@ -70,7 +70,8 @@ public static class ScriptTester
             return Outcome<TestState>.Fail(Localization.Text.T("Jobs.Error.EmptyScript"));
         }
 
-        var template = new AgentJob { Kind = JobKinds.Script, Language = JobService.LanguageOf(language), Script = code, TimeoutSeconds = test.DryRun ? Math.Min(script.TimeoutSeconds, 900) : script.TimeoutSeconds };
+        var template = new AgentJob { Kind = JobKinds.Script, Language = JobService.LanguageOf(language), Script = code, TimeoutSeconds = test.DryRun ? Math.Min(script.TimeoutSeconds, 900) : script.TimeoutSeconds,
+            Files = await ScriptFileService.ForJobAsync(db, script.Id, ct) };
         var job = new Job
         {
             Name = Localization.Text.T(test.DryRun ? "Scripts.Test.DryName" : "Scripts.Test.Name", script.Name),

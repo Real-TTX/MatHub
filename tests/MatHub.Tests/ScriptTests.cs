@@ -130,6 +130,20 @@ public sealed class ScriptTests
     }
 
     [Fact]
+    public void A_file_of_the_script_and_the_variables_of_windows_are_found_on_the_computer()
+    {
+        Assert.Equal("(Join-Path $MatHubFiles 'settings.xml')", ScriptBlocks.Expression("./settings.xml"));
+        Assert.Equal(@"([Environment]::ExpandEnvironmentVariables('%ProgramData%\Contoso\settings.xml'))", ScriptBlocks.Expression(@"%ProgramData%\Contoso\settings.xml"));
+        Assert.Equal(@"([Environment]::ExpandEnvironmentVariables(('%ProgramData%\' + [string]$MatHubVars['dept'])))", ScriptBlocks.Expression(@"%ProgramData%\{{dept}}"));
+        Assert.Equal("'100%'", ScriptBlocks.Expression("100%"));
+
+        var result = ScriptBlocks.CompileBlocks(new ScriptModel { Blocks = [Block("copy", ("source", "./settings.xml"), ("target", @"%ProgramData%\Contoso\"))] });
+        Assert.True(result.Ok, string.Join("; ", result.Errors));
+        Assert.Contains(@"Copy-Item -Path (Join-Path $MatHubFiles 'settings.xml') -Destination ([Environment]::ExpandEnvironmentVariables('%ProgramData%\Contoso\'))", result.Code);
+        Assert.Contains("$MatHubFiles = if ($env:MATHUB_FILES)", result.Code);
+    }
+
+    [Fact]
     public void A_domain_join_names_its_secret_and_never_holds_the_password()
     {
         var result = ScriptBlocks.CompileBlocks(new ScriptModel

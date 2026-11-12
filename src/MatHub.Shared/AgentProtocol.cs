@@ -9,6 +9,7 @@
 //   GET  /api/agent/v1/kiosk                  -> KioskOffer            (the offers of the kiosk, asked live when it opens)
 //   POST /api/agent/v1/kiosk/{id}/start       KioskStart         -> KioskStarted
 //   GET  /api/agent/v1/runs/{runId}           -> RunState              (a run the kiosk started)
+//   GET  /api/agent/v1/files/{id}             a file of a script that runs
 //   GET  /agent/mathub-agent.exe              the agent itself (anonymous); /agent/install.ps1 installs it
 namespace MatHub.Protocol;
 
@@ -143,6 +144,21 @@ public sealed record AgentJob
 
     /// <summary>What the job is called (the kiosk and its progress show it).</summary>
     public string? Title { get; init; }
+
+    /// <summary>The files of the script: downloaded (and checked) into the folder it runs in, <c>MATHUB_FILES</c>.</summary>
+    public IReadOnlyList<JobFile>? Files { get; init; }
+}
+
+/// <summary>A file a script brings along (an XML, a configuration): its name in the folder of the run and where the agent downloads it.</summary>
+public sealed record JobFile
+{
+    public string Name { get; init; } = string.Empty;
+
+    public string Url { get; init; } = string.Empty;
+
+    public string? Sha256 { get; init; }
+
+    public long Size { get; init; }
 }
 
 public sealed record RunResult
