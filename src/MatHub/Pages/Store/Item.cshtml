@@ -1,0 +1,122 @@
+@page "/store/item"
+@model MatHub.Pages.Store.ItemModel
+@{
+    var d = Model.Detail;
+    ViewData["Title"] = d.Name;
+    ViewData["PageSub"] = d.Publisher;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Packages.Title"].Value, "/packages"), (L["Store.Title"].Value, "/store"), (d.Name, null) };
+}
+
+<div class="mat-cols">
+    <div class="mat-col-12 mat-col-lg-8">
+        <section class="mat-card">
+            <div class="mat-card__body mh-store-item">
+                <span class="mh-store-item__icon">
+                    @if (d.IconSha256 is not null && Model.HasIcon)
+                    {
+                        <img src="/store/icons/@d.IconSha256" alt="" width="64" height="64" />
+                    }
+                    else
+                    {
+                        @Ui.Icon("box")
+                    }
+                </span>
+                <div class="mh-store-item__body">
+                    <h2 class="mh-store-item__name">@d.Name</h2>
+                    <p class="mh-muted"><code class="mh-code-name">@d.WingetId</code> · @L["Store.Version", d.Version]@if (d.Publisher is not null) { <span> · @d.Publisher</span> }</p>
+                    @if (d.ShortDescription is not null)
+                    {
+                        <p class="mh-store-item__lead">@d.ShortDescription</p>
+                    }
+                    @if (d.Description is not null && d.Description != d.ShortDescription)
+                    {
+                        <p class="mh-store-item__text">@d.Description</p>
+                    }
+                    <div class="mh-pills">
+                        @foreach (var t in d.Tags)
+                        {
+                            <a class="mh-pill-link" href="/store?q=@Uri.EscapeDataString(t)">@t</a>
+                        }
+                    </div>
+                    <dl class="mh-dl mh-mt">
+                        @if (d.License is not null) { <dt>@L["Store.License"]</dt><dd>@d.License</dd> }
+                        @if (d.Homepage is not null && Uri.TryCreate(d.Homepage, UriKind.Absolute, out var home) && home.Scheme is "https" or "http") { <dt>@L["Store.Homepage"]</dt><dd><a href="@home" rel="noopener noreferrer" target="_blank">@home.Host</a></dd> }
+                        @if (d.DisplayName is not null) { <dt>@L["Store.DisplayName"]</dt><dd>@d.DisplayName</dd> }
+                    </dl>
+                </div>
+            </div>
+        </section>
+
+        <mh-table caption="@L["Store.Installers"]">
+            <thead><tr><th scope="col">@L["Store.Architecture"]</th><th scope="col">@L["Store.Type"]</th><th scope="col" class="mat-hide-sm">@L["Store.Scope"]</th><th scope="col" class="mat-hide-md">@L["Store.Silent"]</th>@if (Model.CanEdit) { <th scope="col"><span class="mat-sr-only">@L["Common.Actions"]</span></th> }</tr></thead>
+            <tbody>
+                @foreach (var i in d.Installers)
+                {
+                    <tr>
+                        <td data-label="@L["Store.Architecture"]" class="mat-table__primary"><span class="mh-name">@Ui.Icon("download")@(i.Architecture ?? "–")@if (i.Locale is not null) { <span class="mh-muted"> · @i.Locale</span> }</span></td>
+                        <td data-label="@L["Store.Type"]"><span class="mat-pill mat-pill--plain">@i.Type.ToUpperInvariant()</span></td>
+                        <td data-label="@L["Store.Scope"]" class="mat-hide-sm">@(i.Scope is null ? "–" : L["Store.Scope." + (i.Scope == "user" ? "user" : "machine")])</td>
+                        <td data-label="@L["Store.Silent"]" class="mat-hide-md"><code class="mh-code-name">@(MatHub.Services.Packages.WingetCatalog.SilentArguments(i) ?? (i.Type is "msi" or "wix" ? "/qn" : "–"))</code></td>
+                        @if (Model.CanEdit)
+                        {
+                            <td class="mat-table__cell-actions">
+                                @if (i.Cacheable)
+                                {
+                                    <form method="post" asp-page-handler="Cache" asp-route-id="@d.WingetId" asp-route-installer="@i.Index" class="mat-table__actions">
+                                        <button type="submit" class="mat-btn mat-btn--secondary mat-btn--sm" data-busy="@L["Store.Caching"]">@Ui.Icon("archive")<span>@L["Store.Cache"]</span></button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span class="mh-muted">@L["Store.WingetOnly"]</span>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </mh-table>
+    </div>
+    <div class="mat-col-12 mat-col-lg-4">
+        <section class="mat-card mat-card--flush" aria-labelledby="store-add">
+            <div class="mat-card__head"><h2 class="mat-card__title" id="store-add">@Ui.Icon("plus")@L["Store.Add"]</h2></div>
+            <div class="mat-card__body">
+                <ul class="mat-itemlist mat-itemlist--lines-inset">
+                    @if (d.PackageId is { } packageId)
+                    {
+                        <li class="mat-item"><a class="mat-item__main" href="/packages/edit?id=@packageId">
+                            <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--ok">@Ui.Icon("check")</span></span>
+                            <span class="mat-item__body"><span class="mat-item__title">@L["Store.InMatHub"]</span><span class="mat-item__text">@L["Store.OpenPackage"]</span></span>
+                            <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                        </a></li>
+                    }
+                    else if (Model.CanEdit)
+                    {
+                        <li class="mat-item">
+                            <form method="post" asp-page-handler="Winget" asp-route-id="@d.WingetId" class="mat-item__row">
+                                <button type="submit" class="mat-item__main">
+                                    <span class="mat-item__lead"><span class="mat-item__tile mat-item__tile--accent">@Ui.Icon("box")</span></span>
+                                    <span class="mat-item__body"><span class="mat-item__title">@L["Store.AddWinget"]</span><span class="mat-item__text">@L["Store.AddWinget.Hint"]</span></span>
+                                </button>
+                            </form>
+                        </li>
+                    }
+                    <li class="mat-item mh-store-item__note">
+                        <span class="mat-item__main">
+                            <span class="mat-item__lead"><span class="mat-item__tile">@Ui.Icon("archive")</span></span>
+                            <span class="mat-item__body"><span class="mat-item__title">@L["Store.CacheTitle"]</span><span class="mat-item__text">@L["Store.CacheHint"]</span></span>
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="mat-btn-row mh-btn-row">
+    <a class="mat-btn mat-btn--secondary" href="/store">@Ui.Icon("back")<span>@L["Common.Back"]</span></a>
+</div>
+
+@section Scripts {
+    <script src="~/js/busy.js" asp-append-version="true"></script>
+}

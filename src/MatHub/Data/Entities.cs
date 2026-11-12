@@ -474,6 +474,27 @@ public sealed class Package : SoftEntity
     public ICollection<PackageAssignment> Assignments { get; set; } = [];
 }
 
+/// <summary>A program of the winget catalog (the store of MatHub): its latest version, imported every day from the source of Microsoft.</summary>
+public sealed class CatalogPackage : Entity
+{
+    public string WingetId { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public string? Moniker { get; set; }
+
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>The publisher as winget normalises it (small letters): for the search.</summary>
+    public string? Publisher { get; set; }
+
+    /// <summary>The tags, separated by spaces.</summary>
+    public string Tags { get; set; } = string.Empty;
+
+    /// <summary>The path of its merged manifest on the CDN of winget.</summary>
+    public string ManifestPath { get; set; } = string.Empty;
+}
+
 public enum AssignmentAction
 {
     Install = 1,

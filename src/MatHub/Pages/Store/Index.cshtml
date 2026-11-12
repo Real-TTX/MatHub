@@ -1,0 +1,91 @@
+@page "/store"
+@model MatHub.Pages.Store.IndexModel
+@{
+    ViewData["Title"] = L["Store.Title"].Value;
+    ViewData["PageSub"] = L["Store.Sub"].Value;
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Packages.Title"].Value, "/packages"), (L["Store.Title"].Value, null) };
+    var state = Model.State;
+}
+
+<div class="mh-store">
+    <form class="mh-store__search" method="get" action="/store" role="search">
+        <label class="mat-sr-only" for="store-q">@L["Store.Search"]</label>
+        <span class="mh-store__lens">@Ui.Icon("search")</span>
+        <input class="mat-input mh-store__input" id="store-q" name="q" value="@Model.Search" placeholder="@L["Store.Search.Placeholder"]" autocomplete="off" autofocus />
+        <button type="submit" class="mat-btn mat-btn--primary">@L["Store.Search"]</button>
+    </form>
+    <div class="mh-store__meta">
+        @if (state.Loaded is { } loaded)
+        {
+            <span>@Ui.Icon("database")@L["Store.Catalog", state.Programs.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)] · @Ui.When(loaded, Model.Zone)</span>
+        }
+        @if (state.Error is not null)
+        {
+            <span class="mh-store__error">@Ui.Icon("alert")@L["Store.LoadFailed"]</span>
+        }
+        @if (Model.CanEdit)
+        {
+            <form method="post" asp-page-handler="Refresh" class="mh-head-end"><button type="submit" class="mat-btn mat-btn--ghost mat-btn--sm" data-busy="@L["Store.Loading"]">@Ui.Icon("refresh")<span>@L[state.Loaded is null ? "Store.Load" : "Store.Refresh"]</span></button></form>
+        }
+    </div>
+
+    @if (state.Loaded is null)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("store", L["Store.NotLoaded"].Value, L["Store.NotLoaded.Text"].Value, false, null, null, null))" />
+    }
+    else if (string.IsNullOrWhiteSpace(Model.Search))
+    {
+        <section class="mh-store__start" aria-labelledby="store-popular">
+            <h2 class="mh-subhead" id="store-popular">@L["Store.Popular"]</h2>
+            <div class="mh-pills">
+                @foreach (var p in Model.Popular)
+                {
+                    <a class="mh-pill-link" href="/store?q=@Uri.EscapeDataString(p)">@p</a>
+                }
+            </div>
+            <p class="mat-muted">@L["Store.Explain"]</p>
+        </section>
+    }
+    else if (Model.Items.Count == 0)
+    {
+        <partial name="_Empty" model="@(new EmptyStateModel("search", L["Store.NoMatch"].Value, L["Store.NoMatch.Text"].Value, false, null, null, null))" />
+    }
+    else
+    {
+        <p class="mh-muted mh-store__count">@L["Store.Matching", Model.Matching.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)]</p>
+        <ul class="mh-store__grid">
+            @foreach (var c in Model.Items)
+            {
+                <li class="mh-store__card">
+                    <a class="mh-store__link" href="/store/item?id=@Uri.EscapeDataString(c.WingetId)">
+                        <span class="mh-store__icon">@Ui.Icon("box")</span>
+                        <span class="mh-store__body">
+                            <strong class="mh-store__name">@c.Name</strong>
+                            <code class="mh-store__id">@c.WingetId</code>
+                            <span class="mh-store__tags">
+                                <span class="mat-pill mat-pill--plain">@c.Version</span>
+                                @if (c.PackageId is not null)
+                                {
+                                    <span class="mat-pill mat-pill--ok">@L["Store.InMatHub"]</span>
+                                }
+                                @foreach (var t in c.Tags.Take(3))
+                                {
+                                    <span class="mat-tag">@t</span>
+                                }
+                            </span>
+                        </span>
+                        <span class="mat-item__chevron">@Ui.Icon("chevron-right")</span>
+                    </a>
+                </li>
+            }
+        </ul>
+        @if (Model.Matching > Model.Items.Count)
+        {
+            <div class="mat-actions"><a class="mat-btn mat-btn--secondary" href="/store?q=@Uri.EscapeDataString(Model.Search ?? string.Empty)&page=@(Model.PageNumber + 1)">@L["Store.More"]</a></div>
+        }
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/busy.js" asp-append-version="true"></script>
+}

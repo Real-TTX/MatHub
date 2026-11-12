@@ -37,7 +37,8 @@
     <div class="mat-actions">
         @if (Model.CanEdit)
         {
-            <a class="mat-btn mat-btn--primary" href="/packages/edit">@Ui.Icon("plus")<span>@L["Packages.New"]</span></a>
+            <a class="mat-btn mat-btn--primary" href="/store">@Ui.Icon("store")<span>@L["Store.FromStore"]</span></a>
+            <a class="mat-btn mat-btn--secondary" href="/packages/edit">@Ui.Icon("plus")<span>@L["Packages.New"]</span></a>
         }
         <a class="mat-btn mat-btn--secondary" href="/updates">@Ui.Icon("refresh")<span>@L["Updates.Title"]</span></a>
     </div>

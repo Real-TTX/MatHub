@@ -49,6 +49,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
 
     public DbSet<ScriptFile> ScriptFiles => Set<ScriptFile>();
 
+    public DbSet<CatalogPackage> CatalogPackages => Set<CatalogPackage>();
+
     public DbSet<Secret> Secrets => Set<Secret>();
 
     public DbSet<Sequence> Sequences => Set<Sequence>();
@@ -222,6 +224,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Origin).HasMaxLength(20);
             e.Property(x => x.Steps).HasColumnType("jsonb");
+        });
+
+        b.Entity<CatalogPackage>(e =>
+        {
+            e.ToTable("CatalogPackage");
+            e.Property(x => x.WingetId).HasMaxLength(200);
+            e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.Moniker).HasMaxLength(100);
+            e.Property(x => x.Version).HasMaxLength(100);
+            e.Property(x => x.Publisher).HasMaxLength(200);
+            e.Property(x => x.Tags).HasMaxLength(2000);
+            e.Property(x => x.ManifestPath).HasMaxLength(400);
+            e.HasIndex(x => x.WingetId).IsUnique();
+            e.HasIndex(x => x.Name);
         });
 
         b.Entity<ScriptFile>(e =>

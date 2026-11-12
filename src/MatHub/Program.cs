@@ -59,6 +59,13 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MailService>());
 // The agent that MatHub hands out, the installers of the packages, the files of the network boot; the planner of the assignments and the TFTP server.
 builder.Services.AddSingleton<AgentFiles>();
 builder.Services.AddSingleton<PackageFiles>();
+builder.Services.AddSingleton<WingetCatalog>();
+// the catalog of winget and the installers of the publishers (the store): a client of its own, generous for large installers
+builder.Services.AddHttpClient("winget", c =>
+{
+    c.Timeout = TimeSpan.FromMinutes(30);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("MatHub/1.0");
+});
 builder.Services.AddSingleton<MatHub.Services.Scripts.ScriptFileStore>();
 builder.Services.AddSingleton<NetbootFiles>();
 builder.Services.AddSingleton<TftpServerInfo>();
@@ -221,6 +228,12 @@ app.MapGet("/health", async (AppDbContext db) => await db.Database.CanConnectAsy
 app.MapAgentEndpoints();
 app.MapBootEndpoints();
 app.MapScriptEndpoints();
+
+// the icons of the programs of the store (kept in the data volume by their SHA-256)
+app.MapGet("/store/icons/{sha}", (string sha, WingetCatalog catalog, CurrentUser me) =>
+    me.Actor.Can(MatHub.Services.Access.Permission.PackagesView) && catalog.IconPath(sha) is { } path
+        ? Results.File(path, path.EndsWith(".png", StringComparison.Ordinal) ? "image/png" : "image/x-icon", lastModified: File.GetLastWriteTimeUtc(path))
+        : Results.NotFound());
 app.MapSearch();
 app.MapMatPlatform();
 app.MapRazorPages();

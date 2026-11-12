@@ -47,6 +47,7 @@
         {
             <li class="mat-nav__group" role="presentation">@L["Shell.Group.Software"]</li>
             <li><a class="@Cls(Under("/packages"))" href="/packages" aria-current="@Cur(Under("/packages"))">@Ui.Icon("box")<span>@L["Packages.Title"]</span></a></li>
+            <li><a class="@Cls(Under("/store"))" href="/store" aria-current="@Cur(Under("/store"))">@Ui.Icon("search")<span>@L["Store.Title"]</span></a></li>
             @if (Me.Can(Permission.ClientsView))
             {
                 <li>

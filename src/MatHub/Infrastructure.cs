@@ -120,6 +120,9 @@ public sealed class MaintenanceService(IServiceScopeFactory scopes, ILogger<Main
         using var scope = scopes.CreateScope();
         var result = await scope.ServiceProvider.GetRequiredService<InstanceService>().CleanUpAsync(ct);
         logger.LogInformation("Housekeeping: {Sessions} old sessions, {Jobs} old jobs, {Rollouts} rollout tasks removed; {Lost} lost runs failed.", result.Sessions, result.Jobs, result.Rollouts, result.LostRuns);
+
+        // the catalog of the store, once a day
+        await scope.ServiceProvider.GetRequiredService<MatHub.Services.Packages.WingetCatalog>().RefreshIfOldAsync(scope.ServiceProvider.GetRequiredService<MatHub.Data.AppDbContext>(), ct);
     }
 }
 
