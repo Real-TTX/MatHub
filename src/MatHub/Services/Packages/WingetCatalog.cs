@@ -260,9 +260,15 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
 
         var lower = text.ToLowerInvariant();
         var starts = lower + "%";
+        var last = "." + lower;
         var matching = await q.CountAsync(ct);
+        // The program itself before its variants: "firefox" finds Mozilla.Firefox before Mozilla.Firefox.af (they share the moniker).
         var rows = await q
-            .OrderBy(c => c.WingetId.ToLower() == lower || c.Moniker == lower ? 0 : EF.Functions.ILike(c.Name, starts) ? 1 : EF.Functions.ILike(c.WingetId, starts) ? 2 : 3)
+            .OrderBy(c => c.WingetId.ToLower() == lower ? 0
+                : c.WingetId.ToLower().EndsWith(last) ? 1
+                : c.Moniker == lower ? 2
+                : EF.Functions.ILike(c.Name, starts) ? 3
+                : EF.Functions.ILike(c.WingetId, starts) ? 4 : 5)
             .ThenBy(c => c.Name.Length)
             .ThenBy(c => c.Name)
             .Skip((Math.Max(1, page) - 1) * pageSize).Take(pageSize)

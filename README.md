@@ -44,7 +44,9 @@ English and German, light and dark, a phone layout, and an installable app (PWA)
 | | |
 |---|---|
 | ![The block editor with its live PowerShell](docs/images/script-blocks.png) | ![The flow editor: a branch, an error path, two ends](docs/images/script-flow.png) |
-| ![The updates winget offers, program by program](docs/images/updates.png) | ![A client: its software with the updates](docs/images/software.png) |
+| ![The versions of a package: one in test for the pilot group, one approved, installers for x64 and ARM64](docs/images/versions.png) | ![Updates: what waits for an approval, what is newer in the catalog, who is behind](docs/images/updates.png) |
+| ![The store: the catalog of winget in MatHub](docs/images/store.png) | ![A program of the store with its installers per platform](docs/images/store-item.png) |
+| ![A new package: from the store, an own MSI or EXE that MatHub reads, a script, winget with a fixed version](docs/images/package-new.png) | ![A client: its programs, a link to its package, what winget would update](docs/images/software.png) |
 | ![A job and its runs, one failed](docs/images/job.png) | ![Rollout: computers that are installed at their next network boot](docs/images/rollout.png) |
 | ![The inventory of a client: hardware, system, disks, network](docs/images/inventory.png) | ![A group by rules: a tag or a notebook name](docs/images/group.png) |
 | ![The kiosk on a computer: offers by category, the state of the last run](docs/images/agent-kiosk.png) | ![A wizard of a script, shown by the agent to the person at the computer](docs/images/agent-wizard.png) |
@@ -68,6 +70,11 @@ The first account that registers is the administrator. No variable is needed.
 | `docker-compose.local.yml` | built from this folder | Local tests (`./scripts/redeploy.ps1`), pgAdmin 4911, PostgreSQL 4912 |
 
 **Ports:** `4910` the pages, the API, the agents and the HTTP part of the network boot · `69/udp` the TFTP server of the network boot (in the container 4969).
+
+**Internet:** the store loads the index of winget from `cdn.winget.microsoft.com` once a day, and the installers of a program from the addresses its
+publisher names in the catalog – MatHub does, and its clients take them from MatHub (only an installer of the kind winget is downloaded by the client
+itself). Nothing about your clients is sent. Without the internet the store is
+empty; own packages, scripts and everything else work.
 
 ## The agent
 
