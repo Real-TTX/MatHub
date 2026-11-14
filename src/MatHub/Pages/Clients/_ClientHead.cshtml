@@ -11,7 +11,7 @@
     <span class="mh-muted">@Ui.Os(c.OperatingSystem)</span>
     @if (c.LastSeenDate is { } seen)
     {
-        <span class="mh-muted">@L["Clients.LastSeenAt", Dates.Ago(seen, Model.Zone)]</span>
+        <span class="mh-muted">@L["Clients.LastSeenAt", Dates.AgoInSentence(seen, Model.Zone)]</span>
     }
     @foreach (var g in Model.Detail.Groups)
     {

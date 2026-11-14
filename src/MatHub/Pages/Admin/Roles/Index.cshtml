@@ -23,7 +23,7 @@
                 <tr>
                     <td data-label="@L["Common.Name"]" class="mat-table__primary"><a href="/Admin/Roles/Edit?id=@r.Id"><span class="mh-name">@Ui.Icon("shield")@r.Name</span></a>@if (r.Key is not null) { <small class="mh-muted mh-block-line">@L["Roles.BuiltIn", r.Key]</small> }</td>
                     <td data-label="@L["Roles.Permissions"]">@L["Roles.PermissionCount", r.Permissions, Permission.All.Count]</td>
-                    <td data-label="@L["Roles.Scope"]" class="mat-hide-sm">@(r.AllClients ? L["Roles.AllClients"].Value : L["Roles.GroupCount", r.Groups].Value)</td>
+                    <td data-label="@L["Roles.Scope"]" class="mat-hide-sm">@(r.AllClients ? L["Roles.AllClients"].Value : (r.Groups == 1 ? L["Roles.GroupCount.One"].Value : L["Roles.GroupCount", r.Groups].Value))</td>
                     <td data-label="@L["Users.Title"]" class="mat-num">@r.Users</td>
                 </tr>
             }

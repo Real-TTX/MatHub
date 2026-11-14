@@ -33,7 +33,7 @@ public static partial class Ui
     }
 
     /// <summary>A moment as a person reads it in a list: "5 min ago", "Yesterday 14:05" … with the exact time as its title.</summary>
-    public static IHtmlContent When(DateTime? utc, string? zone, string? none = null)
+    public static IHtmlContent When(DateTime? utc, string? zone, string? none = null, bool inSentence = false)
     {
         if (utc is null)
         {
@@ -42,7 +42,7 @@ public static partial class Ui
 
         var iso = DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
         var stamp = System.Net.WebUtility.HtmlEncode(Dates.Stamp(utc, zone));
-        var ago = System.Net.WebUtility.HtmlEncode(Dates.Ago(utc.Value, zone));
+        var ago = System.Net.WebUtility.HtmlEncode(inSentence ? Dates.AgoInSentence(utc.Value, zone) : Dates.Ago(utc.Value, zone));
         return new HtmlString($"<time class=\"mh-when\" datetime=\"{iso}\" title=\"{stamp}\">{ago}</time>");
     }
 

@@ -9,6 +9,7 @@
   "Roles.AllClients": { "en": "All clients", "de": "Alle Clients" },
   "Roles.SomeGroups": { "en": "The clients of some groups", "de": "Die Clients einiger Gruppen" },
   "Roles.GroupCount": { "en": "{0} groups", "de": "{0} Gruppen" },
+  "Roles.GroupCount.One": { "en": "1 group", "de": "1 Gruppe" },
   "Roles.Groups.Hint": { "en": "People with this role see and change only the members of these groups.", "de": "Personen mit dieser Rolle sehen und ändern nur die Mitglieder dieser Gruppen." },
   "Roles.Groups.Required": { "en": "Please choose at least one group.", "de": "Bitte mindestens eine Gruppe wählen." },
   "Roles.BuiltIn": { "en": "built in: {0}", "de": "eingebaut: {0}" },

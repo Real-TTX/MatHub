@@ -27,7 +27,7 @@
                         </td>
                         <td data-label="@L["Kiosk.Field.Kind"]"><span class="mat-pill mat-pill--plain">@L["Kiosk.Kind." + k.Kind]</span> <span class="mh-muted">@k.Target</span></td>
                         <td data-label="@L["Kiosk.Field.Category"]" class="mat-hide-sm">@if (k.Category is not null) { <span class="mat-tag">@k.Category</span> }</td>
-                        <td data-label="@L["Kiosk.For"]" class="mat-hide-md">@(k.Groups == 0 ? L["Kiosk.ForAll"].Value : L[k.Groups == 1 ? "Kiosk.ForGroups.One" : "Kiosk.ForGroups", k.Groups].Value)</td>
+                        <td data-label="@L["Kiosk.For"]" class="mat-hide-md mh-nowrap">@(k.Groups == 0 ? L["Kiosk.ForAll"].Value : L[k.Groups == 1 ? "Kiosk.ForGroups.One" : "Kiosk.ForGroups", k.Groups].Value)</td>
                         <td data-label="@L["Common.State"]">@if (k.IsActive) { <span class="mat-pill mat-pill--ok">@L["Kiosk.Active"]</span> } else { <span class="mat-pill mat-pill--plain">@L["Kiosk.Inactive"]</span> }</td>
                         <td data-label="@L["Kiosk.Starts"]" class="mat-num mat-hide-sm">@k.Runs</td>
                     </tr>

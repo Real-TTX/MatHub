@@ -21,7 +21,7 @@
                     <partial name="_JobState" model="j" />
                 </td>
                 <td data-label="@L["Jobs.Col.Progress"]" class="mat-hide-sm">
-                    <div class="mat-meter mat-meter--sm" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@percent" aria-label="@L["Jobs.Col.Progress"]"><div class="mat-meter__fill" data-value="@percent" data-tone="@(j.Failed > 0 ? "error" : null)"></div></div>
+                    <div class="mat-meter mat-meter--sm" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@percent" aria-label="@L["Jobs.Col.Progress"]"><div class="mat-meter__fill" data-value="@percent" data-tone="@(j.Failed > 0 ? "error" : j.Cancelled > 0 && j.Succeeded == 0 ? "muted" : null)"></div></div>
                 </td>
                 <td data-label="@L["Jobs.Col.By"]" class="mat-hide-md">@(j.CreatedBy ?? L["Jobs.Origin." + j.Origin].Value)</td>
                 <td data-label="@L["Jobs.Col.Created"]" class="mat-hide-sm mh-nowrap">@Ui.When(j.Created, Model.Zone)</td>

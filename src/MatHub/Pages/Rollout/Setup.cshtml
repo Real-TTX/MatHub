@@ -3,7 +3,7 @@
 @{
     ViewData["Title"] = L["NetbootSetup.Title"].Value;
     ViewData["PageSub"] = L["NetbootSetup.Sub"].Value;
-    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["NetbootSetup.Title"].Value, null) };
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, "/rollout"), (L["NetbootSetup.Title"].Value, null) };
     var host = ViewContext.HttpContext.Request.Host.Host;
     // the address in the browser is no example for DHCP when it is the machine itself
     var loopback = host is "localhost" or "127.0.0.1" or "::1" or "[::1]";
@@ -88,7 +88,7 @@ Set-DhcpServerv4OptionValue -OptionId 67 -Value "ipxe.efi"
                 }
             </div>
         </div>
-        <div class="mat-alert mat-alert--warn" role="note">
+        <div class="mat-alert mat-alert--warning" role="note">
             @Ui.Icon("alert")
             <div class="mat-alert__body">
                 <strong class="mat-alert__title">@L["NetbootSetup.SecureBoot.Title"]</strong>

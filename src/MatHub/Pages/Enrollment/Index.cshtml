@@ -89,7 +89,7 @@
                         <a class="mat-btn mat-btn--ghost" href="/agent/@AgentFiles.FileName" download>@Ui.Icon("download")<span>@L["Enrollment.Download"]</span></a>
                     }
                 </div>
-                <p class="mat-hint">@L["Enrollment.Manual", "mathub-agent.exe install --server " + Model.Server + " --key <KEY>"]</p>
+                <p class="mat-hint">@L["Enrollment.Manual"] <code class="mh-code-name">mathub-agent.exe install --server @Model.Server --key mhk_…</code></p>
                 @if (Model.Agent.Available)
                 {
                     <dl class="mh-dl">

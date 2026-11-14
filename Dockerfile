@@ -12,14 +12,17 @@ FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS netboot
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git build-essential gcc-multilib perl liblzma-dev binutils mtools \
  && rm -rf /var/lib/apt/lists/*
+# pinned releases: the same loaders in every build (raise them on purpose)
+ARG IpxeVersion=v2.0.0
+ARG WimbootVersion=v2.9.0
 WORKDIR /build
-RUN git clone --depth 1 https://github.com/ipxe/ipxe.git ipxe
+RUN git clone --depth 1 --branch "$IpxeVersion" https://github.com/ipxe/ipxe.git ipxe
 COPY netboot/mathub-embed.ipxe ipxe/src/mathub.ipxe
 RUN make -C ipxe/src -j"$(nproc)" NO_WERROR=1 EMBED=mathub.ipxe bin-x86_64-efi/ipxe.efi bin-x86_64-efi/snponly.efi bin/undionly.kpxe \
  && mkdir -p /netboot \
  && cp ipxe/src/bin-x86_64-efi/ipxe.efi ipxe/src/bin-x86_64-efi/snponly.efi ipxe/src/bin/undionly.kpxe /netboot/
-# wimboot (Windows PE over HTTP): the released binary; without it the setup page says it is missing and it can be put into /data/netboot/tftp
-RUN curl -fsSL -o /netboot/wimboot https://github.com/ipxe/wimboot/releases/latest/download/wimboot || echo "wimboot could not be downloaded"
+# wimboot (Windows PE over HTTP): the released binary – an image without it fails to build
+RUN curl -fsSL -o /netboot/wimboot "https://github.com/ipxe/wimboot/releases/download/$WimbootVersion/wimboot" && test -s /netboot/wimboot
 
 # ---------------------------------------------------------------------------
 # The Windows agent (one file with .NET inside)

@@ -2,7 +2,7 @@
 @model MatHub.Pages.Rollout.ProfileEditModel
 @{
     ViewData["Title"] = Model.IsNew ? L["Profiles.New"].Value : Model.Name;
-    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Profiles.Title"].Value, "/rollout/profiles"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, "/rollout"), (L["Profiles.Title"].Value, "/rollout/profiles"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
     var ro = !Model.CanManage;
 }
 

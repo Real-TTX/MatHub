@@ -112,6 +112,12 @@ The protocol is one source file for both sides: [`src/MatHub.Shared/AgentProtoco
 
 **Rollout → Setting up** shows what the network needs and whether the TFTP server listens. Use an account for the share that may only read it.
 
+- **Secure Boot**: MatHub's iPXE and wimboot are built from source (pinned releases) and not signed by Microsoft. Switch Secure Boot off for the installation,
+  or chain a signed iPXE shim that loads `autoexec.ipxe` from MatHub.
+- A task that booted and never finished stops serving its files (the passwords) after 12 hours.
+- **Back up `/data` with the database**: `/data/keys` decrypts the passwords of the profiles and the secrets. Without it MatHub refuses to install a computer
+  (no empty administrator password) – set the passwords again.
+
 ## Mattiverse
 
 MatHub speaks the platform contract of the Mat family (MatDesign `docs/PLATFORM.md`, contract 2, MatPlatform 2.4): `/api`, `/api/health`, `/api/state`,
@@ -123,6 +129,7 @@ MatHub speaks the platform contract of the Mat family (MatDesign `docs/PLATFORM.
 | `MATIDENTITY_*` | Sign-in through **MatIdentity**; the claim `role` names a role (`admin`, `technician`, `operator`, `viewer`), `entitlements` add permissions |
 | `MATSMTP_*` | Mail through **MatSMTP** |
 | `MAT_API_KEY`, `MAT_FRAME_ANCESTORS` | The key of the platform API, the origins that may show MatHub in a frame |
+| `MAT_TRUSTED_PROXIES` | The networks of the reverse proxies whose `X-Forwarded-*` headers count (comma separated); without it: the machine itself and the private networks |
 
 ## Development
 

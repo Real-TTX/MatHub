@@ -122,7 +122,7 @@ public static class JobService
                     return Outcome<Job>.Fail(Localization.Text.T(uninstall ? "Jobs.Error.NoUninstall" : "Jobs.Error.NoInstaller"));
                 }
 
-                job.Name = Localization.Text.T(uninstall ? "Jobs.Name.UninstallVersion" : "Jobs.Name.InstallVersion", package.Name, version.Version);
+                job.Name = Localization.Text.T(uninstall ? "Jobs.Name.UninstallVersion" : "Jobs.Name.InstallVersion", package.Name, Packages.PackageVersions.Show(version.Version));
                 job.PackageId = package.Id;
                 job.PackageVersionId = version.Id;
                 job.TimeoutSeconds = packageJob.TimeoutSeconds;

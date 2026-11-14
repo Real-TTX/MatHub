@@ -46,8 +46,8 @@
                 </span>
                 break;
             case SequenceStepKind.WingetUpgrade:
-                <label class="mat-sr-only" for="@id-winget">@L["Software.WingetId"]</label>
-                <input class="mat-input mat-input--sm mat-mono" id="@id-winget" name="Steps[@i].WingetId" data-part="WingetId" value="@s.WingetId" maxlength="200" placeholder="@L["Sequences.AllUpdates"]" disabled="@Model.ReadOnly" />
+                <input type="hidden" name="Steps[@i].WingetId" data-part="WingetId" value="@s.WingetId" />
+                <span class="mat-pill mat-pill--warn">@Ui.Icon("alert")@L["Sequences.WingetGone"]</span>
                 break;
             case SequenceStepKind.Restart:
                 <span class="mh-step__note">@L["Sequences.Kind.Restart.Hint"]</span>

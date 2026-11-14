@@ -23,7 +23,8 @@ Accent: amber `#b45309` (white text 5.0:1) – not yet in MatDesign's registry (
 
 - **Build:** `dotnet build MatHub.slnx` (SDK 10, `global.json`). Expected: 0 warnings, 0 errors. The agent (`net10.0-windows`) builds on Linux too (`EnableWindowsTargeting`).
 - **Tests:** `dotnet test`. Database tests run when `MATHUB_TEST_DB` is set (an administrator connection string, e.g.
-  `Host=localhost;Port=4912;Username=mathub;Password=mathub;Database=postgres` while the local stack runs); each test makes and drops a database of its own.
+  `Host=localhost;Port=4912;Username=mathub;Password=mathub;Database=postgres` while the local stack runs); each test makes and drops a database of its own
+  (made one at a time, two test classes in parallel, long timeouts: a PostgreSQL in Docker under load times out otherwise).
   `TextCatalogTests` checks every key of the code and the scripts in both languages; `ScriptTests` the compiler; `BootTests` the answer file and the iPXE scripts;
   `AgentTests` the winget tables (the agent's `Winget.cs` and `ProcessRunner.cs` are compiled into the tests); `HubTests` enrollment, jobs, roles, the planner.
 - **Run / test the app: always rebuild the container** (`./scripts/redeploy.ps1`, `-Clean` for empty volumes). CSS, JS and cshtml are baked into the image.
@@ -37,7 +38,8 @@ Accent: amber `#b45309` (white text 5.0:1) – not yet in MatDesign's registry (
 - **Migrations:** `dotnet ef migrations add <Name> -p src/MatHub -o Data/Migrations` (local tool in `dotnet-tools.json`). Applied at start-up.
 - **MatPlatform:** `node ../MatDesign/tools/matplatform-copy.js src/MatHub` (never edit `MatPlatform/` here).
 - **Logo:** `node tools/logo.js` writes every SVG level (mark, word marks, favicon, maskable, mono, the sprite glyph); `tools/logo-png.js` renders the PNGs (Edge).
-- Write files with the editor tools, not with shell heredocs (apostrophes and backslashes get mangled).
+- Write files with the editor tools, not with shell heredocs (apostrophes and backslashes get mangled). A node script that patches a file: `s.replace(a, () => b)`
+  – with a string as the replacement, `$$`, `$'` and `$&` in C#/PowerShell text are read as patterns (it once doubled half of ScriptSteps.cs).
 
 ## Map
 
@@ -46,7 +48,7 @@ src/MatHub.Shared/AgentProtocol.cs   THE protocol of server and agent (DTOs, job
 src/MatHub
   Program.cs                 composition root: services, cookie auth (+ MatIdentity), rate limits (signin 10/min, enroll 60/min), static files, endpoints
   Infrastructure.cs          HealthCheck (--healthcheck), Database (migrate with retry, seed the built-in roles), SecurityHeaders (CSP), MaintenanceService (hourly), EmptyStringBinderProvider
-  Data/                      Entities.cs (User, UserSession, AccessRole(+Group), Client, ClientSoftware, ClientGroup(+Member), EnrollmentKey, Script, Package, PackageVersion, PackageInstaller, PackageAssignment, CatalogPackage,
+  Data/                      Entities.cs (User, UserSession, AccessRole(+Group), Client, ClientSoftware, ClientGroup(+Member), EnrollmentKey, Script, Package, PackageVersion, PackageInstaller, PackageAssignment, ClientPackage, CatalogPackage,
                              Job, JobRun, Secret, Sequence, KioskItem, BootImage, RolloutProfile, BootDevice, RolloutTask, Activity, SystemSetting), AppDbContext.cs, Migrations/
   Services/Access/           Permission (the keys: clients-view …), Actor (who acts: permissions + reach), AccessRules (Clients/Groups the actor reaches), RoleService (+ seed)
   Services/Clients/          ClientService, GroupService (rules: one or more conditions, all or any; members of dynamic groups are computed into ClientGroupMember), EnrollmentService (keys, enroll, hashes)
@@ -58,7 +60,9 @@ src/MatHub
                              the AgentJob of a version with its Alternatives per platform), PackageFiles (/data/packages/{package}/{installer}/, staging of the assistant),
                              InstallerAnalysis (MSI: Property table via OpenMcdf; EXE: setup marks, PE machine), WingetCatalog (the store: index of winget → CatalogPackage,
                              manifests, icons, add, prepare new versions), UpdateService (what waits, what is newer, who is behind; unmanaged updates only shown)
-  Services/Deployments/      Planner (+ PlannerService, every minute): makes the assignments true (install, uninstall, auto-update), waits for the next inventory
+  Services/Deployments/      Planner (+ PlannerService, every minute, one round at a time): makes the assignments true per package and client (a removal wins over
+                             an install), waits for the next inventory, never tries the same version again when a run worked but the detection does not find it
+                             (ClientPackage: what MatHub did last per client and package; also the "installed" of packages without detection)
   Services/Scripts/          ScriptBlocks (THE catalog of actions + the compilers of blocks and flows, the prelude: $MatHubVars, Invoke-MatHubDialog, Get-MatHubSecret;
                              BlocksToFlow), ScriptSteps (the PowerShell of each action and check; dialogs as UiDialog JSON), ScriptTemplates, ScriptService,
                              ScriptFiles (ScriptFileStore /data/scripts/{id}/, ScriptFileService: uploads, the files of a job, AllowedAsync), SecretService (DataProtection; ResolveAsync for a run), ScriptTester (a test from the editor on the person's computer, User.TestClientId;
@@ -100,8 +104,13 @@ compared in constant time; a removed client gets 401, a switched-off one 403. Sc
 (`ScriptBlocks.Quote`, also the typographic quotes); `{{name}}` in a value becomes `[string]$MatHubVars['name']` (names are letters, digits, _), `./name` a file of the script (`Join-Path $MatHubFiles`, the folder the agent runs the script in: `MATHUB_FILES`), `%VAR%` is expanded on the computer – every expression is in parentheses (an argument of a command); only the
 block "PowerShell" and the check "PowerShell is true" are code by intent. A new action: an entry in `ScriptBlocks.Types`, its PowerShell in `ScriptSteps`, its
 texts (`Blocks.Type/Hint/Field/Option.*`); `ScriptTests` compiles every action. Secrets reach only the run whose script names them (`SecretsIn`), as
-environment variables; the agent masks their values. The kiosk pipe: every signed-in user may use it (it offers what the kiosk shows anyway); the service
-creates it first, clients check the server is the installed agent. A culture set inside an async method is gone when it returns: return it and set it in the caller. The files of a rollout task are served only while it runs,
+environment variables; the agent masks their values; a trial run (origin "trial") gets none. The kiosk pipe: local users only (NETWORK denied); the kiosk
+ops for every signed-in user (it offers what the kiosk shows anyway, the name logged is the caller's), `ask` (a dialog) only from SYSTEM or an administrator,
+a dialog is answered only by the user it was shown to (clients connect with Identification); the service creates it first, clients check the server is the
+installed agent. A role limited to groups cannot widen its reach: no changes to the kind or rules of a group, to keys of other groups, to scripts/sequences the
+kiosk offers beyond its reach (`KioskService.OfferedBeyondAsync`), no rollout of a MAC it does not reach. Re-enrollment by machine id while the agent still
+calls makes the client wait for an approval; a rollout takes over the client of its MAC. Forwarded headers only from `MAT_TRUSTED_PROXIES` (default: loopback
+and private networks). A culture set inside an async method is gone when it returns: return it and set it in the caller. The files of a rollout task are served only while it runs,
 behind its random token; its share password is in `mathub-setup.cmd` (say so: a read-only account).
 
 **Software**: a package is the software, its versions carry installers per platform; only an approved version is distributed (a version in test to the

@@ -30,7 +30,7 @@
                                 <td data-label="@L["Assignments.Action"]"><span class="mat-pill @(a.Action == AssignmentAction.Install ? "mat-pill--ok" : "mat-pill--warn")">@L["Assignments." + a.Action]</span></td>
                                 <td data-label="@L["Assignments.State"]" class="mat-table__keep-label">
                                     <div class="mat-meter mat-meter--sm" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@percent" aria-label="@L["Assignments.State"]"><div class="mat-meter__fill" data-value="@percent"></div></div>
-                                    <small class="mh-muted">@L["Assignments.Done", done, a.Members]</small>
+                                    <small class="mh-muted">@L[a.Action == AssignmentAction.Install ? "Assignments.Done" : "Assignments.Gone", done, a.Members]</small>
                                 </td>
                                 @if (Model.CanDeploy)
                                 {

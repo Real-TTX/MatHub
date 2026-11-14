@@ -43,7 +43,7 @@
   "Dashboard.SplitLabel": { "en": "{0} online, {1} offline", "de": "{0} online, {1} offline" },
   "Dashboard.Systems": { "en": "Operating systems", "de": "Betriebssysteme" },
   "Dashboard.TopUpdates": { "en": "Most wanted updates", "de": "Häufigste Updates" },
-  "Dashboard.Pending": { "en": "Waiting for approval", "de": "Warten auf Freigabe" },
+  "Dashboard.Pending": { "en": "New clients to approve", "de": "Neue Clients zur Freigabe" },
   "Dashboard.PendingHint": { "en": "Approve or remove them", "de": "Freigeben oder entfernen" },
   "Dashboard.Failed": { "en": "Failed (24 h)", "de": "Fehlgeschlagen (24 h)" },
   "Dashboard.OpenRuns": { "en": "{0} still open", "de": "{0} noch offen" },
@@ -54,6 +54,7 @@
   "Dashboard.FirstClient.Action": { "en": "Enroll a computer", "de": "Computer aufnehmen" },
 
   "Search.Label": { "en": "Search clients, scripts, packages", "de": "Clients, Skripte, Pakete suchen" },
+  "Search.Placeholder": { "en": "Search …", "de": "Suchen …" },
   "Search.Title": { "en": "Search", "de": "Suche" },
   "Search.For": { "en": "Results for “{0}”", "de": "Ergebnisse für „{0}“" },
   "Search.Start": { "en": "What are you looking for?", "de": "Wonach suchst du?" },

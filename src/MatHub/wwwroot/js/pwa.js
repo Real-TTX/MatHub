@@ -35,4 +35,15 @@
     if (window.caches) { caches.delete('mh-pages'); }
     if (navigator.serviceWorker && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage('mh-clear'); }
   });
+
+  // the menu shows where one is: the current entry scrolled into the visible part of a long menu (the rollout pages are far down)
+  var current = document.querySelector('.mat-nav__scroll:not([hidden]) [aria-current="page"]');
+  if (current && current.scrollIntoView) { current.scrollIntoView({ block: 'nearest' }); }
+  // the tabs of a record on a phone scroll sideways: the open one is in view (and the row shows it goes on)
+  var tab = document.querySelector('.mat-tabs .mat-tab.is-active');
+  var tabs = tab && tab.parentElement;
+  if (tabs && tabs.scrollWidth > tabs.clientWidth) {
+    tabs.scrollLeft = Math.max(0, tab.offsetLeft - (tabs.clientWidth - tab.offsetWidth) / 2);
+    tabs.classList.add('mh-tabs-scroll');
+  }
 })();

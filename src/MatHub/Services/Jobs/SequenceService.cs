@@ -346,7 +346,7 @@ public static class SequenceService
 
                     result.Add(new JobStep
                     {
-                        Name = Localization.Text.T(uninstall ? "Jobs.Name.UninstallVersion" : "Jobs.Name.InstallVersion", package.Name, version.Version), Kind = step.Kind,
+                        Name = Localization.Text.T(uninstall ? "Jobs.Name.UninstallVersion" : "Jobs.Name.InstallVersion", package.Name, Packages.PackageVersions.Show(version.Version)), Kind = step.Kind,
                         ContinueOnError = step.ContinueOnError, Template = template, PackageId = package.Id, PackageVersionId = version.Id,
                     });
                     break;

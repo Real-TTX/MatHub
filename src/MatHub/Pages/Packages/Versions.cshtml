@@ -53,7 +53,7 @@
             <div class="mat-card__head">
                 <h2 class="mat-card__title" id="v-@v.Version.Id">@Ui.Icon("layers")@L["Store.Version", MatHub.Services.Packages.PackageVersions.Show(v.Version.Version)]</h2>
                 <span class="mat-pill mat-pill--@(s switch { VersionStatus.Approved => "ok", VersionStatus.Testing => "info", VersionStatus.New => "warn", _ => "plain" })">@L["Versions.Status." + s]</span>
-                <span class="mh-head-end mh-muted mh-version__meta">@L["Versions.Source." + v.Version.Source] · @Ui.When(v.Version.CreateDate, Model.Zone)@if (v.Version.ApprovedDate is { } ad && s != VersionStatus.New) { <span> · @L["Versions.ApprovedBy", v.ApprovedBy ?? "MatHub"] @Ui.When(ad, Model.Zone)</span> } · @L["Versions.ClientsHave", v.Clients]</span>
+                <span class="mh-head-end mh-muted mh-version__meta">@L["Versions.Source." + v.Version.Source] · @Ui.When(v.Version.CreateDate, Model.Zone, inSentence: true)@if (v.Version.ApprovedDate is { } ad && s != VersionStatus.New && v.ApprovedBy is { } approver) { <span> · @L["Versions.ApprovedBy", approver] @Ui.When(ad, Model.Zone, inSentence: true)</span> } · @L["Versions.ClientsHave", v.Clients]</span>
             </div>
             <div class="mat-card__body">
                 <ul class="mh-installers">

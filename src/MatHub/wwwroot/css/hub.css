@@ -16,6 +16,7 @@
 .mh-head-end { margin-left: auto; }
 .mh-subhead { margin: var(--mat-space-2) 0 0; font-size: var(--mat-fs-sm); font-weight: 650; color: var(--mat-text-muted); }
 .mat-meter__fill.mh-fill-muted { background: var(--mat-border-strong); }
+.mat-meter__fill[data-tone="muted"] { background: var(--mat-border-strong); }
 /* the legend under a split bar: a dot, the name, the number; each a link to the filtered list */
 .mh-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--mat-space-2) var(--mat-space-5); font-size: var(--mat-fs-sm); }
 .mh-legend a { display: inline-flex; align-items: center; gap: var(--mat-space-2); color: var(--mat-text); text-decoration: none; min-height: 32px; }
@@ -80,6 +81,8 @@ a.mh-stat:hover .mh-stat__hint, a.mh-stat:focus-visible .mh-stat__hint { color: 
 .mh-file-input { max-width: 16rem; font-size: var(--mat-fs-sm); }
 details.mat-card > summary.mat-card__head { cursor: pointer; list-style: none; }
 details.mat-card > summary.mat-card__head::-webkit-details-marker { display: none; }
+details.mat-card > summary.mat-card__head::after { content: ""; flex: none; width: 0.55em; height: 0.55em; margin-left: auto; border-right: 2px solid var(--mat-text-muted); border-bottom: 2px solid var(--mat-text-muted); transform: rotate(45deg); transition: transform 0.15s; }
+details.mat-card[open] > summary.mat-card__head::after { transform: rotate(-135deg); }
 .mat-btn-row form { display: contents; }
 @media (max-width: 599px) { .mh-btn-collapse > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
 
@@ -426,6 +429,10 @@ html.mh-code-full { overflow: hidden; }
 .mh-source__icon { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: var(--mat-radius-sm); color: var(--mat-accent); background: color-mix(in srgb, var(--mat-accent) 12%, transparent); }
 .mh-source__body { display: grid; gap: 2px; }
 .mh-source__body span { font-size: var(--mat-fs-sm); color: var(--mat-text-muted); }
-.mh-updates { display: grid; gap: var(--mat-space-5); margin-top: var(--mat-space-4); }
+.mh-updates { display: grid; gap: var(--mat-space-5); }
 .mh-updates .mh-subhead { display: flex; gap: var(--mat-space-2); align-items: center; }
 .mh-updates section > .mat-muted { margin: 0 0 var(--mat-space-2); }
+/* a code sample in a help card: wrapped, never cut off at the edge of a narrow column */
+.mat-card pre.mat-code { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* tabs wider than the screen: a fade at the right edge says the row goes on */
+.mat-tabs.mh-tabs-scroll { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent); }

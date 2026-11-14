@@ -78,7 +78,7 @@
   "Js.Editors.Start": { "en": "Start", "de": "Start" },
   "Js.Editors.End": { "en": "End", "de": "Ende" },
   "Js.Editors.If": { "en": "If", "de": "Wenn" },
-  "Js.Editors.Flow": { "en": "Flow", "de": "Ablauf" },
+  "Js.Editors.Flow": { "en": "Control", "de": "Steuerung" },
   "Js.Editors.Arrow": { "en": "Arrow", "de": "Pfeil" },
   "Js.Editors.RemoveArrow": { "en": "Remove the arrow", "de": "Pfeil entfernen" },
   "Js.Editors.RemoveNode": { "en": "Remove the step", "de": "Schritt entfernen" },

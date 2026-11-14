@@ -2,7 +2,7 @@
 @model MatHub.Pages.Rollout.TaskEditModel
 @{
     ViewData["Title"] = Model.IsNew ? L["Rollout.New"].Value : Model.HostName;
-    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Rollout.Tasks"].Value, "/rollout"), (Model.IsNew ? L["Common.New"].Value : Model.HostName, null) };
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, "/rollout"), (L["Rollout.Tasks"].Value, "/rollout"), (Model.IsNew ? L["Common.New"].Value : Model.HostName, null) };
     ViewData["Width"] = "narrow";
     var task = Model.Current;
 }

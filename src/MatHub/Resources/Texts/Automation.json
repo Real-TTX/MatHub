@@ -63,6 +63,7 @@
   "Sequences.Error.TooMany": { "en": "A sequence has at most {0} steps.", "de": "Ein Ablauf hat höchstens {0} Schritte." },
   "Sequences.Error.Script": { "en": "Step {0}: choose a script.", "de": "Schritt {0}: wähle ein Skript." },
   "Sequences.Error.WingetUpgrade": { "en": "Step {0} is a winget upgrade: that is no longer run (it would install versions nobody approved). Remove it or use \"Install a package\".", "de": "Schritt {0} ist ein winget-Upgrade: das läuft nicht mehr (es würde Versionen installieren, die niemand freigegeben hat). Entferne ihn oder nimm „Paket installieren“." },
+  "Sequences.WingetGone": { "en": "No longer run: winget would install versions nobody approved – remove the step or take \"Install a package\"", "de": "Läuft nicht mehr: winget würde Versionen installieren, die niemand freigegeben hat – entferne den Schritt oder nimm „Paket installieren“" },
   "Sequences.Error.OfferedBeyond": { "en": "The kiosk offers this sequence to computers you do not reach: only someone who reaches them changes it.", "de": "Der Kiosk bietet diesen Ablauf Computern an, die du nicht erreichst: ändern darf ihn nur, wer sie erreicht." },
   "Sequences.Error.Package": { "en": "Step {0}: choose a package.", "de": "Schritt {0}: wähle ein Paket." },
   "Sequences.Error.Empty": { "en": "The sequence has no steps.", "de": "Der Ablauf hat keine Schritte." },

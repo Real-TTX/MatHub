@@ -173,6 +173,17 @@ function codeEditor(root) {
   };
   const changed = () => { render(); area.dispatchEvent(new Event('change', { bubbles: true })); };
 
+  // every change of the editor goes through the browser's own editing, so Ctrl+Z undoes it (setRangeText would cut the history); the caret ends
+  // after the text – callers set another selection where they need one
+  const edit = (text, start, end) => {
+    area.focus();
+    area.setSelectionRange(start, end);
+    let done = false;
+    try { done = text === '' ? document.execCommand('delete') : document.execCommand('insertText', false, text); } catch { done = false; }
+    if (!done) area.setRangeText(text, start, end, 'end');
+    area.setSelectionRange(start + text.length, start + text.length);
+  };
+
   function lineBounds(from, to) {
     const value = area.value;
     const start = value.lastIndexOf('\n', from - 1) + 1;
@@ -189,7 +200,7 @@ function codeEditor(root) {
     const placed = text.replace(/\n/g, '\n' + indent);
     const at = placed.indexOf('|');
     area.focus();
-    area.setRangeText(placed.replace('|', ''), s, area.selectionEnd, 'start');
+    edit(placed.replace('|', ''), s, area.selectionEnd);
     area.selectionStart = area.selectionEnd = s + Math.max(0, at);
     changed();
   }
@@ -207,17 +218,17 @@ function codeEditor(root) {
       if (all) return lead + r.slice(lead.length + marker.length).replace(/^ /, '');
       return lead + comment + r.slice(lead.length);
     }).join('\n');
-    area.focus();
-    area.setRangeText(next, start, end, 'select');
+    edit(next, start, end);
+    area.setSelectionRange(start, start + next.length);
     changed();
   }
 
   function duplicateLine() {
     const { start, end } = lineBounds(area.selectionStart, area.selectionEnd);
     const text = area.value.slice(start, end);
-    area.setRangeText(text + '\n', start, start, 'preserve');
-    area.selectionStart = area.selectionStart + text.length + 1;
-    area.selectionEnd = area.selectionEnd + text.length + 1;
+    const { selectionStart: from, selectionEnd: to } = area;
+    edit(text + '\n', start, start);
+    area.setSelectionRange(from + text.length + 1, to + text.length + 1);
     changed();
   }
 
@@ -232,13 +243,13 @@ function codeEditor(root) {
     if (direction < 0) {
       const prevStart = value.lastIndexOf('\n', start - 2) + 1;
       const prev = value.slice(prevStart, start - 1);
-      area.setRangeText(block + '\n' + prev, prevStart, end, 'preserve');
+      edit(block + '\n' + prev, prevStart, end);
       area.selectionStart = prevStart + offset;
     } else {
       let nextEnd = value.indexOf('\n', end + 1);
       if (nextEnd < 0) nextEnd = value.length;
       const next = value.slice(end + 1, nextEnd);
-      area.setRangeText(next + '\n' + block, start, nextEnd, 'preserve');
+      edit(next + '\n' + block, start, nextEnd);
       area.selectionStart = start + next.length + 1 + offset;
     }
     area.selectionEnd = area.selectionStart + length;
@@ -306,12 +317,13 @@ function codeEditor(root) {
       e.preventDefault();
       const lineStart = value.lastIndexOf('\n', s - 1) + 1;
       if (s === end && !e.shiftKey) {
-        area.setRangeText('    ', s, end, 'end');
+        edit('    ', s, end);
       } else {
         // indent or outdent every line of the selection
         const block = value.slice(lineStart, end);
         const next = e.shiftKey ? block.replace(/^ {1,4}/gm, '') : block.replace(/^/gm, '    ');
-        area.setRangeText(next, lineStart, end, 'select');
+        edit(next, lineStart, end);
+        area.setSelectionRange(lineStart, lineStart + next.length);
       }
       changed();
     } else if (e.key === 'Enter' && !mod) {
@@ -323,15 +335,15 @@ function codeEditor(root) {
       const closes = opens && /^\s*[})]/.test(value.slice(end));
       if (closes) {
         // between a pair: the caret on an indented line of its own, the closing one under the opening line
-        area.setRangeText('\n' + indent + '    \n' + indent, s, end, 'start');
+        edit('\n' + indent + '    \n' + indent, s, end);
         area.selectionStart = area.selectionEnd = s + 1 + indent.length + 4;
       } else {
-        area.setRangeText('\n' + indent + (opens ? '    ' : ''), s, end, 'end');
+        edit('\n' + indent + (opens ? '    ' : ''), s, end);
       }
       changed();
     } else if (e.key === 'Backspace' && s === end && s > 0 && PAIRS[value[s - 1]] !== undefined && PAIRS[value[s - 1]] === value[s]) {
       e.preventDefault();
-      area.setRangeText('', s - 1, s + 1, 'end');
+      edit('', s - 1, s + 1);
       changed();
     } else if (PAIRS[e.key] && !mod && !e.altKey) {
       const close = PAIRS[e.key];
@@ -346,7 +358,7 @@ function codeEditor(root) {
       if (quote && s === end && /\w/.test(value[s - 1] || '')) return; // an apostrophe in a word
       e.preventDefault();
       const inner = value.slice(s, end);
-      area.setRangeText(e.key + inner + close, s, end, 'preserve');
+      edit(e.key + inner + close, s, end);
       area.selectionStart = s + 1;
       area.selectionEnd = s + 1 + inner.length;
       changed();
@@ -1046,9 +1058,13 @@ document.querySelectorAll('[data-flow-editor]').forEach(flowEditor);
 // a person who leaves with changes that are not saved is asked first
 const form = document.querySelector('[data-script-form]');
 if (form) {
-  let dirty = false;
-  form.addEventListener('input', () => { dirty = true; });
-  form.addEventListener('click', e => { if (e.target.closest('.mh-palette__item, .mh-block__tools, .mh-blocks__add')) dirty = true; });
-  form.addEventListener('submit', () => { dirty = false; });
-  window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  // what the editors keep in the form (the model of the blocks or the flow, the code) as it was when the page came: every change counts – a node
+  // dragged, an arrow drawn or removed, a block moved, a field of a dialog – not only typing
+  const state = () => [...form.querySelectorAll('input[type=hidden][name], textarea[name]')].map(i => i.value).join('\u0001');
+  const start = state();
+  let typed = false;
+  let saving = false;
+  form.addEventListener('input', () => { typed = true; });
+  form.addEventListener('submit', () => { saving = true; });
+  window.addEventListener('beforeunload', e => { if (!saving && (typed || state() !== start)) { e.preventDefault(); e.returnValue = ''; } });
 }

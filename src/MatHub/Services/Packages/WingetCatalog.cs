@@ -285,14 +285,19 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         var lower = text.ToLowerInvariant();
         var starts = lower + "%";
         var last = "." + lower;
+        var word = "% " + lower + "%";
+        var tail = "%-" + lower + "%";
+        var end = "%" + lower;
         var matching = await q.CountAsync(ct);
-        // The program itself before its variants: "firefox" finds Mozilla.Firefox before Mozilla.Firefox.af (they share the moniker).
+        // The program itself before its variants: "firefox" finds Mozilla.Firefox before Mozilla.Firefox.af (they share the moniker); a name with the word
+        // ("zip" in "7-Zip", "Bandizip"…) before names that only contain the letters somewhere ("Cram" by its tags).
         var rows = await q
             .OrderBy(c => c.WingetId.ToLower() == lower ? 0
                 : c.WingetId.ToLower().EndsWith(last) ? 1
                 : c.Moniker == lower ? 2
                 : EF.Functions.ILike(c.Name, starts) ? 3
-                : EF.Functions.ILike(c.WingetId, starts) ? 4 : 5)
+                : EF.Functions.ILike(c.Name, word) || EF.Functions.ILike(c.Name, tail) || EF.Functions.ILike(c.Name, end) ? 4
+                : EF.Functions.ILike(c.WingetId, starts) ? 5 : 6)
             .ThenBy(c => c.Name.Length)
             .ThenBy(c => c.Name)
             .Skip((Math.Max(1, page) - 1) * pageSize).Take(pageSize)

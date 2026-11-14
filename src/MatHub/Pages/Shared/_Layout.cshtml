@@ -118,7 +118,7 @@
                     <form role="search" action="/search" method="get">
                         <label class="mat-sr-only" for="mh-search">@L["Search.Label"]</label>
                         <div class="mat-search" data-autocomplete data-search-url="/live/search" data-results-url="/search" data-recent="hub" data-key="/,mod+k">
-                            <input class="mat-search__input" type="search" id="mh-search" name="q" placeholder="@L["Search.Label"]" value="@(ViewData["SearchText"] as string)" />
+                            <input class="mat-search__input" type="search" id="mh-search" name="q" placeholder="@L["Search.Placeholder"]" title="@L["Search.Label"]" value="@(ViewData["SearchText"] as string)" />
                         </div>
                     </form>
                 </div>

@@ -2,7 +2,7 @@
 @model MatHub.Pages.Rollout.ImageEditModel
 @{
     ViewData["Title"] = Model.IsNew ? L["Images.New"].Value : Model.Name;
-    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["Images.Title"].Value, "/rollout/images"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
+    ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, "/rollout"), (L["Images.Title"].Value, "/rollout/images"), (Model.IsNew ? L["Common.New"].Value : Model.Name, null) };
     var ro = !Model.CanManage;
 }
 

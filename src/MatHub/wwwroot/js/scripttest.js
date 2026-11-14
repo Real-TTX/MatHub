@@ -27,6 +27,7 @@ if (box) {
   mode();
 
   const show = s => {
+    if (s.done) run.disabled = false;
     state.className = 'mat-pill mat-pill--' + s.tone;
     state.textContent = s.statusText + (s.exitCode != null && s.done ? ' · ' + s.exitCode : '');
     wait.hidden = s.status !== 'queued';
@@ -43,8 +44,9 @@ if (box) {
         const s = await request('GET', '/live/runs/' + runId);
         show(s);
         if (!s.done) timer = setTimeout(tick, 1500);
-        else run.disabled = false;
-      } catch {
+      } catch (e) {
+        // the run is gone (deleted, or out of reach): nothing more to follow
+        if (e.status === 404 || e.status === 403) return;
         timer = setTimeout(tick, 4000);
       }
     };
@@ -73,6 +75,8 @@ if (box) {
       result.hidden = false;
       show(s);
       follow(s.runId);
+      // another test may start while this one waits (a computer that does not take it, another computer): the button is free again
+      setTimeout(() => { run.disabled = false; }, 1500);
       result.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } catch (e) {
       run.disabled = false;

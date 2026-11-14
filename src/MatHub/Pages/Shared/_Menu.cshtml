@@ -80,7 +80,7 @@
             }
             @if (Me.Can(Permission.SecretsManage))
             {
-                <li><a class="@Cls(Under("/secrets"))" href="/secrets" aria-current="@Cur(Under("/secrets"))">@Ui.Icon("key")<span>@L["Secrets.Title"]</span></a></li>
+                <li><a class="@Cls(Under("/secrets"))" href="/secrets" aria-current="@Cur(Under("/secrets"))">@Ui.Icon("lock")<span>@L["Secrets.Title"]</span></a></li>
             }
             @if (Me.Can(Permission.JobsView))
             {

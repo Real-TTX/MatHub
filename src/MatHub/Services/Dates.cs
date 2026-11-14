@@ -119,6 +119,14 @@ public static class Dates
         return day.Year == today.Year ? $"{DayMonth(day)} {time}" : $"{DayMonth(day)} {day.Year}";
     }
 
+    /// <summary>As <see cref="Ago"/>, for the middle of a sentence ("gesehen gestern 16:14"): "Yesterday" / "Gestern" written small.</summary>
+    public static string AgoInSentence(DateTime utc, string? zone)
+    {
+        var text = Ago(utc, zone);
+        var yesterday = Today(zone).DayNumber - DateOnly.FromDateTime(Local(utc, zone)).DayNumber == 1;
+        return yesterday && text.Length > 0 ? char.ToLower(text[0], CultureInfo.CurrentCulture) + text[1..] : text;
+    }
+
     /// <summary>The last moment of a day in a time zone, in UTC (a link that works "until" a day works the whole day).</summary>
     public static DateTime EndOfDayUtc(DateOnly day, string? zone)
         => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(day.ToDateTime(new TimeOnly(23, 59, 59)), DateTimeKind.Unspecified), Zone(zone));
