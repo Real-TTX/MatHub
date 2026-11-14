@@ -440,7 +440,8 @@ public static class JobService
                 continue;
             }
 
-            if (protection is not null && template.Script is { } script && await SecretService.ResolveAsync(db, protection, script, ct) is { } secrets)
+            // a trial run changes nothing and reads no secret (the code of a trial is only parsed, the actions only say what they would do)
+            if (protection is not null && run.Job.Origin != "trial" && template.Script is { } script && await SecretService.ResolveAsync(db, protection, script, ct) is { } secrets)
             {
                 template = template with { Secrets = secrets };
             }

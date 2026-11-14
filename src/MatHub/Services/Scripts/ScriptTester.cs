@@ -75,7 +75,7 @@ public static class ScriptTester
         var job = new Job
         {
             Name = Localization.Text.T(test.DryRun ? "Scripts.Test.DryName" : "Scripts.Test.Name", script.Name),
-            Kind = JobKind.Script, ScriptId = script.Id, Language = language, TimeoutSeconds = template.TimeoutSeconds, Origin = "test",
+            Kind = JobKind.Script, ScriptId = script.Id, Language = language, TimeoutSeconds = template.TimeoutSeconds, Origin = test.DryRun ? "trial" : "test",
             Payload = System.Text.Json.JsonSerializer.Serialize(template, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),
         };
         var run = new JobRun { ClientId = client.Id };

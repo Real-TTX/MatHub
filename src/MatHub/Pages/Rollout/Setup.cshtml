@@ -5,6 +5,8 @@
     ViewData["PageSub"] = L["NetbootSetup.Sub"].Value;
     ViewData["Crumbs"] = new List<(string, string?)> { (L["Shell.Group.Rollout"].Value, null), (L["NetbootSetup.Title"].Value, null) };
     var host = ViewContext.HttpContext.Request.Host.Host;
+    // the address in the browser is no example for DHCP when it is the machine itself
+    var loopback = host is "localhost" or "127.0.0.1" or "::1" or "[::1]";
 }
 
 <div class="mat-cols">
@@ -28,7 +30,7 @@
                 <mh-table caption="@L["NetbootSetup.Dhcp"]">
                     <thead><tr><th scope="col">@L["NetbootSetup.Option"]</th><th scope="col">@L["NetbootSetup.Value"]</th></tr></thead>
                     <tbody>
-                        <tr><td data-label="@L["NetbootSetup.Option"]">66 · next-server</td><td data-label="@L["NetbootSetup.Value"]" class="mat-mono">@L["NetbootSetup.ServerAddress", host]</td></tr>
+                        <tr><td data-label="@L["NetbootSetup.Option"]">66 · next-server</td><td data-label="@L["NetbootSetup.Value"]" class="mat-mono">@(loopback ? L["NetbootSetup.ServerAddress.Lan"].Value : L["NetbootSetup.ServerAddress", host].Value)</td></tr>
                         <tr><td data-label="@L["NetbootSetup.Option"]">67 · UEFI x64</td><td data-label="@L["NetbootSetup.Value"]" class="mat-mono">ipxe.efi</td></tr>
                         <tr><td data-label="@L["NetbootSetup.Option"]">67 · BIOS</td><td data-label="@L["NetbootSetup.Value"]" class="mat-mono">undionly.kpxe</td></tr>
                     </tbody>
@@ -71,7 +73,7 @@ Set-DhcpServerv4OptionValue -OptionId 67 -Value "ipxe.efi"
                         }
                     </dd>
                     <dt>@L["NetbootSetup.Transfers"]</dt><dd>@Model.Tftp.Transfers @if (Model.Tftp.LastFile is not null) { <small class="mh-muted mat-mono">@Model.Tftp.LastFile</small> }</dd>
-                    <dt>HTTP</dt><dd class="mat-mono">@(Model.BootUrl ?? "http://<next-server>:" + Model.HttpPort)</dd>
+                    <dt>HTTP</dt><dd>@if (Model.BootUrl is { } bootUrl) { <span class="mat-mono">@bootUrl</span> } else { <span class="mat-pill mat-pill--warn">@L["NetbootSetup.NoBootUrl"]</span> <small class="mh-muted">@L["NetbootSetup.NoBootUrl.Hint", Model.HttpPort]</small> }</dd>
                     @foreach (var (file, purpose, there) in Model.Loaders)
                     {
                         <dt class="mat-mono">@file</dt>
@@ -84,6 +86,13 @@ Set-DhcpServerv4OptionValue -OptionId 67 -Value "ipxe.efi"
                 {
                     <p class="mat-hint"><a href="/Admin/System">@L["NetbootSetup.ChangeUrl"]</a></p>
                 }
+            </div>
+        </div>
+        <div class="mat-alert mat-alert--warn" role="note">
+            @Ui.Icon("alert")
+            <div class="mat-alert__body">
+                <strong class="mat-alert__title">@L["NetbootSetup.SecureBoot.Title"]</strong>
+                <p>@L["NetbootSetup.SecureBoot.Text"]</p>
             </div>
         </div>
         <div class="mat-alert mat-alert--info" role="note">

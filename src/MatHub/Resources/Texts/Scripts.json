@@ -1,6 +1,7 @@
 {
   "Scripts.Title": { "en": "Scripts", "de": "Skripte" },
   "Scripts.One": { "en": "script", "de": "Skript" },
+  "Scripts.Error.OfferedBeyond": { "en": "The kiosk offers this script to computers you do not reach: only someone who reaches them changes it.", "de": "Der Kiosk bietet dieses Skript Computern an, die du nicht erreichst: ändern darf es nur, wer sie erreicht." },
   "Scripts.Many": { "en": "scripts", "de": "Skripte" },
   "Scripts.Search": { "en": "Name, description or code", "de": "Name, Beschreibung oder Code" },
   "Scripts.Empty": { "en": "No scripts yet", "de": "Noch keine Skripte" },

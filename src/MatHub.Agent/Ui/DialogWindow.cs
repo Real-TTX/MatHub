@@ -154,7 +154,7 @@ internal sealed class DialogWindow : Form
             {
                 "check" => new CheckBox { Text = field.Label, AutoSize = true, Checked = field.Default is "true" or "1" or "yes" or "ja", Font = Theme.Ui(9.5f) },
                 "choice" => Choice(field),
-                "number" => new NumericUpDown { Minimum = -1_000_000, Maximum = 1_000_000_000, Value = decimal.TryParse(field.Default, NumberStyles.Number, CultureInfo.InvariantCulture, out var n) ? n : 0, Width = 160 },
+                "number" => new NumericUpDown { Minimum = -1_000_000, Maximum = 1_000_000_000, Value = decimal.TryParse(field.Default, NumberStyles.Number, CultureInfo.InvariantCulture, out var n) ? Math.Clamp(n, -1_000_000, 1_000_000_000) : 0, Width = 160 },
                 "multiline" => new TextBox { Multiline = true, Height = 76, ScrollBars = ScrollBars.Vertical, Text = field.Default ?? string.Empty },
                 "password" => new TextBox { UseSystemPasswordChar = true, Text = string.Empty },
                 _ => new TextBox { Text = field.Default ?? string.Empty },

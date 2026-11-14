@@ -14,8 +14,11 @@ public sealed class ScriptFileStore(IConfiguration configuration)
 
     public string PathOf(long scriptId, string name) => Path.Combine(Root, scriptId.ToString(System.Globalization.CultureInfo.InvariantCulture), PackageFiles.SafeName(name));
 
-    /// <summary>Stores a file (a temporary name first, then moved; a file of the same name is replaced): its size and SHA-256.</summary>
-    public async Task<(long Size, string Sha256)> SaveAsync(long scriptId, string name, Stream content, CancellationToken ct)
+    /// <summary>
+    /// Stores a file (a temporary name first, then moved; a file of the same name is replaced): its size and SHA-256 – or null when it grows beyond
+    /// <paramref name="maxSize"/> (then nothing changed: the file there before stays).
+    /// </summary>
+    public async Task<(long Size, string Sha256)?> SaveAsync(long scriptId, string name, Stream content, long maxSize, CancellationToken ct)
     {
         var target = PathOf(scriptId, name);
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -29,12 +32,23 @@ public sealed class ScriptFileStore(IConfiguration configuration)
             int read;
             while ((read = await content.ReadAsync(buffer, ct)) > 0)
             {
+                if (file.Length + read > maxSize)
+                {
+                    break;
+                }
+
                 hash.AppendData(buffer, 0, read);
                 await file.WriteAsync(buffer.AsMemory(0, read), ct);
             }
 
-            size = file.Length;
+            size = read > 0 ? -1 : file.Length;
             sha = Convert.ToHexStringLower(hash.GetHashAndReset());
+        }
+
+        if (size < 0)
+        {
+            File.Delete(temp);
+            return null;
         }
 
         File.Move(temp, target, overwrite: true);
@@ -77,8 +91,29 @@ public static class ScriptFileService
             ? await db.ScriptFiles.AsNoTracking().Where(f => f.ScriptId == scriptId).OrderBy(f => f.Name).ToListAsync(ct)
             : [];
 
+    /// <summary>The files of a script go with its copy (a duplicate, a copy as a flow): rows and files.</summary>
+    public static async Task CopyAllAsync(AppDbContext db, ScriptFileStore store, long fromScript, long toScript, CancellationToken ct = default)
+    {
+        var files = await db.ScriptFiles.AsNoTracking().Where(f => f.ScriptId == fromScript).ToListAsync(ct);
+        foreach (var f in files)
+        {
+            store.Copy(fromScript, toScript, f.Name);
+            db.ScriptFiles.Add(new ScriptFile { ScriptId = toScript, Name = f.Name, Size = f.Size, Sha256 = f.Sha256 });
+        }
+
+        if (files.Count > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
     public static async Task<Outcome<ScriptFile>> UploadAsync(AppDbContext db, Actor actor, ScriptFileStore store, long scriptId, string fileName, Stream content, CancellationToken ct = default)
     {
+        if (await Kiosk.KioskService.OfferedBeyondAsync(db, actor, scriptId, null, ct))
+        {
+            return Outcome<ScriptFile>.Fail(Localization.Text.T("Scripts.Error.OfferedBeyond"));
+        }
+
         if (!actor.Can(Permission.ScriptsEdit))
         {
             return Outcome<ScriptFile>.Denied();
@@ -97,10 +132,8 @@ public static class ScriptFileService
             return Outcome<ScriptFile>.Fail(Localization.Text.T("ScriptFiles.Error.TooMany", MaxFiles));
         }
 
-        var (size, sha) = await store.SaveAsync(scriptId, name, content, ct);
-        if (size > MaxSize)
+        if (await store.SaveAsync(scriptId, name, content, MaxSize, ct) is not var (size, sha))
         {
-            store.Delete(scriptId, name);
             return Outcome<ScriptFile>.Fail(Localization.Text.T("ScriptFiles.Error.TooLarge"));
         }
 
@@ -120,6 +153,11 @@ public static class ScriptFileService
 
     public static async Task<Outcome<string>> DeleteAsync(AppDbContext db, Actor actor, ScriptFileStore store, long scriptId, long fileId, CancellationToken ct = default)
     {
+        if (await Kiosk.KioskService.OfferedBeyondAsync(db, actor, scriptId, null, ct))
+        {
+            return Outcome<string>.Fail(Localization.Text.T("Scripts.Error.OfferedBeyond"));
+        }
+
         if (!actor.Can(Permission.ScriptsEdit))
         {
             return Outcome<string>.Denied();

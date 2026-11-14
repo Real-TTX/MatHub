@@ -85,6 +85,9 @@ public static class BootService
         string script;
         try
         {
+            // the passwords of the profile must be readable (keys of /data lost): else no installation with an empty administrator password
+            Unprotect(protection, task.Profile.AdminPasswordProtected);
+            Unprotect(protection, task.Profile.SourcePasswordProtected);
             script = ProfileScript(task, task.Profile, device, files, baseUrl, protection);
         }
         catch (InvalidOperationException ex)
@@ -166,18 +169,29 @@ public static class BootService
         }
 
         var platform = await db.BootDevices.AsNoTracking().Where(d => d.MacAddress == task.MacAddress).Select(d => d.Platform).FirstOrDefaultAsync(ct);
-        return file switch
+        try
+        {
+            return TaskFile(task, profile, protection, file, platform, serverUrl);
+        }
+        catch (InvalidOperationException)
+        {
+            // a password of the profile cannot be read: no file with an empty one
+            return null;
+        }
+    }
+
+    private static (string Content, string Type)? TaskFile(RolloutTask task, RolloutProfile profile, IDataProtectionProvider protection, string file, string? platform, string serverUrl)
+        => file switch
         {
             "winpeshl.ini" when profile.Kind == ProfileKind.Windows => (WinPeShell(), "text/plain"),
             "mathub-setup.cmd" when profile.Kind == ProfileKind.Windows => (SetupCommand(task, profile, protection), "text/plain"),
             "autounattend.xml" when profile.Kind == ProfileKind.Windows => (string.IsNullOrWhiteSpace(profile.AnswerFile)
                 ? Unattend(task, profile, platform != "pcbios", serverUrl, protection)
-                : Fill(profile.AnswerFile, task, profile, serverUrl, protection), "application/xml"),
+                : Fill(profile.AnswerFile, task, profile, serverUrl, protection, xml: true), "application/xml"),
             "answer" when profile.Kind != ProfileKind.Windows => (Fill(profile.AnswerFile ?? string.Empty, task, profile, serverUrl, protection), "text/plain"),
             "agent.ps1" when profile.InstallAgent => (AgentScript(task, serverUrl), "text/plain"),
             _ => null,
         };
-    }
 
     /// <summary>Windows PE runs the network start and then MatHub's setup script instead of a shell.</summary>
     public static string WinPeShell() => "[LaunchApps]\r\n%SYSTEMROOT%\\System32\\wpeinit.exe\r\n%SYSTEMROOT%\\System32\\cmd.exe, /c %SYSTEMROOT%\\System32\\mathub-setup.cmd\r\n";
@@ -196,7 +210,7 @@ public static class BootService
             "set tries=0",
             ":connect",
             "set /a tries+=1",
-            $"net use Z: \"{profile.SourcePath}\"{credentials} >nul 2>&1",
+            $"net use Z: \"{profile.SourcePath}\"{credentials} <nul >nul 2>&1",
             "if not errorlevel 1 goto setup",
             "if %tries% geq 12 goto failed",
             "echo MatHub: waiting for the network ...",
@@ -338,7 +352,7 @@ public static class BootService
         => $"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"for($i=0;$i -lt 60;$i++){{try{{irm '{serverUrl}/boot/task/{task.Token}/agent.ps1'|iex;break}}catch{{sleep 10}}}}\"";
 
     /// <summary>The placeholders of answer files, kernel arguments and iPXE scripts.</summary>
-    public static string Fill(string text, RolloutTask task, RolloutProfile profile, string serverUrl, IDataProtectionProvider protection)
+    public static string Fill(string text, RolloutTask task, RolloutProfile profile, string serverUrl, IDataProtectionProvider protection, bool xml = false)
     {
         var map = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase)
         {
@@ -368,7 +382,8 @@ public static class BootService
 
             var name = text[(open + 1)..close];
             sb.Append(text, i, open - i);
-            sb.Append(map.TryGetValue(name, out var value) ? value() : text[open..(close + 1)]);
+            // in an answer file (XML) a password with & or < must not break it
+            sb.Append(map.TryGetValue(name, out var value) ? xml ? System.Security.SecurityElement.Escape(value()) : value() : text[open..(close + 1)]);
             i = close + 1;
         }
 
@@ -388,7 +403,7 @@ public static class BootService
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            return string.Empty;
+            throw new InvalidOperationException("a password of the profile cannot be read (the keys of /data are not those it was saved with). Set it again.");
         }
     }
 

@@ -81,7 +81,11 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
-    private sealed record Pending(string Id, UiDialog Dialog, TaskCompletionSource<UiReply> Done);
+    /// <summary>A dialog of a script; <paramref name="Owner"/>: the user (SID) whose kiosk took it – only they answer it.</summary>
+    private sealed record Pending(string Id, UiDialog Dialog, TaskCompletionSource<UiReply> Done, string? Owner = null);
+
+    /// <summary>Who called through the pipe: their SID, and whether they are SYSTEM or an administrator (a script of the agent runs as SYSTEM).</summary>
+    private sealed record Caller(string? Sid, string? Name, bool Privileged);
 
     private readonly Channel<Pending> _queue = Channel.CreateUnbounded<Pending>();
     private readonly ConcurrentDictionary<string, Pending> _shown = new();
@@ -149,6 +153,8 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), PipeAccessRights.FullControl, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), PipeAccessRights.FullControl, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null), PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        // only the people at this computer: nobody over the network
+        security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.NetworkSid, null), PipeAccessRights.FullControl, AccessControlType.Deny));
         return NamedPipeServerStreamAcl.Create(AgentInfo.PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, options, 0, 0, security);
     }
 
@@ -161,14 +167,14 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
             using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 4096, leaveOpen: true);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            var line = await reader.ReadLineAsync(timeout.Token);
-            if (line is null || line.Length > 1_000_000)
+            var line = await ReadLineAsync(reader, 1_000_000, timeout.Token);
+            if (line is null)
             {
                 return;
             }
 
             var request = JsonSerializer.Deserialize<PipeRequest>(line, Json) ?? new PipeRequest();
-            response = await AnswerAsync(request, ct);
+            response = await AnswerAsync(request, CallerOf(pipe), ct);
             await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, leaveOpen: true) { AutoFlush = true };
             await writer.WriteLineAsync(JsonSerializer.Serialize(response, Json).AsMemory(), ct);
         }
@@ -182,7 +188,59 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
         }
     }
 
-    private async Task<PipeResponse> AnswerAsync(PipeRequest request, CancellationToken ct)
+    /// <summary>One line of at most <paramref name="max"/> characters (a longer one is refused before it fills the memory of the service).</summary>
+    private static async Task<string?> ReadLineAsync(StreamReader reader, int max, CancellationToken ct)
+    {
+        var line = new StringBuilder();
+        var buffer = new char[4096];
+        while (true)
+        {
+            var read = await reader.ReadAsync(buffer.AsMemory(), ct);
+            if (read == 0)
+            {
+                return line.Length == 0 ? null : line.ToString();
+            }
+
+            var end = Array.IndexOf(buffer, '\n', 0, read);
+            line.Append(buffer, 0, end < 0 ? read : end);
+            if (line.Length > max)
+            {
+                return null;
+            }
+
+            if (end >= 0)
+            {
+                return line.ToString().TrimEnd('\r');
+            }
+        }
+    }
+
+    /// <summary>The caller of the pipe (its clients allow the service to identify them); without the service as SYSTEM (a test as a person) everyone may.</summary>
+    private static Caller CallerOf(NamedPipeServerStream pipe)
+    {
+        if (!WindowsIdentity.GetCurrent().IsSystem)
+        {
+            return new Caller(null, null, true);
+        }
+
+        Caller caller = new(null, null, false);
+        try
+        {
+            pipe.RunAsClient(() =>
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                caller = new Caller(identity.User?.Value, identity.Name, identity.IsSystem || new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator));
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // a client that does not let itself be identified is nobody
+        }
+
+        return caller;
+    }
+
+    private async Task<PipeResponse> AnswerAsync(PipeRequest request, Caller caller, CancellationToken ct)
     {
         switch (request.Op)
         {
@@ -203,7 +261,7 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
 
                             if (pending.Dialog.Kind is UiKinds.Message or UiKinds.Question or UiKinds.Form)
                             {
-                                _shown[pending.Id] = pending;
+                                _shown[pending.Id] = pending with { Owner = caller.Sid };
                             }
 
                             return new PipeResponse { Version = AgentInfo.Version, DialogId = pending.Id, Dialog = pending.Dialog };
@@ -216,7 +274,9 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
                 }
 
             case "answer":
-                if (request.DialogId is { } answered && _shown.TryRemove(answered, out var shown))
+                // only the one who was shown the dialog answers it
+                if (request.DialogId is { } answered && _shown.TryGetValue(answered, out var shown) && shown.Owner == caller.Sid
+                    && _shown.TryRemove(answered, out _))
                 {
                     shown.Done.TrySetResult(request.Reply ?? new UiReply());
                 }
@@ -224,6 +284,12 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
                 return new PipeResponse { Version = AgentInfo.Version };
 
             case "ask":
+                // a dialog comes from a script of the agent (SYSTEM) or an administrator – never from another person, who could ask for a password
+                if (!caller.Privileged)
+                {
+                    return new PipeResponse { Error = "denied" };
+                }
+
                 return new PipeResponse { Reply = await AskAsync(request.Dialog ?? new UiDialog(), request.Wait, ct) };
 
             case "kiosk":
@@ -239,7 +305,8 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
             case "start":
                 try
                 {
-                    var runId = await client.StartKioskAsync(request.Id ?? 0, request.User, ct);
+                    // the name in the activity of MatHub: who really called, not what the request says
+                    var runId = await client.StartKioskAsync(request.Id ?? 0, caller.Name ?? request.User, ct);
                     signal.Wake();
                     logger.LogInformation("Kiosk: {User} started offer {Id} (run {RunId}).", request.User, request.Id, runId);
                     return new PipeResponse { RunId = runId };
@@ -297,7 +364,8 @@ public static class UiPipe
 {
     public static async Task<PipeResponse> RequestAsync(PipeRequest request, TimeSpan timeout, CancellationToken ct = default)
     {
-        await using var pipe = new NamedPipeClientStream(".", AgentInfo.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        // Identification: the service may see who calls (it answers a dialog only to its user, and takes a dialog only from SYSTEM or an administrator)
+        await using var pipe = new NamedPipeClientStream(".", AgentInfo.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous, System.Security.Principal.TokenImpersonationLevel.Identification);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(timeout);
         await pipe.ConnectAsync(3000, limit.Token);

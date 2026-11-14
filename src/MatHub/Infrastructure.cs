@@ -101,8 +101,9 @@ public sealed class MaintenanceService(IServiceScopeFactory scopes, ILogger<Main
                 {
                     await RunOnceAsync(stoppingToken);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
                 {
+                    // also a download that timed out (a TaskCanceledException): the loop goes on
                     logger.LogWarning(ex, "The housekeeping failed; it tries again later.");
                 }
 

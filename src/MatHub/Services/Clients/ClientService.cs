@@ -30,8 +30,11 @@ public sealed record SoftwareRow(string Name, string? Version, string? Publisher
 /// </summary>
 public static class ClientService
 {
-    /// <summary>A client is online while its agent called within this time.</summary>
-    public static readonly TimeSpan OnlineWindow = TimeSpan.FromMinutes(3);
+    /// <summary>How often the agents call (the setting; the agent API keeps it up to date).</summary>
+    public static int PollSeconds { get; set; } = 30;
+
+    /// <summary>A client is online while its agent called within this time: two calls and a minute, at least three minutes.</summary>
+    public static TimeSpan OnlineWindow => TimeSpan.FromSeconds(Math.Max(180, (2 * PollSeconds) + 60));
 
     public static bool IsOnline(DateTime? lastSeen) => lastSeen is { } seen && DateTime.UtcNow - seen < OnlineWindow;
 

@@ -107,8 +107,20 @@ public sealed class TftpServer(IServiceScopeFactory scopes, NetbootFiles files, 
                     // a client that went away answers with ICMP "port unreachable", which turns up here
                     logger.LogDebug("TFTP: {Message}", ex.Message);
                 }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // one packet that went wrong (the database, a file) must not stop the server – nor the whole app with it
+                    logger.LogWarning(ex, "TFTP: a request failed.");
+                }
 
-                await ResendAsync(udp);
+                try
+                {
+                    await ResendAsync(udp);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogDebug("TFTP: {Message}", ex.Message);
+                }
             }
         }
     }

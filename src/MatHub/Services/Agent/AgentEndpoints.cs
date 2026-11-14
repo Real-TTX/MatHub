@@ -46,6 +46,7 @@ public static class AgentEndpoints
             client.LastUser = Trim(request.LastUser, 200) ?? client.LastUser;
             client.BootDate = request.BootTime?.ToUniversalTime() ?? client.BootDate;
             var settings = await SettingsStore.LoadAsync(db, ct);
+            ClientService.PollSeconds = settings.AgentPollSeconds;
             await db.SaveChangesAsync(ct);
 
             if (client.Status == ClientStatus.Pending)
@@ -59,7 +60,7 @@ public static class AgentEndpoints
             {
                 Status = "active",
                 // somebody tests a script on this computer: it asks every few seconds for a while
-                PollSeconds = await db.Jobs.AnyAsync(j => j.Origin == "test" && j.CreateDate > now.AddMinutes(-15) && j.Runs.Any(r => r.ClientId == client.Id), ct)
+                PollSeconds = await db.Jobs.AnyAsync(j => (j.Origin == "test" || j.Origin == "trial") && j.CreateDate > now.AddMinutes(-15) && j.Runs.Any(r => r.ClientId == client.Id), ct)
                     ? Math.Min(5, settings.AgentPollSeconds)
                     : settings.AgentPollSeconds,
                 InventoryDue = inventoryDue,

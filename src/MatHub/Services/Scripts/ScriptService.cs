@@ -72,6 +72,11 @@ public static class ScriptService
     /// <summary>Saves name, description, language, editor and time. A script that moves from a visual editor to code keeps the compiled code to go on with.</summary>
     public static async Task<Outcome<Script>> SaveAsync(AppDbContext db, Actor actor, long? id, ScriptForm form, CancellationToken ct = default)
     {
+        if (id is { } guarded && await Kiosk.KioskService.OfferedBeyondAsync(db, actor, guarded, null, ct))
+        {
+            return Outcome<Script>.Fail(Localization.Text.T("Scripts.Error.OfferedBeyond"));
+        }
+
         if (!actor.Can(Permission.ScriptsEdit))
         {
             return Outcome<Script>.Denied();
@@ -137,6 +142,11 @@ public static class ScriptService
     /// </summary>
     public static async Task<Outcome<(Script Script, IReadOnlyList<string> Errors)>> SaveContentAsync(AppDbContext db, Actor actor, long id, string? content, string? model, CancellationToken ct = default)
     {
+        if ((long?)id is { } guarded && await Kiosk.KioskService.OfferedBeyondAsync(db, actor, guarded, null, ct))
+        {
+            return Outcome<(Script Script, IReadOnlyList<string> Errors)>.Fail(Localization.Text.T("Scripts.Error.OfferedBeyond"));
+        }
+
         if (!actor.Can(Permission.ScriptsEdit))
         {
             return Outcome<(Script, IReadOnlyList<string>)>.Denied();
@@ -205,7 +215,7 @@ public static class ScriptService
     }
 
     /// <summary>A script of blocks as a new flow ("Name (flow)"): the same steps, one base; the blocks stay as they are.</summary>
-    public static async Task<Outcome<Script>> CopyAsFlowAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
+    public static async Task<Outcome<Script>> CopyAsFlowAsync(AppDbContext db, Actor actor, ScriptFileStore store, long id, CancellationToken ct = default)
     {
         if (!actor.Can(Permission.ScriptsEdit))
         {
@@ -229,11 +239,12 @@ public static class ScriptService
         db.Scripts.Add(copy);
         ActivityLog.Add(db, actor, "script", "convert", copy.Name);
         await db.SaveChangesAsync(ct);
+        await ScriptFileService.CopyAllAsync(db, store, source.Id, copy.Id, ct);
         return Outcome<Script>.Success(copy);
     }
 
     /// <summary>A copy of a script ("Name (copy)").</summary>
-    public static async Task<Outcome<Script>> DuplicateAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
+    public static async Task<Outcome<Script>> DuplicateAsync(AppDbContext db, Actor actor, ScriptFileStore store, long id, CancellationToken ct = default)
     {
         if (!actor.Can(Permission.ScriptsEdit))
         {
@@ -255,11 +266,17 @@ public static class ScriptService
         db.Scripts.Add(copy);
         ActivityLog.Add(db, actor, "script", "create", copy.Name);
         await db.SaveChangesAsync(ct);
+        await ScriptFileService.CopyAllAsync(db, store, source.Id, copy.Id, ct);
         return Outcome<Script>.Success(copy);
     }
 
     public static async Task<Outcome<string>> DeleteAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
     {
+        if ((long?)id is { } guarded && await Kiosk.KioskService.OfferedBeyondAsync(db, actor, guarded, null, ct))
+        {
+            return Outcome<string>.Fail(Localization.Text.T("Scripts.Error.OfferedBeyond"));
+        }
+
         if (!actor.Can(Permission.ScriptsEdit))
         {
             return Outcome<string>.Denied();

@@ -96,5 +96,6 @@
   "Jobs.Kind.Sequence": { "en": "Sequence", "de": "Ablauf" },
   "Jobs.Kind.Sequence.Hint": { "en": "Several steps one after the other, also with restarts.", "de": "Mehrere Schritte nacheinander, auch mit Neustarts." },
   "Jobs.Origin.kiosk": { "en": "Kiosk", "de": "Kiosk" },
-  "Jobs.Origin.test": { "en": "Test", "de": "Test" }
+  "Jobs.Origin.test": { "en": "Test", "de": "Test" },
+  "Jobs.Origin.trial": { "en": "Trial run", "de": "Probelauf" }
 }

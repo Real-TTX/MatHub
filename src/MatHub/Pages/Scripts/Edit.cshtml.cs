@@ -103,7 +103,7 @@ public sealed class EditModel(AppDbContext db) : AppPageModel
 
     public async Task<IActionResult> OnPostFlowAsync()
     {
-        var outcome = await ScriptService.CopyAsFlowAsync(db, Me.Actor, Id ?? 0, HttpContext.RequestAborted);
+        var outcome = await ScriptService.CopyAsFlowAsync(db, Me.Actor, HttpContext.RequestServices.GetRequiredService<ScriptFileStore>(), Id ?? 0, HttpContext.RequestAborted);
         if (outcome.NotAllowed)
         {
             return NotFound();
@@ -115,7 +115,7 @@ public sealed class EditModel(AppDbContext db) : AppPageModel
 
     public async Task<IActionResult> OnPostDuplicateAsync()
     {
-        var outcome = await ScriptService.DuplicateAsync(db, Me.Actor, Id ?? 0, HttpContext.RequestAborted);
+        var outcome = await ScriptService.DuplicateAsync(db, Me.Actor, HttpContext.RequestServices.GetRequiredService<ScriptFileStore>(), Id ?? 0, HttpContext.RequestAborted);
         if (outcome.NotAllowed)
         {
             return NotFound();

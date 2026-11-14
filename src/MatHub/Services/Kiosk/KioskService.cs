@@ -114,7 +114,7 @@ public static class KioskService
         if (id is { } existing)
         {
             var found = await db.KioskItems.FirstOrDefaultAsync(s => s.Id == existing, ct);
-            if (found is null)
+            if (found is null || !await WithinReachAsync(db, actor, found, ct))
             {
                 return Outcome<KioskItem>.Denied();
             }
@@ -152,7 +152,7 @@ public static class KioskService
         }
 
         var item = await db.KioskItems.FirstOrDefaultAsync(s => s.Id == id, ct);
-        if (item is null)
+        if (item is null || !await WithinReachAsync(db, actor, item, ct))
         {
             return Outcome<string>.Denied();
         }
@@ -161,6 +161,52 @@ public static class KioskService
         ActivityLog.Add(db, actor, "kiosk", "delete", item.Name);
         await db.SaveChangesAsync(ct);
         return Outcome<string>.Success(item.Name);
+    }
+
+    /// <summary>Whether the actor reaches every computer an offer goes to (an offer for all clients: only someone who reaches all).</summary>
+    private static async Task<bool> WithinReachAsync(AppDbContext db, Actor actor, KioskItem item, CancellationToken ct)
+    {
+        if (actor.ReachesAll)
+        {
+            return true;
+        }
+
+        if (item.GroupIds.Count == 0)
+        {
+            return false;
+        }
+
+        var reachable = await AccessRules.Groups(db, actor).Select(g => g.Id).ToListAsync(ct);
+        return item.GroupIds.All(reachable.Contains);
+    }
+
+    /// <summary>
+    /// Whether a script or a sequence is offered by the kiosk to computers the actor does not reach – directly, or (a script) as a step of an offered
+    /// sequence. A kiosk start runs what the script is now: someone limited to some groups must not change what runs on all the others.
+    /// </summary>
+    public static async Task<bool> OfferedBeyondAsync(AppDbContext db, Actor actor, long? scriptId, long? sequenceId, CancellationToken ct = default)
+    {
+        if (actor.ReachesAll)
+        {
+            return false;
+        }
+
+        var reachable = await AccessRules.Groups(db, actor).Select(g => g.Id).ToListAsync(ct);
+        var beyond = (await db.KioskItems.AsNoTracking().Where(i => i.Kind != KioskKind.Package).ToListAsync(ct))
+            .Where(i => i.GroupIds.Count == 0 || !i.GroupIds.All(reachable.Contains)).ToList();
+        if (beyond.Any(i => (scriptId is not null && i.ScriptId == scriptId) || (sequenceId is not null && i.SequenceId == sequenceId)))
+        {
+            return true;
+        }
+
+        if (scriptId is null)
+        {
+            return false;
+        }
+
+        var sequences = beyond.Where(i => i.SequenceId is not null).Select(i => i.SequenceId!.Value).Distinct().ToList();
+        var offered = await db.Sequences.AsNoTracking().Where(s => sequences.Contains(s.Id)).ToListAsync(ct);
+        return offered.Any(s => SequenceService.StepsOf(s).Any(step => step.ScriptId == scriptId));
     }
 
     // ---- the agent ---------------------------------------------------------------------------------------------------------------

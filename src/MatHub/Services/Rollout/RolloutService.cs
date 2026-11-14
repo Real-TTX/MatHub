@@ -324,6 +324,16 @@ public static class RolloutService
             return Outcome<RolloutTask>.Denied();
         }
 
+        // a task wipes the disk of the computer: a limited role only installs computers it reaches (or new ones MatHub does not know)
+        if (!actor.ReachesAll)
+        {
+            var reachable = AccessRules.Clients(db, actor).Select(c => c.Id);
+            if (await db.Clients.AnyAsync(c => c.MacAddresses != null && c.MacAddresses.Contains(mac) && !reachable.Contains(c.Id), ct))
+            {
+                return Outcome<RolloutTask>.Denied();
+            }
+        }
+
         RolloutTask task;
         if (id is { } existing)
         {

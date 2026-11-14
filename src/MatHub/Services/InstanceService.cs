@@ -198,6 +198,9 @@ public sealed class InstanceService(AppDbContext db, AccountService accounts, Ma
         var jobs = await db.Jobs
             .Where(j => j.CreateDate < limit && !db.JobRuns.Any(r => r.JobId == j.Id && (r.Status == RunStatus.Queued || r.Status == RunStatus.Running)))
             .ExecuteDeleteAsync(ct);
+        // a task that booted half a day ago and never finished (setup failed, no agent): its files (the passwords) are not served any longer
+        await db.RolloutTasks.Where(t => t.Status == RolloutStatus.Installing && t.BootedDate < now.AddHours(-12))
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, RolloutStatus.Cancelled).SetProperty(t => t.UpdateDate, now), ct);
         var rolloutLimit = now.AddDays(-30);
         var rollouts = await db.RolloutTasks
             .Where(t => (t.Status == RolloutStatus.Completed || t.Status == RolloutStatus.Cancelled) && t.UpdateDate < rolloutLimit)

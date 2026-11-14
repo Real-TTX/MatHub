@@ -244,7 +244,16 @@ internal sealed class TrayApp : ApplicationContext
                 continue;
             }
 
-            var reply = await OnUi(() => Handle(dialog));
+            // a dialog that cannot be shown must not end this loop (then no dialog would come any more until the next sign-in): the script hears "error"
+            UiReply? reply;
+            try
+            {
+                reply = await OnUi(() => Handle(dialog));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                reply = new UiReply { Answer = "error" };
+            }
             if (reply is not null && response.DialogId is { } id)
             {
                 try

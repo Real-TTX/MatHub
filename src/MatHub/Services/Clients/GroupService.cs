@@ -293,17 +293,27 @@ public static class GroupService
     /// <summary>Makes the members of a group <paramref name="wanted"/> (only for <paramref name="onlyClient"/> when it is given).</summary>
     private static async Task ApplyAsync(AppDbContext db, long groupId, HashSet<long> wanted, long? onlyClient, CancellationToken ct)
     {
-        var current = await db.ClientGroupMembers.Where(m => m.ClientGroupId == groupId && (onlyClient == null || m.ClientId == onlyClient)).ToListAsync(ct);
-        var gone = current.Where(m => !wanted.Contains(m.ClientId)).ToList();
-        var added = wanted.Where(id => current.All(m => m.ClientId != id)).ToList();
-        if (gone.Count == 0 && added.Count == 0)
+        var current = await db.ClientGroupMembers.AsNoTracking().Where(m => m.ClientGroupId == groupId && (onlyClient == null || m.ClientId == onlyClient))
+            .Select(m => m.ClientId).ToListAsync(ct);
+        var gone = current.Where(id => !wanted.Contains(id)).ToList();
+        var added = wanted.Where(id => !current.Contains(id)).ToList();
+
+        // set by set in the database: the planner (every minute) and an inventory may refresh the same group at once – a row that is there already or
+        // gone already is no error
+        if (gone.Count > 0)
         {
-            return;
+            await db.ClientGroupMembers.Where(m => m.ClientGroupId == groupId && gone.Contains(m.ClientId)).ExecuteDeleteAsync(ct);
         }
 
-        db.ClientGroupMembers.RemoveRange(gone);
-        db.ClientGroupMembers.AddRange(added.Select(id => new ClientGroupMember { ClientGroupId = groupId, ClientId = id }));
-        await db.SaveChangesAsync(ct);
+        if (added.Count > 0)
+        {
+            var now = DateTime.UtcNow;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "ClientGroupMember" ("ClientGroupId", "ClientId", "CreateDate", "UpdateDate")
+                SELECT {groupId}, id, {now}, {now} FROM unnest({added.ToArray()}) AS id
+                ON CONFLICT ("ClientGroupId", "ClientId") DO NOTHING
+                """, ct);
+        }
     }
 
     public static string RuleText(GroupRuleField field, GroupRuleOperator op, string? value)

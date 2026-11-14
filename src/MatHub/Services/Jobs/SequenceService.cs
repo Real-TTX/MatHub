@@ -169,6 +169,11 @@ public static class SequenceService
 
     public static async Task<Outcome<Sequence>> SaveAsync(AppDbContext db, Actor actor, long? id, SequenceForm form, CancellationToken ct = default)
     {
+        if (id is { } guarded && await Kiosk.KioskService.OfferedBeyondAsync(db, actor, null, guarded, ct))
+        {
+            return Outcome<Sequence>.Fail(Localization.Text.T("Sequences.Error.OfferedBeyond"));
+        }
+
         if (!actor.Can(Permission.ScriptsEdit))
         {
             return Outcome<Sequence>.Denied();
@@ -263,6 +268,11 @@ public static class SequenceService
 
     public static async Task<Outcome<string>> DeleteAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
     {
+        if ((long?)id is { } guarded && await Kiosk.KioskService.OfferedBeyondAsync(db, actor, null, guarded, ct))
+        {
+            return Outcome<string>.Fail(Localization.Text.T("Sequences.Error.OfferedBeyond"));
+        }
+
         if (!actor.Can(Permission.ScriptsEdit))
         {
             return Outcome<string>.Denied();
