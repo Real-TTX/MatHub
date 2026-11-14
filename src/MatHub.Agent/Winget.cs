@@ -33,6 +33,40 @@ public static partial class Winget
             return _path;
         }
 
+        // the App Installer's own folder first (the newest, of this platform); the PATH only for a person, never as SYSTEM: a folder of the PATH a user may
+        // write to would let them put a winget.exe there that runs as SYSTEM
+        var apps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps");
+        var platform = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64";
+        try
+        {
+            var found = Directory.GetDirectories(apps, $"Microsoft.DesktopAppInstaller_*_{platform}__8wekyb3d8bbwe")
+                .Select(d => (Dir: d, Version: VersionOf(Path.GetFileName(d))))
+                .OrderByDescending(d => d.Version)
+                .Select(d => Path.Combine(d.Dir, "winget.exe"))
+                .FirstOrDefault(File.Exists);
+            if (found is not null)
+            {
+                return _path = found;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // a person may not list WindowsApps: the PATH below
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        using (var me = System.Security.Principal.WindowsIdentity.GetCurrent())
+        {
+            if (me.IsSystem)
+            {
+                return null;
+            }
+        }
+
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var candidate = Path.Combine(dir.Trim(), "winget.exe");
@@ -42,20 +76,7 @@ public static partial class Winget
             }
         }
 
-        var apps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps");
-        try
-        {
-            var found = Directory.GetDirectories(apps, "Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe")
-                .Select(d => (Dir: d, Version: VersionOf(Path.GetFileName(d))))
-                .OrderByDescending(d => d.Version)
-                .Select(d => Path.Combine(d.Dir, "winget.exe"))
-                .FirstOrDefault(File.Exists);
-            return _path = found;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
+        return null;
     }
 
     private static Version VersionOf(string folder)
@@ -87,8 +108,14 @@ public static partial class Winget
             return null;
         }
 
+        // a list that failed is no list (null: the server keeps the ids it knows); "nothing found" is an empty one
         var result = await ProcessRunner.RunAsync(winget, ["list", "--source", "winget", .. Agreements], TimeSpan.FromMinutes(3), ct);
-        return result.ExitCode is null ? null : ParseTable(result.Output).Where(r => r.Length >= 3 && Id(r[1]) is not null)
+        if (result.ExitCode is not { } code || (code != 0 && code != NotFound))
+        {
+            return null;
+        }
+
+        return ParseTable(result.Output).Where(r => r.Length >= 3 && Id(r[1]) is not null)
             .Select(r => new WingetPackageInfo(r[0], r[1], r[2])).ToList();
     }
 

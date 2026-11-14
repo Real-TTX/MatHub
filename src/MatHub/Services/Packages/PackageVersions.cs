@@ -153,7 +153,7 @@ public static class PackageVersions
         return Outcome<PackageVersion>.Success(created);
     }
 
-    /// <summary>An installer of a version (a file is stored with it: MSI, EXE). Only a version that is not distributed yet takes new installers.</summary>
+    /// <summary>An installer of a version (a file is stored with it: MSI, EXE). Only a new version (not tested, approved or retired) takes or loses installers.</summary>
     public static async Task<Outcome<PackageInstaller>> AddInstallerAsync(
         AppDbContext db, Actor actor, PackageFiles store, long versionId, InstallerForm form, string? fileName, Stream? file, CancellationToken ct = default)
     {
@@ -166,6 +166,12 @@ public static class PackageVersions
         if (version?.Package is null)
         {
             return Outcome<PackageInstaller>.Denied();
+        }
+
+        // what was tested or approved stays as it was: a change is a new version
+        if (version.Status != VersionStatus.New)
+        {
+            return Outcome<PackageInstaller>.Fail(Localization.Text.T("Versions.Error.Locked"));
         }
 
         if (version.Installers.Any(i => i.Architecture == form.Architecture))
@@ -201,11 +207,6 @@ public static class PackageVersions
             installer.FileSha256 = sha;
         }
 
-        if (version.Status == VersionStatus.Approved)
-        {
-            version.Package.Kind = installer.Kind;
-        }
-
         ActivityLog.Add(db, actor, "package", "upload", version.Package.Name, $"{version.Version} {Code(installer.Architecture)}");
         await db.SaveChangesAsync(ct);
         return Outcome<PackageInstaller>.Success(installer);
@@ -224,10 +225,9 @@ public static class PackageVersions
             return Outcome<string>.Denied();
         }
 
-        if (installer.PackageVersion.Status is VersionStatus.Approved or VersionStatus.Testing
-            && await db.PackageInstallers.CountAsync(i => i.PackageVersionId == installer.PackageVersionId, ct) == 1)
+        if (installer.PackageVersion.Status != VersionStatus.New)
         {
-            return Outcome<string>.Fail(Localization.Text.T("Versions.Error.LastInstaller"));
+            return Outcome<string>.Fail(Localization.Text.T("Versions.Error.Locked"));
         }
 
         db.PackageInstallers.Remove(installer);
@@ -258,10 +258,14 @@ public static class PackageVersions
             return Outcome<PackageVersion>.Fail(Localization.Text.T("Versions.Error.NoInstaller"));
         }
 
-        var others = await db.PackageVersions.Where(v => v.PackageId == version.PackageId && v.Id != version.Id && v.Status == status).ToListAsync(ct);
-        foreach (var other in others)
+        // one approved version and one in test per package: the one before steps aside (retiring touches nobody else)
+        if (status is VersionStatus.Approved or VersionStatus.Testing)
         {
-            other.Status = status == VersionStatus.Approved ? VersionStatus.Retired : VersionStatus.New;
+            var others = await db.PackageVersions.Where(v => v.PackageId == version.PackageId && v.Id != version.Id && v.Status == status).ToListAsync(ct);
+            foreach (var other in others)
+            {
+                other.Status = status == VersionStatus.Approved ? VersionStatus.Retired : VersionStatus.New;
+            }
         }
 
         version.Status = status;

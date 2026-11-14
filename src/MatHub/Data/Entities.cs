@@ -602,6 +602,33 @@ public sealed class PackageAssignment : Entity
     public bool IsActive { get; set; } = true;
 }
 
+/// <summary>
+/// What MatHub did last with a package on a client, written when a run of it worked: installed (which version) or removed. The planner reads it where the
+/// inventory cannot tell (a package without detection), and so it does not install again what the inventory does not confirm (installed, not detected) or
+/// remove again what is still found after a removal that worked. Kept apart from the jobs: housekeeping deletes old jobs, this stays.
+/// </summary>
+public sealed class ClientPackage : Entity
+{
+    public long ClientId { get; set; }
+
+    public Client? Client { get; set; }
+
+    public long PackageId { get; set; }
+
+    public Package? Package { get; set; }
+
+    /// <summary>The version installed or removed (null: not known, e.g. from a sequence).</summary>
+    public long? PackageVersionId { get; set; }
+
+    public PackageVersion? PackageVersion { get; set; }
+
+    /// <summary>true: installed; false: removed.</summary>
+    public bool Installed { get; set; }
+
+    /// <summary>When the run that did it ended.</summary>
+    public DateTime Date { get; set; }
+}
+
 // ==== Jobs ============================================================================================================================
 
 public enum JobKind

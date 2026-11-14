@@ -39,6 +39,9 @@ public sealed record JobStep
     /// <summary>The installer of this package may be downloaded while the step runs.</summary>
     public long? PackageId { get; init; }
 
+    /// <summary>The version of the package the step installs or removes.</summary>
+    public long? PackageVersionId { get; init; }
+
     /// <summary>The files of this script may be downloaded while the step runs.</summary>
     public long? ScriptId { get; init; }
 }
@@ -190,9 +193,14 @@ public static class SequenceService
                 SequenceStepKind.Script => step with { PackageId = null, WingetId = null, Seconds = null },
                 SequenceStepKind.PackageInstall or SequenceStepKind.PackageUninstall => step with { ScriptId = null, WingetId = null, Seconds = null },
                 SequenceStepKind.Wait => step with { ScriptId = null, PackageId = null, WingetId = null, Seconds = Math.Clamp(step.Seconds ?? 60, 1, 86400) },
-                SequenceStepKind.WingetUpgrade => step with { ScriptId = null, PackageId = null, Seconds = null, WingetId = string.IsNullOrWhiteSpace(step.WingetId) ? null : step.WingetId.Trim() },
                 _ => step with { ScriptId = null, PackageId = null, WingetId = null, Seconds = null },
             };
+            // winget upgrade installs versions nobody approved: no longer a step (old sequences have to replace it)
+            if (clean.Kind == SequenceStepKind.WingetUpgrade)
+            {
+                return Outcome<Sequence>.Fail(Localization.Text.T("Sequences.Error.WingetUpgrade", index));
+            }
+
             if (clean.Kind == SequenceStepKind.Script && (clean.ScriptId is not { } sid || !await db.Scripts.AnyAsync(s => s.Id == sid, ct)))
             {
                 return Outcome<Sequence>.Fail(Localization.Text.T("Sequences.Error.Script", index));
@@ -320,7 +328,7 @@ public static class SequenceService
 
                     var package = await db.Packages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == step.PackageId, ct);
                     var uninstall = step.Kind == SequenceStepKind.PackageUninstall;
-                    var version = package is null ? null : await JobService.VersionForAsync(db, package.Id, null, ct);
+                    var version = package is null ? null : await JobService.VersionForAsync(db, package.Id, null, ct, uninstall);
                     if (package is null || version is null || Packages.PackageVersions.Template(version, uninstall) is not { } template)
                     {
                         return Outcome<List<JobStep>>.Fail(Localization.Text.T("Sequences.Error.PackageEmpty", number));
@@ -329,22 +337,11 @@ public static class SequenceService
                     result.Add(new JobStep
                     {
                         Name = Localization.Text.T(uninstall ? "Jobs.Name.UninstallVersion" : "Jobs.Name.InstallVersion", package.Name, version.Version), Kind = step.Kind,
-                        ContinueOnError = step.ContinueOnError, Template = template, PackageId = package.Id,
+                        ContinueOnError = step.ContinueOnError, Template = template, PackageId = package.Id, PackageVersionId = version.Id,
                     });
                     break;
                 case SequenceStepKind.WingetUpgrade:
-                    if (!actor.Can(Permission.PackagesDeploy))
-                    {
-                        return Outcome<List<JobStep>>.Denied();
-                    }
-
-                    result.Add(new JobStep
-                    {
-                        Name = string.IsNullOrWhiteSpace(step.WingetId) ? Localization.Text.T("Jobs.Name.UpgradeAll") : Localization.Text.T("Jobs.Name.Upgrade", step.WingetId),
-                        Kind = step.Kind, ContinueOnError = step.ContinueOnError,
-                        Template = new AgentJob { Kind = JobKinds.WingetUpgrade, Arguments = step.WingetId, TimeoutSeconds = 3600 },
-                    });
-                    break;
+                    return Outcome<List<JobStep>>.Fail(Localization.Text.T("Sequences.Error.WingetUpgrade", number));
                 case SequenceStepKind.Restart:
                     result.Add(new JobStep
                     {

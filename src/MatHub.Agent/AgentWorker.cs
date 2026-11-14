@@ -20,6 +20,9 @@ public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunne
             {
                 // the time the server asks for, or less: the kiosk started something
                 await signal.WaitAsync(wait, stoppingToken);
+
+                // results the server did not take last time (it was not there): first
+                await SendKeptResultsAsync(stoppingToken);
                 var poll = await client.PollAsync(new PollRequest
                 {
                     AgentVersion = AgentInfo.Version,
@@ -43,7 +46,7 @@ public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunne
                 foreach (var job in poll.Jobs)
                 {
                     var result = await runner.RunAsync(job, stoppingToken);
-                    await client.ReportAsync(job.RunId, result, stoppingToken);
+                    await ReportAsync(job.RunId, result, stoppingToken);
                     broker.JobEnded();
                 }
 
@@ -79,6 +82,58 @@ public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunne
                 logger.LogError(ex, "The agent ran into an error; it goes on.");
                 wait = TimeSpan.FromSeconds(60);
             }
+        }
+    }
+
+    /// <summary>The folder of the results that wait for the server (in the data folder of the agent: only SYSTEM and administrators).</summary>
+    private static string KeptResults => Path.Combine(AgentInfo.DataDirectory, "results");
+
+    /// <summary>Reports a result; when the server cannot be reached the result is kept on disk and reported with the next call (it is not lost).</summary>
+    private async Task ReportAsync(long runId, RunResult result, CancellationToken ct)
+    {
+        try
+        {
+            await client.ReportAsync(runId, result, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            Directory.CreateDirectory(KeptResults);
+            await File.WriteAllTextAsync(Path.Combine(KeptResults, runId.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".json"),
+                System.Text.Json.JsonSerializer.Serialize(result), ct);
+            logger.LogWarning("The result of run {Run} is kept until the server can be reached: {Message}", runId, ex.Message);
+            throw;
+        }
+    }
+
+    private async Task SendKeptResultsAsync(CancellationToken ct)
+    {
+        if (!Directory.Exists(KeptResults))
+        {
+            return;
+        }
+
+        foreach (var file in Directory.GetFiles(KeptResults, "*.json").Order())
+        {
+            RunResult? result;
+            try
+            {
+                result = System.Text.Json.JsonSerializer.Deserialize<RunResult>(await File.ReadAllTextAsync(file, ct));
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                result = null;
+            }
+
+            if (!long.TryParse(Path.GetFileNameWithoutExtension(file), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var runId)
+                || result is null)
+            {
+                File.Delete(file);
+                continue;
+            }
+
+            await client.ReportAsync(runId, result, ct);
+            File.Delete(file);
+            logger.LogInformation("The kept result of run {Run} is reported.", runId);
         }
     }
 }

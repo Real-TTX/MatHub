@@ -80,7 +80,7 @@
                             {
                                 <code class="mh-code-name mh-installer__args">@i.Arguments</code>
                             }
-                            @if (Model.CanEdit && s is VersionStatus.New or VersionStatus.Testing)
+                            @if (Model.CanEdit && s == VersionStatus.New)
                             {
                                 <form method="post" asp-page-handler="RemoveInstaller" asp-route-id="@p.Id" asp-route-installer="@i.Id" class="mh-installer__remove">
                                     <button type="submit" class="mat-btn mat-btn--ghost mat-btn--icon mat-btn--sm" aria-label="@L["Versions.RemoveInstaller"]" data-tip="@L["Versions.RemoveInstaller"]">@Ui.Icon("trash")</button>
@@ -114,7 +114,7 @@
                         <form method="post" asp-page-handler="Status" asp-route-id="@p.Id" asp-route-version="@v.Version.Id" asp-route-status="Retired"><button type="submit" class="mat-btn mat-btn--ghost" data-confirm="@L["Versions.Retire.Confirm", v.Version.Version]" data-confirm-ok="@L["Versions.Retire"]">@Ui.Icon("x-circle")<span>@L["Versions.Retire"]</span></button></form>
                     }
                 }
-                @if (Model.CanEdit && s is VersionStatus.New or VersionStatus.Testing)
+                @if (Model.CanEdit && s == VersionStatus.New)
                 {
                     <a class="mat-btn mat-btn--ghost" href="/packages/@p.Id/versions?add=@v.Version.Id">@Ui.Icon("plus")<span>@L["Versions.AddPlatform"]</span></a>
                 }

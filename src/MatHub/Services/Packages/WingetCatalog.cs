@@ -218,18 +218,30 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         return map;
     }
 
-    /// <summary>Versions as winget compares them: part by part, numbers as numbers ("10.2" after "9.11").</summary>
+    /// <summary>
+    /// Versions as winget compares them: part by part at the dots, each part by its leading number ("10.2" after "9.11"); with the same number a part with
+    /// something after it comes before the part without ("2.0.0-rc1" before "2.0.0", "1.2.beta" before "1.2.0"), two such rests compare as text. Missing
+    /// parts are 0 ("1.0" = "1.0.0").
+    /// </summary>
     public static int CompareVersions(string a, string b)
     {
-        var x = a.Split('.', '-', '_', '+');
-        var y = b.Split('.', '-', '_', '+');
+        var x = a.Trim().Split('.');
+        var y = b.Trim().Split('.');
         for (var i = 0; i < Math.Max(x.Length, y.Length); i++)
         {
-            var p = i < x.Length ? x[i] : "0";
-            var q = i < y.Length ? y[i] : "0";
-            var c = long.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out var m) && long.TryParse(q, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
-                ? m.CompareTo(n)
-                : string.Compare(p, q, StringComparison.OrdinalIgnoreCase);
+            var (m, p) = Part(i < x.Length ? x[i] : "0");
+            var (n, q) = Part(i < y.Length ? y[i] : "0");
+            if (m != n)
+            {
+                return m.CompareTo(n);
+            }
+
+            if (p.Length == 0 != (q.Length == 0))
+            {
+                return p.Length == 0 ? 1 : -1;
+            }
+
+            var c = string.Compare(p, q, StringComparison.OrdinalIgnoreCase);
             if (c != 0)
             {
                 return c;
@@ -237,6 +249,18 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         }
 
         return 0;
+
+        static (long Number, string Tail) Part(string part)
+        {
+            var digits = 0;
+            while (digits < part.Length && char.IsAsciiDigit(part[digits]))
+            {
+                digits++;
+            }
+
+            var number = digits == 0 ? 0 : long.TryParse(part.AsSpan(0, Math.Min(digits, 18)), NumberStyles.None, CultureInfo.InvariantCulture, out var v) ? v : 0;
+            return (number, part[digits..]);
+        }
     }
 
     // ---- the store --------------------------------------------------------------------------------------------------------------
@@ -459,34 +483,85 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
             return Outcome<Package>.Denied();
         }
 
-        Package package;
-        var status = VersionStatus.Approved;
-        if (d.PackageId is { } existing && await db.Packages.FirstOrDefaultAsync(p => p.Id == existing, ct) is { } found)
+        // the installers first: a download that fails leaves nothing half made behind (no package, no version without installers)
+        var downloads = await DownloadAllAsync(d, viaWinget, ct);
+        if (downloads.Error is not null)
         {
-            package = found;
-            status = VersionStatus.New;
-            if (await db.PackageVersions.AnyAsync(v => v.PackageId == package.Id && v.Version == d.Version, ct))
-            {
-                return Outcome<Package>.Success(package);
-            }
-        }
-        else
-        {
-            var saved = await PackageService.SaveAsync(db, actor, null, new PackageForm(d.Name, d.Publisher, d.ShortDescription ?? d.Description, d.WingetId, DetectionKind.WingetId, d.WingetId, true), ct);
-            if (!saved.Ok)
-            {
-                return saved;
-            }
-
-            package = saved.Value!;
+            return Outcome<Package>.Fail(downloads.Error);
         }
 
-        var version = await PrepareAsync(db, actor, package, d, status, "store", viaWinget, ct);
-        return version.Ok ? Outcome<Package>.Success(package) : Outcome<Package>.Fail(version.Error!);
+        try
+        {
+            Package package;
+            var status = VersionStatus.Approved;
+            if (d.PackageId is { } existing && await db.Packages.FirstOrDefaultAsync(p => p.Id == existing, ct) is { } found)
+            {
+                package = found;
+                status = VersionStatus.New;
+                if (await db.PackageVersions.AnyAsync(v => v.PackageId == package.Id && v.Version == d.Version, ct))
+                {
+                    return Outcome<Package>.Success(package);
+                }
+            }
+            else
+            {
+                var saved = await PackageService.SaveAsync(db, actor, null, new PackageForm(d.Name, d.Publisher, d.ShortDescription ?? d.Description, d.WingetId, DetectionKind.WingetId, d.WingetId, true), ct);
+                if (!saved.Ok)
+                {
+                    return saved;
+                }
+
+                package = saved.Value!;
+            }
+
+            var version = await CreateVersionAsync(db, actor, package, d, downloads.Items, status, "store", ct);
+            return version.Ok ? Outcome<Package>.Success(package) : Outcome<Package>.Fail(version.Error!);
+        }
+        finally
+        {
+            DeleteTemp(downloads.Items);
+        }
     }
 
-    /// <summary>A version of a package from the manifest of the catalog, with its installers (downloaded and checked, or winget pinned).</summary>
-    private async Task<Outcome<PackageVersion>> PrepareAsync(AppDbContext db, Actor actor, Package package, CatalogDetail d, VersionStatus status, string source, bool viaWinget, CancellationToken ct)
+    /// <summary>An installer of the manifest as MatHub takes it: its platform, the kind (null: winget pinned) and the file downloaded and checked.</summary>
+    private sealed record Download(InstallerArchitecture Architecture, CatalogInstaller Installer, PackageKind? Kind, string? Temp);
+
+    /// <summary>Downloads the installers MatHub keeps (one per platform) and checks them; on an error nothing is left on disk.</summary>
+    private async Task<(List<Download> Items, string? Error)> DownloadAllAsync(CatalogDetail d, bool viaWinget, CancellationToken ct)
+    {
+        var items = new List<Download>();
+        foreach (var (architecture, installer) in Choose(d.Installers))
+        {
+            var kind = viaWinget ? null : PackageKindOf(installer.Type);
+            if (kind is null)
+            {
+                items.Add(new Download(architecture, installer, null, null));
+                continue;
+            }
+
+            var temp = await DownloadAsync(installer, ct);
+            if (temp.Error is not null)
+            {
+                DeleteTemp(items);
+                return ([], temp.Error);
+            }
+
+            items.Add(new Download(architecture, installer, kind, temp.Path));
+        }
+
+        return (items, null);
+    }
+
+    private static void DeleteTemp(IEnumerable<Download> items)
+    {
+        foreach (var item in items.Where(i => i.Temp is not null && File.Exists(i.Temp)))
+        {
+            File.Delete(item.Temp!);
+        }
+    }
+
+    /// <summary>A version of a package from the manifest of the catalog with the installers downloaded before; on an error the version is removed again.</summary>
+    private async Task<Outcome<PackageVersion>> CreateVersionAsync(AppDbContext db, Actor actor, Package package, CatalogDetail d, List<Download> downloads, VersionStatus status, string source, CancellationToken ct)
     {
         var created = await PackageVersions.CreateAsync(db, actor, package.Id, d.Version, source, null, ct);
         if (!created.Ok)
@@ -495,46 +570,35 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         }
 
         var version = created.Value!;
-        var chosen = Choose(d.Installers);
-        foreach (var (architecture, installer) in chosen)
+        foreach (var item in downloads)
         {
-            var kind = viaWinget ? null : PackageKindOf(installer.Type);
-            if (kind is null)
+            Outcome<PackageInstaller> added;
+            if (item.Kind is not { } kind)
             {
-                await PackageVersions.AddInstallerAsync(db, actor, packageFiles, version.Id, new InstallerForm(architecture, PackageKind.Winget,
-                    WingetId: d.WingetId, WingetVersion: d.Version, SourceUrl: installer.Url), null, null, ct);
-                continue;
+                added = await PackageVersions.AddInstallerAsync(db, actor, packageFiles, version.Id, new InstallerForm(item.Architecture, PackageKind.Winget,
+                    WingetId: d.WingetId, WingetVersion: d.Version, SourceUrl: item.Installer.Url), null, null, ct);
             }
-
-            var temp = await DownloadAsync(installer, ct);
-            if (temp.Error is not null)
+            else
             {
-                return Outcome<PackageVersion>.Fail(temp.Error);
-            }
-
-            try
-            {
-                var fileName = Path.GetFileName(new Uri(installer.Url).LocalPath);
+                var fileName = Path.GetFileName(new Uri(item.Installer.Url).LocalPath);
                 if (string.IsNullOrWhiteSpace(Path.GetExtension(fileName)) || Path.GetExtension(fileName).ToLowerInvariant() is not (".msi" or ".exe"))
                 {
                     fileName = d.WingetId + (kind == PackageKind.Msi ? ".msi" : ".exe");
                 }
 
-                await using var content = File.OpenRead(temp.Path!);
-                var added = await PackageVersions.AddInstallerAsync(db, actor, packageFiles, version.Id, new InstallerForm(architecture, kind.Value,
-                    Arguments: SilentArguments(installer), ProductCode: installer.ProductCode, SourceUrl: installer.Url), fileName, content, ct);
-                if (!added.Ok)
-                {
-                    return Outcome<PackageVersion>.Fail(added.Error!);
-                }
+                await using var content = File.OpenRead(item.Temp!);
+                added = await PackageVersions.AddInstallerAsync(db, actor, packageFiles, version.Id, new InstallerForm(item.Architecture, kind,
+                    Arguments: SilentArguments(item.Installer), ProductCode: item.Installer.ProductCode, SourceUrl: item.Installer.Url), fileName, content, ct);
             }
-            finally
+
+            if (!added.Ok)
             {
-                File.Delete(temp.Path!);
+                await PackageVersions.DeleteAsync(db, Actor.System, packageFiles, version.Id, ct);
+                return Outcome<PackageVersion>.Fail(added.Error!);
             }
         }
 
-        if (status != VersionStatus.New && chosen.Count > 0)
+        if (status != VersionStatus.New && downloads.Count > 0)
         {
             var set = await PackageVersions.SetStatusAsync(db, actor, version.Id, status, ct);
             if (!set.Ok)
@@ -546,19 +610,21 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         return Outcome<PackageVersion>.Success(version);
     }
 
-    /// <summary>Downloads an installer of a manifest to a temporary file and checks it against the SHA-256 of the manifest.</summary>
+    /// <summary>Downloads an installer of a manifest to a temporary file and checks it against the SHA-256 of the manifest (at most half an hour).</summary>
     private async Task<(string? Path, string? Error)> DownloadAsync(CatalogInstaller installer, CancellationToken ct)
     {
         var temp = Path.Combine(Path.GetTempPath(), "mathub-store-" + Guid.NewGuid().ToString("N"));
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(TimeSpan.FromMinutes(30));
         try
         {
             using (var client = http.CreateClient("winget"))
-            using (var response = await client.GetAsync(installer.Url, HttpCompletionOption.ResponseHeadersRead, ct))
+            using (var response = await client.GetAsync(installer.Url, HttpCompletionOption.ResponseHeadersRead, limit.Token))
             {
                 response.EnsureSuccessStatusCode();
-                await using var source = await response.Content.ReadAsStreamAsync(ct);
+                await using var source = await response.Content.ReadAsStreamAsync(limit.Token);
                 await using var file = File.Create(temp);
-                await source.CopyToAsync(file, ct);
+                await source.CopyToAsync(file, limit.Token);
             }
 
             await using (var check = File.OpenRead(temp))
@@ -573,14 +639,14 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
 
             return (temp, null);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException or IOException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
             if (File.Exists(temp))
             {
                 File.Delete(temp);
             }
 
-            return (null, Localization.Text.T("Store.Error.Download", ex.Message));
+            return (null, Localization.Text.T("Store.Error.Download", ex is OperationCanceledException ? "timeout" : ex.Message));
         }
     }
 
@@ -620,7 +686,20 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
         // as the version before: kept in MatHub, or through winget
         var viaWinget = await db.PackageVersions.Where(v => v.PackageId == package.Id && v.Status == VersionStatus.Approved)
             .SelectMany(v => v.Installers).AnyAsync(i => i.Kind == PackageKind.Winget, ct);
-        return await PrepareAsync(db, actor, package, d, VersionStatus.New, "catalog", viaWinget, ct);
+        var downloads = await DownloadAllAsync(d, viaWinget, ct);
+        if (downloads.Error is not null)
+        {
+            return Outcome<PackageVersion>.Fail(downloads.Error);
+        }
+
+        try
+        {
+            return await CreateVersionAsync(db, actor, package, d, downloads.Items, VersionStatus.New, "catalog", ct);
+        }
+        finally
+        {
+            DeleteTemp(downloads.Items);
+        }
     }
 
     /// <summary>The daily check: every package that prepares its new versions by itself gets the newest one of the catalog, as a new version (never approved).</summary>
@@ -649,7 +728,7 @@ public sealed class WingetCatalog(IHttpClientFactory http, IConfiguration config
                     logger.LogWarning("The new version of {Package} could not be prepared: {Error}", package.Name, outcome.Error);
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException or IOException or YamlDotNet.Core.YamlException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 logger.LogWarning("The new version of {Package} could not be prepared: {Message}", package.Name, ex.Message);
             }

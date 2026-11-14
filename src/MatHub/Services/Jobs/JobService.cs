@@ -129,11 +129,8 @@ public static class JobService
                 template = packageJob;
                 break;
             case JobKind.WingetUpgrade:
-                var id = request.WingetId?.Trim();
-                job.Name = string.IsNullOrEmpty(id) ? Localization.Text.T("Jobs.Name.UpgradeAll") : Localization.Text.T("Jobs.Name.Upgrade", await ProgramNameAsync(db, id, ct));
-                job.TimeoutSeconds = 3600;
-                template = new AgentJob { Kind = JobKinds.WingetUpgrade, Arguments = string.IsNullOrEmpty(id) ? null : id, TimeoutSeconds = 3600 };
-                break;
+                // installs versions nobody approved: no longer made (the kind stays for old jobs)
+                return Outcome<Job>.Fail(Localization.Text.T("Jobs.Error.WingetUpgrade"));
             case JobKind.Inventory:
                 job.Name = Localization.Text.T("Jobs.Name.Inventory");
                 template = new AgentJob { Kind = JobKinds.Inventory, TimeoutSeconds = 600 };
@@ -188,20 +185,6 @@ public static class JobService
     }
 
     /// <summary>The active clients of the request the actor reaches: those named and the members of the groups.</summary>
-    /// <summary>The name of a winget program as people know it: its package, else what Windows calls it on a client, else the id.</summary>
-    private static async Task<string> ProgramNameAsync(AppDbContext db, string wingetId, CancellationToken ct)
-    {
-        var lower = wingetId.ToLowerInvariant();
-        var package = await db.Packages.AsNoTracking().Where(p => p.WingetId != null && p.WingetId.ToLower() == lower).Select(p => p.Name).FirstOrDefaultAsync(ct);
-        if (package is not null)
-        {
-            return package;
-        }
-
-        var installed = await db.ClientSoftware.AsNoTracking().Where(s => s.WingetId != null && s.WingetId.ToLower() == lower).Select(s => s.Name).FirstOrDefaultAsync(ct);
-        return installed is null ? wingetId : PackageService.CleanName(installed);
-    }
-
     public static async Task<List<long>> TargetsAsync(AppDbContext db, Actor actor, IReadOnlyList<long> clientIds, IReadOnlyList<long> groupIds, CancellationToken ct = default)
     {
         var ids = clientIds.ToList();
@@ -377,6 +360,18 @@ public static class JobService
             return Outcome<Job>.Fail(Localization.Text.T("Jobs.Error.NothingToRetry"));
         }
 
+        // what may run today: no winget upgrade any more, and a package version only while it is approved or in test (no way back to a retired one)
+        if (old.Kind == JobKind.WingetUpgrade)
+        {
+            return Outcome<Job>.Fail(Localization.Text.T("Jobs.Error.WingetUpgrade"));
+        }
+
+        if (old.Kind is JobKind.PackageInstall or JobKind.PackageUninstall && old.PackageId is { } package
+            && await VersionForAsync(db, package, old.PackageVersionId, ct, old.Kind == JobKind.PackageUninstall) is null)
+        {
+            return Outcome<Job>.Fail(Localization.Text.T("Versions.Error.NotForJobs"));
+        }
+
         var job = new Job
         {
             Name = old.Name, Kind = old.Kind, ScriptId = old.ScriptId, PackageId = old.PackageId, PackageVersionId = old.PackageVersionId, Payload = old.Payload, Language = old.Language,
@@ -400,7 +395,9 @@ public static class JobService
 
     /// <summary>
     /// The queued runs of a client that are due, at most <paramref name="max"/>: they are running from now on. A sequence hands out its current step (after a
-    /// restart only when the client started again). The secrets the script names go with it (<see cref="SecretService.ResolveAsync"/>).
+    /// restart only when the client started again). The secrets the script names go with it (<see cref="SecretService.ResolveAsync"/>). The agent runs one
+    /// after the other, so it takes one at a time (the time of a run counts from when it is taken). A run is claimed only while it is still queued: a cancel
+    /// that comes in between wins.
     /// </summary>
     public static async Task<IReadOnlyList<AgentJob>> TakeAsync(AppDbContext db, long clientId, int max, CancellationToken ct = default, IDataProtectionProvider? protection = null)
     {
@@ -420,8 +417,8 @@ public static class JobService
             AgentJob? template;
             if (run.Job!.Kind == JobKind.Sequence)
             {
-                // after a restart: the computer has to be back first (a newer boot), or half an hour has gone by
-                if (run.WaitBootDate is { } since && (boot is null || boot <= since) && now - since < RestartWait)
+                // after a restart: the computer has to be back first (its boot time changed – both times are the computer's clock), or half an hour has gone by
+                if (run.WaitBootDate is { } before && (boot is null || boot <= before.AddSeconds(10)) && now - (run.StepDate ?? now) < RestartWait)
                 {
                     continue;
                 }
@@ -448,10 +445,21 @@ public static class JobService
                 template = template with { Secrets = secrets };
             }
 
-            run.Status = RunStatus.Running;
-            run.StartedDate ??= now;
-            run.StepDate = now;
-            jobs.Add(template with { RunId = run.Id });
+            // claim it: only if nobody cancelled it meanwhile
+            var claimed = await db.JobRuns.Where(r => r.Id == run.Id && r.Status == RunStatus.Queued)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RunStatus.Running).SetProperty(r => r.StartedDate, r => r.StartedDate ?? now)
+                    .SetProperty(r => r.StepDate, now).SetProperty(r => r.WaitBootDate, (DateTime?)null), ct);
+            if (claimed == 1)
+            {
+                jobs.Add(template with { RunId = run.Id });
+                run.Status = RunStatus.Running;
+                run.StartedDate ??= now;
+                run.StepDate = now;
+                run.WaitBootDate = null;
+            }
+
+            // what the database has now is what this context knows (no second write of the run)
+            db.Entry(run).State = EntityState.Unchanged;
         }
 
         await db.SaveChangesAsync(ct);
@@ -527,7 +535,16 @@ public static class JobService
             {
                 run.Step++;
                 run.Status = RunStatus.Queued;
-                run.WaitBootDate = step.Kind == SequenceStepKind.Restart ? now : null;
+                if (step.Kind == SequenceStepKind.Restart)
+                {
+                    // the boot time before the restart, as the computer said it (its clock); the wait counts from now
+                    run.WaitBootDate = await db.Clients.Where(c => c.Id == clientId).Select(c => c.BootDate).FirstOrDefaultAsync(ct) ?? now;
+                    run.StepDate = now;
+                }
+                else
+                {
+                    run.WaitBootDate = null;
+                }
             }
             else
             {
@@ -542,6 +559,21 @@ public static class JobService
             run.Output = Tail(result.Output);
         }
 
+        // what MatHub did with a package on this client (the planner reads it)
+        if (result.Succeeded)
+        {
+            if (run.Job.Kind is JobKind.PackageInstall or JobKind.PackageUninstall && run.Job.PackageId is { } package)
+            {
+                await NotePackageAsync(db, clientId, package, run.Job.PackageVersionId, run.Job.Kind == JobKind.PackageInstall, now, ct);
+            }
+            else if (run.Job.Kind == JobKind.Sequence && SequenceService.StepsOf(run.Job) is var done && run.Step < done.Count
+                     && (run.Status != RunStatus.Queued ? done[run.Step] : run.Step > 0 ? done[run.Step - 1] : null) is { PackageId: { } stepPackage } step2
+                     && step2.Kind is SequenceStepKind.PackageInstall or SequenceStepKind.PackageUninstall)
+            {
+                await NotePackageAsync(db, clientId, stepPackage, step2.PackageVersionId, step2.Kind == SequenceStepKind.PackageInstall, now, ct);
+            }
+        }
+
         await db.SaveChangesAsync(ct);
 
         // what is installed changed: the next call of the agent brings an inventory (the planner waits for it)
@@ -550,6 +582,20 @@ public static class JobService
             await db.Clients.Where(c => c.Id == clientId).ExecuteUpdateAsync(s => s.SetProperty(c => c.InventoryRequested, true), ct);
         }
         return true;
+    }
+
+    private static async Task NotePackageAsync(AppDbContext db, long clientId, long packageId, long? versionId, bool installed, DateTime when, CancellationToken ct)
+    {
+        var state = await db.ClientPackages.FirstOrDefaultAsync(x => x.ClientId == clientId && x.PackageId == packageId, ct);
+        if (state is null)
+        {
+            state = new ClientPackage { ClientId = clientId, PackageId = packageId };
+            db.ClientPackages.Add(state);
+        }
+
+        state.PackageVersionId = versionId;
+        state.Installed = installed;
+        state.Date = when;
     }
 
     /// <summary>Runs that never came back (the computer was switched off, the agent restarted) fail after their time and a quarter of an hour.</summary>

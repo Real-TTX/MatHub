@@ -26,6 +26,7 @@
   "Jobs.Kind.System": { "en": "System", "de": "System" },
   "Jobs.ChooseScript": { "en": "Choose a script", "de": "Skript wählen" },
   "Jobs.ChoosePackage": { "en": "Choose a package", "de": "Paket wählen" },
+  "Jobs.Error.WingetUpgrade": { "en": "winget upgrade is no longer run: it would install versions nobody approved. Updates come as approved versions of the packages.", "de": "winget upgrade läuft nicht mehr: es würde Versionen installieren, die niemand freigegeben hat. Updates kommen als freigegebene Versionen der Pakete." },
   "Jobs.PackageVersion": { "en": "{0} {1}", "de": "{0} {1}" },
   "Jobs.PackageVersion.Testing": { "en": "In test – tried on the computers you choose", "de": "Im Test – auf den Computern ausprobiert, die du wählst" },
   "Jobs.WingetId.Hint": { "en": "Empty: every update winget offers.", "de": "Leer: jedes Update, das winget anbietet." },

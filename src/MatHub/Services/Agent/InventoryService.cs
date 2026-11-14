@@ -30,7 +30,9 @@ public static class InventoryService
         client.DiskFreeBytes = r.Disks.Count == 0 ? null : r.Disks.Sum(d => d.FreeBytes);
         client.IpAddresses = Trim(string.Join(", ", r.Network.SelectMany(n => n.Addresses).Distinct()), 1000);
         client.MacAddresses = Trim(string.Join(", ", r.Network.Select(n => NormalizeMac(n.MacAddress)).Where(m => m is not null).Distinct()), 1000);
-        client.Inventory = JsonSerializer.Serialize(new { r.Disks, r.Network, r.BiosVersion, r.BiosDate, r.ProcessorCores, r.ProcessorThreads, r.Graphics, r.OsInstallDate, r.SecureBoot, r.Platform }, Json);
+        // PostgreSQL takes no NUL in text or jsonb (a value of the registry may end with one)
+        client.Inventory = JsonSerializer.Serialize(new { r.Disks, r.Network, r.BiosVersion, r.BiosDate, r.ProcessorCores, r.ProcessorThreads, r.Graphics, r.OsInstallDate, r.SecureBoot, r.Platform }, Json)
+            .Replace("\\u0000", string.Empty, StringComparison.Ordinal);
         client.LastInventoryDate = DateTime.UtcNow;
         client.InventoryRequested = false;
 
@@ -40,7 +42,19 @@ public static class InventoryService
             .GroupBy(s => (s.Name.Trim(), s.Version?.Trim()))
             .Select(g => new ClientSoftware { ClientId = client.Id, Name = Trim(g.Key.Item1, 300)!, Version = Trim(g.Key.Item2, 100), Publisher = Trim(g.First().Publisher, 300) })
             .ToList();
-        if (r.WingetInstalled is { } installed)
+        if (r.WingetInstalled is null)
+        {
+            // winget could not say this time (not there, or it failed): the ids of the last inventory stay, so a package found by its id is not "missing"
+            var known = await db.ClientSoftware.AsNoTracking().Where(s => s.ClientId == client.Id && s.WingetId != null).Select(s => new { s.Name, s.WingetId }).ToListAsync(ct);
+            foreach (var k in known)
+            {
+                if (software.FirstOrDefault(s => s.WingetId is null && string.Equals(s.Name, k.Name, StringComparison.OrdinalIgnoreCase)) is { } same)
+                {
+                    same.WingetId = k.WingetId;
+                }
+            }
+        }
+        else if (r.WingetInstalled is { } installed)
         {
             foreach (var w in installed)
             {
@@ -74,9 +88,15 @@ public static class InventoryService
         }
 
         client.UpdatesAvailable = software.Count(s => s.AvailableVersion is not null);
-        await db.ClientSoftware.Where(s => s.ClientId == client.Id).ExecuteDeleteAsync(ct);
-        db.ClientSoftware.AddRange(software);
-        await db.SaveChangesAsync(ct);
+        // the old list and the new one in one go: an error leaves the old list
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            await db.ClientSoftware.Where(s => s.ClientId == client.Id).ExecuteDeleteAsync(ct);
+            db.ClientSoftware.AddRange(software);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
         await GroupService.RefreshClientAsync(db, client.Id, ct);
     }
 
@@ -94,7 +114,7 @@ public static class InventoryService
 
     private static string? Trim(string? text, int max)
     {
-        var t = text?.Trim();
+        var t = text?.Replace("\0", string.Empty, StringComparison.Ordinal).Trim();
         return string.IsNullOrEmpty(t) ? null : t.Length > max ? t[..max] : t;
     }
 }

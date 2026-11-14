@@ -96,14 +96,48 @@ public sealed class AgentClient : IDisposable
         return await response.Content.ReadFromJsonAsync<RunState>(Json, ct);
     }
 
-    /// <summary>Downloads a file of the server (an installer, the next agent) to <paramref name="target"/>.</summary>
+    /// <summary>
+    /// Downloads a file of the server (an installer, the next agent) to <paramref name="target"/>. Only from the server itself (the key of the agent goes with
+    /// every call), and a connection that stops sending for two minutes ends the download (a laptop that slept or changed its network) instead of hanging.
+    /// </summary>
     public async Task DownloadAsync(string url, string target, CancellationToken ct)
     {
-        using var response = await _http.GetAsync(url.TrimStart('/'), HttpCompletionOption.ResponseHeadersRead, ct);
+        var uri = new Uri(_http.BaseAddress!, url.TrimStart('/'));
+        if (Uri.Compare(uri, _http.BaseAddress, UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)
+        {
+            throw new InvalidOperationException("A download has to come from the server of the agent.");
+        }
+
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        idle.CancelAfter(IdleLimit);
+        using var response = await _http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, idle.Token);
         Check(response);
+        await using var source = await response.Content.ReadAsStreamAsync(idle.Token);
         await using var file = File.Create(target);
-        await response.Content.CopyToAsync(file, ct);
+        var buffer = new byte[81920];
+        while (true)
+        {
+            idle.CancelAfter(IdleLimit);
+            int read;
+            try
+            {
+                read = await source.ReadAsync(buffer, idle.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new IOException("The download stopped: the server sent nothing for two minutes.");
+            }
+
+            if (read == 0)
+            {
+                break;
+            }
+
+            await file.WriteAsync(buffer.AsMemory(0, read), ct);
+        }
     }
+
+    private static readonly TimeSpan IdleLimit = TimeSpan.FromMinutes(2);
 
     private static void Check(HttpResponseMessage response)
     {

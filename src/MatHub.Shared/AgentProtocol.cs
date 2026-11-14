@@ -180,7 +180,8 @@ public static class Architectures
     {
         if (job.Alternatives is not { Count: > 0 } all)
         {
-            return job;
+            // one installer: it has to fit as well (an arm64 one on an x64 computer would only fail later with an unclear error)
+            return job.Architecture is null || Fitting(computer).Contains(job.Architecture, StringComparer.OrdinalIgnoreCase) ? job : null;
         }
 
         foreach (var platform in Fitting(computer))

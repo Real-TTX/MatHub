@@ -52,8 +52,10 @@ public static class UpdateService
         }
 
         var rows = await q.Select(s => new { s.WingetId, s.Name, s.Version, s.AvailableVersion, s.ClientId }).ToListAsync(ct);
+        var versions = Comparer<string>.Create(WingetCatalog.CompareVersions);
         var items = rows.GroupBy(r => r.WingetId!, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new UpdateRow(g.Key, g.First().Name, g.Select(x => x.Version).Where(v => v is not null).Order().FirstOrDefault(), g.Max(x => x.AvailableVersion)!, g.Select(x => x.ClientId).Distinct().Count()))
+            .Select(g => new UpdateRow(g.Key, g.First().Name, g.Select(x => x.Version).OfType<string>().Order(versions).FirstOrDefault(),
+                g.Select(x => x.AvailableVersion!).Order(versions).Last(), g.Select(x => x.ClientId).Distinct().Count()))
             .OrderByDescending(r => r.Clients).ThenBy(r => r.Name)
             .ToList();
         return new UpdateList(items, items.Count, rows.Select(r => r.ClientId).Distinct().Count());

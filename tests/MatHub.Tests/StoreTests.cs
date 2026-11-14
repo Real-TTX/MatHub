@@ -13,7 +13,10 @@ public sealed class StoreTests
     [InlineData("10.2", "9.11", 1)]
     [InlineData("1.0.0", "1.0", 0)]
     [InlineData("24.08", "24.8", 0)]
-    [InlineData("1.2.3-beta", "1.2.3", 1)]
+    [InlineData("1.2.3-beta", "1.2.3", -1)]
+    [InlineData("2.0.0-rc1", "2.0.0-rc2", -1)]
+    [InlineData("1.2.beta", "1.2.0", -1)]
+    [InlineData("9.1", "10.0", -1)]
     [InlineData("128.0", "129.0", -1)]
     public void Versions_are_compared_part_by_part(string a, string b, int sign) => Assert.Equal(sign, Math.Sign(WingetCatalog.CompareVersions(a, b)));
 

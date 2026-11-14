@@ -580,6 +580,53 @@ namespace MatHub.Data.Migrations
                     b.ToTable("ClientGroupMember", (string)null);
                 });
 
+            modelBuilder.Entity("MatHub.Data.ClientPackage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ClientId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("CreateUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Installed")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("PackageId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("PackageVersionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("UpdateUserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("PackageVersionId");
+
+                    b.HasIndex("PackageId", "ClientId")
+                        .IsUnique();
+
+                    b.ToTable("ClientPackage", (string)null);
+                });
+
             modelBuilder.Entity("MatHub.Data.ClientSoftware", b =>
                 {
                     b.Property<long>("Id")
@@ -957,8 +1004,8 @@ namespace MatHub.Data.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("Version")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("WingetId")
                         .HasMaxLength(200)
@@ -1732,6 +1779,32 @@ namespace MatHub.Data.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("ClientGroup");
+                });
+
+            modelBuilder.Entity("MatHub.Data.ClientPackage", b =>
+                {
+                    b.HasOne("MatHub.Data.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MatHub.Data.Package", "Package")
+                        .WithMany()
+                        .HasForeignKey("PackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MatHub.Data.PackageVersion", "PackageVersion")
+                        .WithMany()
+                        .HasForeignKey("PackageVersionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Package");
+
+                    b.Navigation("PackageVersion");
                 });
 
             modelBuilder.Entity("MatHub.Data.ClientSoftware", b =>

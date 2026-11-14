@@ -78,7 +78,7 @@
   "Versions.Error.Exists": { "en": "There is a version {0} already.", "de": "Es gibt die Version {0} schon." },
   "Versions.Error.Platform": { "en": "This version has an installer for {0} already.", "de": "Diese Version hat schon einen Installer für {0}." },
   "Versions.Error.NoInstaller": { "en": "The version has no installer yet.", "de": "Die Version hat noch keinen Installer." },
-  "Versions.Error.LastInstaller": { "en": "A distributed version keeps at least one installer.", "de": "Eine verteilte Version behält mindestens einen Installer." },
+  "Versions.Error.Locked": { "en": "A version in test, approved or retired keeps its installers: upload the change as a new version.", "de": "Eine Version im Test, freigegeben oder zurückgezogen behält ihre Installer: lade die Änderung als neue Version hoch." },
   "Versions.Error.InUse": { "en": "An approved version or one in test is not deleted: retire it first.", "de": "Eine freigegebene oder getestete Version wird nicht gelöscht: zieh sie zuerst zurück." },
   "Versions.Error.NoneApproved": { "en": "The package has no approved version yet.", "de": "Das Paket hat noch keine freigegebene Version." },
   "Versions.Error.NotForJobs": { "en": "This version cannot run as a job: only the approved one or the one in test (an uninstall also a retired one).", "de": "Diese Version kann nicht als Auftrag laufen: nur die freigegebene oder die im Test (eine Deinstallation auch eine zurückgezogene)." },

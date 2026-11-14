@@ -172,7 +172,7 @@ public sealed class HubTests
 
         // the computer has not started again yet: nothing to do; after its new boot the last step comes
         Assert.Empty(await JobService.TakeAsync(t.Db, client.Id, 5));
-        await t.Db.Clients.Where(c => c.Id == client.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.BootDate, DateTime.UtcNow.AddSeconds(5)));
+        await t.Db.Clients.Where(c => c.Id == client.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.BootDate, DateTime.UtcNow.AddMinutes(1)));
         var step3 = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 5));
         Assert.Equal("Write-Output 'three'", step3.Script);
         Assert.Contains("Finish", step3.Title);
@@ -438,6 +438,101 @@ public sealed class HubTests
         var choices = await PackageVersions.JobChoicesAsync(t.Db, Admin);
         Assert.Equal([package.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)], choices.Select(c => c.Value));
         Assert.Equal((package.Id, (long?)fresh.Id), JobVersionChoice.Parse(package.Id + "@" + fresh.Id));
+    }
+
+    [DbFact]
+    public async Task The_planner_does_not_install_again_what_the_inventory_does_not_confirm()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var all = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("All", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-"))).Value!;
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-1", "m-1");
+        await InventoryAsync(t, client);
+        var package = await PackageWithVersionAsync(t, "11.0");
+        await PackageService.AssignAsync(t.Db, Admin, package.Id, all.Id, AssignmentAction.Install);
+        Assert.Equal(1, (await Planner.RunOnceAsync(t.Db)).Jobs);
+
+        // the install works, but the program reports another version (or none): after the next inventory nothing is tried again
+        var run = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 1));
+        Assert.True(await JobService.CompleteAsync(t.Db, client.Id, run.RunId, new RunResult { Succeeded = true, ExitCode = 0 }));
+        await InventoryAsync(t, client, ("Contoso Editor", "Contoso.Editor", "10.9"));
+        Assert.Equal(0, (await Planner.RunOnceAsync(t.Db)).Jobs);
+
+        // a newer approved version is tried once again
+        var newer = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "12.0", "upload")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, newer.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "12.0"), null, null);
+        await PackageVersions.SetStatusAsync(t.Db, Admin, newer.Id, VersionStatus.Approved);
+        Assert.Equal(1, (await Planner.RunOnceAsync(t.Db)).Jobs);
+    }
+
+    [DbFact]
+    public async Task A_removal_wins_over_an_install_and_takes_the_installer_of_the_version_there()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var all = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("All", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-"))).Value!;
+        var kiosk = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("Kiosk", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-K"))).Value!;
+        var key = await KeyAsync(t);
+        var office = await EnrollAsync(t, key, "PC-O1", "m-o1");
+        var terminal = await EnrollAsync(t, key, "PC-K1", "m-k1");
+        await InventoryAsync(t, office);
+        await InventoryAsync(t, terminal, ("Contoso Editor", "Contoso.Editor", "10.2"));
+        var package = await PackageWithVersionAsync(t, "10.2");
+        var newer = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "11.0", "upload")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, newer.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "11.0"), null, null);
+        await PackageVersions.SetStatusAsync(t.Db, Admin, newer.Id, VersionStatus.Approved);
+        await PackageService.AssignAsync(t.Db, Admin, package.Id, all.Id, AssignmentAction.Install);
+        await PackageService.AssignAsync(t.Db, Admin, package.Id, kiosk.Id, AssignmentAction.Uninstall);
+
+        await Planner.RunOnceAsync(t.Db);
+        var jobs = await t.Db.Jobs.AsNoTracking().Include(j => j.Runs).ToListAsync();
+        Assert.Equal(2, jobs.Count);
+        var install = Assert.Single(jobs, j => j.Kind == JobKind.PackageInstall);
+        Assert.Equal(office.Id, Assert.Single(install.Runs).ClientId);
+        var removal = Assert.Single(jobs, j => j.Kind == JobKind.PackageUninstall);
+        Assert.Equal(terminal.Id, Assert.Single(removal.Runs).ClientId);
+        Assert.Equal("10.2", (await t.Db.PackageVersions.FindAsync(removal.PackageVersionId))!.Version);
+
+        // nothing twice while they run
+        Assert.Equal(0, (await Planner.RunOnceAsync(t.Db)).Jobs);
+    }
+
+    [DbFact]
+    public async Task A_package_without_detection_remembers_what_it_installed_after_its_jobs_are_gone()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var all = (await GroupService.SaveAsync(t.Db, Admin, null, new GroupForm("All", null, null, GroupKind.Dynamic, GroupRuleField.Name, GroupRuleOperator.StartsWith, "PC-"))).Value!;
+        var client = await EnrollAsync(t, await KeyAsync(t), "PC-1", "m-1");
+        await InventoryAsync(t, client);
+        var package = (await PackageService.SaveAsync(t.Db, Admin, null, new PackageForm("Fonts", "Contoso", null, null, DetectionKind.None, null, false))).Value!;
+        var v = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "1.0", "upload")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, v.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Script, InstallScript: "Write-Output fonts"), null, null);
+        await PackageVersions.SetStatusAsync(t.Db, Admin, v.Id, VersionStatus.Approved);
+        await PackageService.AssignAsync(t.Db, Admin, package.Id, all.Id, AssignmentAction.Install);
+        Assert.Equal(1, (await Planner.RunOnceAsync(t.Db)).Jobs);
+        var run = Assert.Single(await JobService.TakeAsync(t.Db, client.Id, 1));
+        await JobService.CompleteAsync(t.Db, client.Id, run.RunId, new RunResult { Succeeded = true, ExitCode = 0 });
+        await InventoryAsync(t, client);
+
+        // housekeeping deleted the jobs: still installed
+        await t.Db.Jobs.ExecuteDeleteAsync();
+        Assert.Equal(0, (await Planner.RunOnceAsync(t.Db)).Jobs);
+        Assert.True((await t.Db.ClientPackages.AsNoTracking().SingleAsync()).Installed);
+    }
+
+    [DbFact]
+    public async Task Versions_keep_their_state_and_their_installers()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var package = await PackageWithVersionAsync(t, "1.0");
+        var second = (await PackageVersions.CreateAsync(t.Db, Admin, package.Id, "2.0", "upload")).Value!;
+        await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, second.Id, new InstallerForm(InstallerArchitecture.Neutral, PackageKind.Winget, WingetId: "Contoso.Editor", WingetVersion: "2.0"), null, null);
+        await PackageVersions.SetStatusAsync(t.Db, Admin, second.Id, VersionStatus.Approved);
+
+        // retiring the approved one does not bring the retired 1.0 back as new
+        await PackageVersions.SetStatusAsync(t.Db, Admin, second.Id, VersionStatus.Retired);
+        Assert.All(await t.Db.PackageVersions.AsNoTracking().ToListAsync(), x => Assert.Equal(VersionStatus.Retired, x.Status));
+
+        // a version that was distributed takes no other installer
+        Assert.False((await PackageVersions.AddInstallerAsync(t.Db, Admin, null!, second.Id, new InstallerForm(InstallerArchitecture.Arm64, PackageKind.Script, InstallScript: "evil"), null, null)).Ok);
     }
 
     [DbFact]

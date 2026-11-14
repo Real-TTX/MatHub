@@ -80,6 +80,10 @@ public static class ProcessRunner
         using var process = new Process { StartInfo = start, EnableRaisingEvents = true };
         process.OutputDataReceived += (_, e) => Append(e.Data);
         process.ErrorDataReceived += (_, e) => Append(e.Data);
+
+        // the end of the process, not of its output: a child that keeps stdout open (cmd start, a setup that starts the program) must not hold the run
+        var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        process.Exited += (_, _) => exited.TrySetResult();
         try
         {
             process.Start();
@@ -87,6 +91,11 @@ public static class ProcessRunner
         catch (System.ComponentModel.Win32Exception ex)
         {
             return new ProcessResult(-1, $"{start.FileName} could not be started: {ex.Message}", false);
+        }
+
+        if (process.HasExited)
+        {
+            exited.TrySetResult();
         }
 
         process.StandardInput.Close();
@@ -98,7 +107,7 @@ public static class ProcessRunner
         var timedOut = false;
         try
         {
-            await process.WaitForExitAsync(limit.Token);
+            await exited.Task.WaitAsync(limit.Token);
         }
         catch (OperationCanceledException)
         {
@@ -115,7 +124,7 @@ public static class ProcessRunner
             Append(timedOut ? $"MatHub: stopped after {timeout.TotalMinutes:0} minutes." : "MatHub: stopped (the agent stops).");
         }
 
-        // the last lines of the asynchronous readers
+        // the last lines of the asynchronous readers (a moment: a child may hold the output open)
         process.WaitForExit(2000);
         string text;
         lock (gate)

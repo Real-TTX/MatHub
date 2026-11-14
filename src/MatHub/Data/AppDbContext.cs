@@ -35,6 +35,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
 
     public DbSet<PackageAssignment> PackageAssignments => Set<PackageAssignment>();
 
+    public DbSet<ClientPackage> ClientPackages => Set<ClientPackage>();
+
     public DbSet<PackageVersion> PackageVersions => Set<PackageVersion>();
 
     public DbSet<PackageInstaller> PackageInstallers => Set<PackageInstaller>();
@@ -203,7 +205,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             e.Property(x => x.Name).HasMaxLength(120);
             e.Property(x => x.Publisher).HasMaxLength(120);
             e.Property(x => x.Description).HasMaxLength(1000);
-            e.Property(x => x.Version).HasMaxLength(60);
+            e.Property(x => x.Version).HasMaxLength(100);
             e.Property(x => x.WingetId).HasMaxLength(200);
             e.Property(x => x.DetectionValue).HasMaxLength(300);
             e.HasOne(x => x.PilotGroup).WithMany().HasForeignKey(x => x.PilotGroupId).OnDelete(DeleteBehavior.SetNull);
@@ -240,6 +242,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, Current
             e.HasIndex(x => new { x.PackageId, x.ClientGroupId }).IsUnique();
             e.HasOne(x => x.Package).WithMany(x => x.Assignments).HasForeignKey(x => x.PackageId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.ClientGroup).WithMany().HasForeignKey(x => x.ClientGroupId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ClientPackage>(e =>
+        {
+            e.ToTable("ClientPackage");
+            e.HasIndex(x => new { x.PackageId, x.ClientId }).IsUnique();
+            e.HasIndex(x => x.ClientId);
+            e.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Package).WithMany().HasForeignKey(x => x.PackageId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.PackageVersion).WithMany().HasForeignKey(x => x.PackageVersionId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<Job>(e =>

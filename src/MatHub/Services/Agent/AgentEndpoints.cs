@@ -54,7 +54,7 @@ public static class AgentEndpoints
             }
 
             var inventoryDue = client.InventoryRequested || client.LastInventoryDate is null || client.LastInventoryDate < now.AddHours(-settings.InventoryHours);
-            var jobs = await JobService.TakeAsync(db, client.Id, 5, ct, protection);
+            var jobs = await JobService.TakeAsync(db, client.Id, 1, ct, protection);
             return Results.Ok(new PollResponse
             {
                 Status = "active",

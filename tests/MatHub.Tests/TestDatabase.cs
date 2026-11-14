@@ -2,6 +2,9 @@ using MatHub.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
+// two test classes at a time: each makes, migrates and drops databases of its own, and many at once make a PostgreSQL in Docker time out on connect
+[assembly: CollectionBehavior(MaxParallelThreads = 2)]
+
 namespace MatHub.Tests;
 
 /// <summary>A test that needs PostgreSQL: it runs when <c>MATHUB_TEST_DB</c> names a server (an administrator connection string), else it is skipped.</summary>
@@ -25,12 +28,30 @@ public sealed class TestDatabase : IAsyncDisposable
     {
     }
 
-    public static string? Admin => Environment.GetEnvironmentVariable("MATHUB_TEST_DB");
+    public static string? Admin => Environment.GetEnvironmentVariable("MATHUB_TEST_DB") is { Length: > 0 } text
+        ? new NpgsqlConnectionStringBuilder(text) { Timeout = 60, CommandTimeout = 120 }.ConnectionString
+        : null;
 
     public AppDbContext Db { get; private set; } = null!;
 
     /// <summary>A new database; <paramref name="migrate"/> = false leaves it empty (a test of a migration takes it step by step).</summary>
     public static async Task<TestDatabase> CreateAsync(bool migrate = true)
+    {
+        // one database is made and migrated at a time: many at once make a local PostgreSQL time out
+        await Creating.WaitAsync();
+        try
+        {
+            return await CreateCoreAsync(migrate);
+        }
+        finally
+        {
+            Creating.Release();
+        }
+    }
+
+    private static readonly SemaphoreSlim Creating = new(1, 1);
+
+    private static async Task<TestDatabase> CreateCoreAsync(bool migrate)
     {
         var test = new TestDatabase();
         await using (var admin = new NpgsqlConnection(Admin))
