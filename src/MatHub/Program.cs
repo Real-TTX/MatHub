@@ -171,8 +171,20 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 {
     // behind a reverse proxy (Caddy, nginx, Traefik) the address and the scheme of the visitor are in the headers
     o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    // only from a proxy MatHub trusts (else anyone could name another address and pass the limits of the sign-in): MAT_TRUSTED_PROXIES (networks,
+    // comma separated), by default the machine itself and the private networks (a proxy in the same Docker network or the LAN)
     o.KnownIPNetworks.Clear();
     o.KnownProxies.Clear();
+    var trusted = Environment.GetEnvironmentVariable("MAT_TRUSTED_PROXIES") is { Length: > 0 } list
+        ? list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"];
+    foreach (var network in trusted)
+    {
+        if (System.Net.IPNetwork.TryParse(network, out var parsed))
+        {
+            o.KnownIPNetworks.Add(parsed);
+        }
+    }
 });
 
 var app = builder.Build();

@@ -129,6 +129,14 @@ public static class GroupService
             {
                 return Outcome<ClientGroup>.Denied();
             }
+
+            // the kind and the rules decide who is a member, and so whom a role limited to this group reaches: only someone who reaches all clients
+            // changes them (else a role could widen its own reach)
+            if (!actor.ReachesAll && (group.Kind != form.Kind
+                || (form.Kind == GroupKind.Dynamic && (!Conditions(group).SequenceEqual(conditions) || group.MatchAny != form.MatchAny))))
+            {
+                return Outcome<ClientGroup>.Fail(Localization.Text.T("Groups.Error.RulesNeedAll"));
+            }
         }
         else
         {

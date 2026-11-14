@@ -45,6 +45,21 @@ public static class EnrollmentService
 
     // ---- the keys ---------------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The keys an actor may see and change: all for someone who reaches all clients, else those that put their clients into a group the actor reaches
+    /// (another team's key could otherwise be pointed at one's own group, and their new computers would land in one's reach).
+    /// </summary>
+    private static IQueryable<EnrollmentKey> Keys(AppDbContext db, Actor actor)
+    {
+        if (actor.ReachesAll)
+        {
+            return db.EnrollmentKeys;
+        }
+
+        var groups = AccessRules.Groups(db, actor).Select(g => g.Id);
+        return db.EnrollmentKeys.Where(k => k.ClientGroupId != null && groups.Contains(k.ClientGroupId.Value));
+    }
+
     public static async Task<IReadOnlyList<EnrollmentKeyRow>?> ListAsync(AppDbContext db, Actor actor, CancellationToken ct = default)
     {
         if (!actor.Can(Permission.ClientsEnroll))
@@ -53,12 +68,12 @@ public static class EnrollmentService
         }
 
         var now = DateTime.UtcNow;
-        var keys = await db.EnrollmentKeys.AsNoTracking().Include(k => k.ClientGroup).OrderBy(k => k.Name).ToListAsync(ct);
+        var keys = await Keys(db, actor).AsNoTracking().Include(k => k.ClientGroup).OrderBy(k => k.Name).ToListAsync(ct);
         return keys.Select(k => new EnrollmentKeyRow(k.Id, k.Name, k.Prefix, k.IsActive, k.ExpiresDate, k.MaxUses, k.UseCount, k.AutoApprove, k.ClientGroup?.Name, k.ClientGroup?.Colour, IsUsable(k, now))).ToList();
     }
 
     public static async Task<EnrollmentKey?> GetAsync(AppDbContext db, Actor actor, long id, CancellationToken ct = default)
-        => actor.Can(Permission.ClientsEnroll) ? await db.EnrollmentKeys.AsNoTracking().FirstOrDefaultAsync(k => k.Id == id, ct) : null;
+        => actor.Can(Permission.ClientsEnroll) ? await Keys(db, actor).AsNoTracking().FirstOrDefaultAsync(k => k.Id == id, ct) : null;
 
     /// <summary>Saves a key; a new key is answered with its plain text (the only time it is seen) as the second value.</summary>
     public static async Task<Outcome<(EnrollmentKey Key, string? Plain)>> SaveAsync(AppDbContext db, Actor actor, long? id, EnrollmentKeyForm form, string timeZone, CancellationToken ct = default)
@@ -89,7 +104,7 @@ public static class EnrollmentService
         string? plain = null;
         if (id is { } existing)
         {
-            var found = await db.EnrollmentKeys.FirstOrDefaultAsync(k => k.Id == existing, ct);
+            var found = await Keys(db, actor).FirstOrDefaultAsync(k => k.Id == existing, ct);
             if (found is null)
             {
                 return Outcome<(EnrollmentKey, string?)>.Denied();
@@ -122,7 +137,7 @@ public static class EnrollmentService
             return Outcome<string>.Denied();
         }
 
-        var key = await db.EnrollmentKeys.FirstOrDefaultAsync(k => k.Id == id, ct);
+        var key = await Keys(db, actor).FirstOrDefaultAsync(k => k.Id == id, ct);
         if (key is null)
         {
             return Outcome<string>.Denied();
@@ -159,7 +174,14 @@ public static class EnrollmentService
                 return new EnrollOutcome(null, StatusCodes.Status403Forbidden, "unknown or used-up key");
             }
 
-            key.UseCount++;
+            // counted in the database: a classroom enrolling at once does not pass the limit
+            var counted = await db.EnrollmentKeys.Where(k => k.Id == key.Id && (k.MaxUses == 0 || k.UseCount < k.MaxUses))
+                .ExecuteUpdateAsync(s => s.SetProperty(k => k.UseCount, k => k.UseCount + 1), ct);
+            if (counted == 0)
+            {
+                return new EnrollOutcome(null, StatusCodes.Status403Forbidden, "unknown or used-up key");
+            }
+
             groupId = key.ClientGroupId;
             keyId = key.Id;
             pending = !key.AutoApprove;
@@ -179,9 +201,23 @@ public static class EnrollmentService
             return new EnrollOutcome(null, StatusCodes.Status403Forbidden, "no key");
         }
 
-        // the same computer again (a reinstall of the agent or of Windows on the same board): its client, with a new secret
+        // the same computer again (a reinstall of the agent): its client, with a new secret. A computer installed again by a rollout task gets a new
+        // machine id from Windows: its client is found by the MAC address of the task (it keeps its groups and its history).
         var machineId = Trim(request.MachineId, 64);
-        var client = machineId is null ? null : await db.Clients.FirstOrDefaultAsync(c => c.MachineId == machineId, ct);
+        var client = machineId is null ? null : await db.Clients.Where(c => c.MachineId == machineId).OrderByDescending(c => c.LastSeenDate).FirstOrDefaultAsync(ct);
+        if (client is null && rollout?.MacAddress is { Length: > 0 } mac)
+        {
+            client = await db.Clients.Where(c => c.MacAddresses != null && c.MacAddresses.Contains(mac)).OrderByDescending(c => c.LastSeenDate).FirstOrDefaultAsync(ct);
+        }
+
+        // a client whose agent called just now is not simply taken over: that may be a copy of the computer (a cloned VM) or someone who read its
+        // machine id – it waits for an approval (no jobs, no secrets until someone looked at it)
+        if (client is not null && rollout is null && client.Status == ClientStatus.Active && ClientService.IsOnline(client.LastSeenDate))
+        {
+            ActivityLog.Add(db, Actor.System, "client", "enroll-again", client.Name, hostName, client.Id);
+            pending = true;
+        }
+
         var secret = NewSecret(string.Empty, 40);
         if (client is null)
         {
@@ -193,6 +229,13 @@ public static class EnrollmentService
             // a key without approval (or a rollout) approves a computer that waited
             client.Status = ClientStatus.Active;
         }
+        else if (client.Status == ClientStatus.Active && pending)
+        {
+            // taken over with a key that wants an approval: it waits for one again (its jobs and secrets only after it)
+            client.Status = ClientStatus.Pending;
+        }
+
+        client.MachineId = machineId ?? client.MachineId;
 
         client.Token = Guid.NewGuid();
         client.SecretHash = Hash(secret);

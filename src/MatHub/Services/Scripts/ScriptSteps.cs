@@ -114,7 +114,7 @@ public static partial class ScriptBlocks
     /// <summary>What runs in a trial run as it is: it changes nothing (the output, variables, dialogs, the end). Everything else only says what it would do.</summary>
     public static IReadOnlySet<string> DryRunSafe { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
-        "message", "set-variable", "exit", "fail", "ui-message", "ui-question", "ui-form", "ui-notify", "ui-progress",
+        "message", "set-variable", "exit", "fail", "ui-message", "ui-question", "ui-form", "ui-notify", "ui-progress", "wait",
     };
 
     private static string DryRunHeader() => "$MatHubDryRun = $true\nWrite-Output " + Quote(Localization.Text.T("Scripts.Test.DryHeader")) + "\n\n";
@@ -191,15 +191,28 @@ public static partial class ScriptBlocks
 
             // ---- files
             case "download":
-                return $"Invoke-WebRequest -UseBasicParsing -Uri {r.E("url")} -OutFile {r.E("path")}";
+                return $$"""
+                    $file = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath({{r.E("path")}})
+                    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null
+                    Invoke-WebRequest -UseBasicParsing -Uri {{r.E("url")}} -OutFile $file
+                    """;
             case "folder":
                 return $"New-Item -ItemType Directory -Force -Path {r.E("path")} | Out-Null";
             case "copy":
-                return $"Copy-Item -Path {r.E("source")} -Destination {r.E("target")} -Recurse -Force";
+                return $$"""
+                    $target = {{r.E("target")}}
+                    $folder = if ($target -match '[\/]$') { $target } else { Split-Path -Parent $target }
+                    if ($folder) { New-Item -ItemType Directory -Force -Path $folder | Out-Null }
+                    Copy-Item -Path {{r.E("source")}} -Destination $target -Recurse -Force
+                    """;
             case "delete":
                 return $"if (Test-Path -LiteralPath {r.E("path")}) {{ Remove-Item -LiteralPath {r.E("path")} -Recurse -Force }}";
             case "write-file":
-                return $"Set-Content -LiteralPath {r.E("path")} -Value {Expression(r.Raw("content"))} -Encoding UTF8";
+                return $$"""
+                    $file = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath({{r.E("path")}})
+                    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null
+                    [IO.File]::WriteAllText($file, {{Text(r.Raw("content"))}}, (New-Object System.Text.UTF8Encoding $false))
+                    """;
             case "unzip":
                 return $"Expand-Archive -LiteralPath {r.E("source")} -DestinationPath {r.E("target")} -Force";
             case "replace-text":
@@ -238,6 +251,7 @@ public static partial class ScriptBlocks
                         ? n.ToString(CultureInfo.InvariantCulture)
                         : Failed(r, "value"),
                     "MultiString" => "@(" + string.Join(", ", r.V("value").Split(';').Select(Expression)) + ")",
+                    "ExpandString" => Text(r.V("value")),
                     _ => r.E("value"),
                 };
                 return $"if (-not (Test-Path -Path {r.E("path")})) {{ New-Item -Path {r.E("path")} -Force | Out-Null }}\nNew-ItemProperty -Path {r.E("path")} -Name {r.E("name")} -PropertyType {kind} -Value {value} -Force | Out-Null";
@@ -261,7 +275,7 @@ public static partial class ScriptBlocks
                 return $$"""
                     $newName = {{r.E("name")}}
                     if ($env:COMPUTERNAME -ieq $newName) { Write-Output ('The computer is called ' + $newName + ' already.') }
-                    else { Rename-Computer -NewName $newName -Force; $MatHubVars['restartNeeded'] = 'True'; Write-Output ('Renamed to ' + $newName + ' (after the next restart).') }
+                    else { Rename-Computer -NewName $newName -Force; $MatHubRenamed = $newName; $MatHubVars['restartNeeded'] = 'True'; Write-Output ('Renamed to ' + $newName + ' (after the next restart).') }
                     """;
             case "timezone":
                 return $"Set-TimeZone -Id {r.E("zone")}";
@@ -303,7 +317,7 @@ public static partial class ScriptBlocks
                     else {
                         $join = @{ DomainName = $domain; Credential = (New-MatHubCredential {{r.Secret("credential")}} ''); Force = $true }
                         {{(r.Has("ou") ? $"$join['OUPath'] = {r.E("ou")}" : "# the default container of the domain")}}
-                        {{(r.Has("name") ? $"if ($env:COMPUTERNAME -ine {r.E("name")}) {{ $join['NewName'] = {r.E("name")} }}" : "# the name stays")}}
+                        {{(r.Has("name") ? $"if ($env:COMPUTERNAME -ine {r.E("name")}) {{ $join['NewName'] = {r.E("name")} }}" : "if ($MatHubRenamed) { $join['Options'] = 'JoinWithNewName' } # renamed before in this run: the account in the domain gets the new name")}}
                         Add-Computer @join
                         Write-Output ('Joined ' + $domain + '.'){{reboot}}
                     }
@@ -356,7 +370,7 @@ public static partial class ScriptBlocks
                     {{(protocol is null ? "# every protocol" : $"$rule['Protocol'] = '{protocol}'")}}
                     {{(r.Has("port") ? $"$rule['{(inbound ? "LocalPort" : "RemotePort")}'] = @({r.E("port")} -split '[,; ]+' | Where-Object {{ $_ }})" : "# every port")}}
                     {{(r.Has("program") ? $"$rule['Program'] = {r.E("program")}" : "# every program")}}
-                    Get-NetFirewallRule -DisplayName $rule.DisplayName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+                    Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq $rule.DisplayName } | Remove-NetFirewallRule
                     New-NetFirewallRule @rule | Out-Null
                     """;
             case "printer":
@@ -484,7 +498,8 @@ public static partial class ScriptBlocks
             case "message":
                 return $"Write-Output {r.E("text")}";
             case "wait":
-                return $"Start-Sleep -Seconds {r.Number("seconds", 10, 0, 86400)}";
+                // a trial run waits too (a flow that polls must not spin), but three seconds at most
+                return $"Start-Sleep -Seconds {(dryRun ? Math.Min(3, r.Number("seconds", 10, 0, 86400)) : r.Number("seconds", 10, 0, 86400))}";
             case "fail":
                 return $"throw {r.E("text")}";
             case "exit":

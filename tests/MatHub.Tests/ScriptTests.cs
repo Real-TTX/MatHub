@@ -44,6 +44,17 @@ public sealed class ScriptTests
     }
 
     [Fact]
+    public void Wrapping_a_step_keeps_its_strings_and_here_strings_as_they_are()
+    {
+        var here = Block("powershell", ("code", "$text = @'\nline one\n  line two\n'@\nWrite-Output $text")) with { ContinueOnError = true };
+        var file = Block("write-file", ("path", @"C:\Temp\a.txt"), ("content", "a\nb")) with { ContinueOnError = true };
+        var code = ScriptBlocks.CompileBlocks(new ScriptModel { Blocks = [here, file] }).Code;
+        Assert.Contains("\nline one\n  line two\n'@\n", code);
+        Assert.Contains("'a\nb'", code);
+        Assert.Contains("\n    Write-Output $text", code);
+    }
+
+    [Fact]
     public void A_condition_and_go_on_after_an_error_wrap_the_step()
     {
         var block = Block("service", ("name", "Spooler"), ("action", "restart")) with
@@ -139,7 +150,8 @@ public sealed class ScriptTests
 
         var result = ScriptBlocks.CompileBlocks(new ScriptModel { Blocks = [Block("copy", ("source", "./settings.xml"), ("target", @"%ProgramData%\Contoso\"))] });
         Assert.True(result.Ok, string.Join("; ", result.Errors));
-        Assert.Contains(@"Copy-Item -Path (Join-Path $MatHubFiles 'settings.xml') -Destination ([Environment]::ExpandEnvironmentVariables('%ProgramData%\Contoso\'))", result.Code);
+        Assert.Contains(@"$target = ([Environment]::ExpandEnvironmentVariables('%ProgramData%\Contoso\'))", result.Code);
+        Assert.Contains(@"Copy-Item -Path (Join-Path $MatHubFiles 'settings.xml') -Destination $target -Recurse -Force", result.Code);
         Assert.Contains("$MatHubFiles = if ($env:MATHUB_FILES)", result.Code);
     }
 

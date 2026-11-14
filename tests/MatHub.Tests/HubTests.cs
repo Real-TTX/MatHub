@@ -42,9 +42,18 @@ public sealed class HubTests
         Assert.True(await t.Db.ClientGroupMembers.AnyAsync(m => m.ClientId == client.Id && m.ClientGroupId == group.Id));
         Assert.Equal("Lab", Assert.Single((await ClientService.GetAsync(t.Db, Admin, client.Id))!.Groups).Name);
 
-        // a reinstall on the same computer finds its client again, with a new secret
+        // the same machine id while the agent still calls: the client waits for an approval (a cloned computer, or someone who read the id)
+        var twin = await EnrollAsync(t, key, "PC-1", "machine-1");
+        Assert.Equal(client.Id, twin.Id);
+        Assert.Equal(ClientStatus.Pending, twin.Status);
+        await ClientService.SetStatusAsync(t.Db, Admin, client.Id, ClientStatus.Active);
+
+        // a reinstall after the agent stopped finds its client again, with a new secret, approved as it was
+        await t.Db.Clients.ExecuteUpdateAsync(s => s.SetProperty(c => c.LastSeenDate, DateTime.UtcNow.AddMinutes(-10)));
+        t.Db.ChangeTracker.Clear();
         var again = await EnrollAsync(t, key, "PC-1", "machine-1");
         Assert.Equal(client.Id, again.Id);
+        Assert.Equal(ClientStatus.Active, again.Status);
         Assert.Equal(1, await t.Db.Clients.CountAsync());
 
         var script = (await ScriptService.SaveAsync(t.Db, Admin, null, new ScriptForm("Hello", null, null, ScriptLanguage.PowerShell, ScriptEditor.Code, 60))).Value!;

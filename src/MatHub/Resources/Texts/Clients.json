@@ -85,6 +85,7 @@
   "Groups.Rule": { "en": "Rule", "de": "Regel" },
   "Groups.Rule.Hint": { "en": "Not case-sensitive. A tag or an address matches when one of them matches.", "de": "Groß- und Kleinschreibung egal. Ein Tag oder eine Adresse passt, wenn eine davon passt." },
   "Groups.Rule.Required": { "en": "Please enter the value of the rule.", "de": "Bitte den Wert der Regel eingeben." },
+  "Groups.Error.RulesNeedAll": { "en": "Only someone who reaches all clients changes the kind or the rules of a group: they decide who is a member, and so whom a role limited to the group reaches.", "de": "Die Art und die Regeln einer Gruppe ändert nur, wer alle Clients erreicht: sie bestimmen, wer Mitglied ist – und damit, wen eine auf die Gruppe beschränkte Rolle erreicht." },
   "Groups.RuleField": { "en": "Field", "de": "Feld" },
   "Groups.RuleOperator": { "en": "Condition", "de": "Bedingung" },
   "Groups.RuleValue": { "en": "Value", "de": "Wert" },

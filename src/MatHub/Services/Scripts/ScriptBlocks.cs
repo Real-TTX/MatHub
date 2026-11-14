@@ -352,15 +352,26 @@ public static partial class ScriptBlocks
 
         function Invoke-MatHubWinget {
             if (-not $env:MATHUB_WINGET) { throw 'winget is not available on this computer.' }
+            $verb = [string]$args[0]
             & $env:MATHUB_WINGET @args --accept-source-agreements --disable-interactivity
-            # 0 = done; -1978335189 = nothing to update; -1978335212 = no package found (uninstall of something that is not there)
-            if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne -1978335189 -and $LASTEXITCODE -ne -1978335212) { throw "winget ended with $LASTEXITCODE." }
+            $code = $LASTEXITCODE
+            # -1978335216 = no installer for the whole machine (a package for one user): once more without --scope machine
+            if ($code -eq -1978335216 -and $args -contains '--scope') {
+                $rest = @(); $skip = $false
+                foreach ($a in $args) { if ($skip) { $skip = $false } elseif ($a -eq '--scope') { $skip = $true } else { $rest += $a } }
+                & $env:MATHUB_WINGET @rest --accept-source-agreements --disable-interactivity
+                $code = $LASTEXITCODE
+            }
+            # 0 = done; -1978335189 = nothing to update; -1978335135 = installed already; -1978335212 = no package found: fine only for an uninstall
+            $ok = @(0, -1978335189, -1978335135)
+            if ($verb -eq 'uninstall') { $ok += -1978335212 }
+            if ($ok -notcontains $code) { throw "winget ended with $code." }
         }
 
         # a dialog for the person at the computer: the agent shows it in their session and gives back the answer (and the values of the fields)
         function Invoke-MatHubDialog([string]$Json, [switch]$NoWait) {
             $Json = [regex]::Replace($Json, '\{\{\s*([A-Za-z][A-Za-z0-9_]{0,39})\s*\}\}', [Text.RegularExpressions.MatchEvaluator]{
-                param($m) $v = [string]$MatHubVars[$m.Groups[1].Value]; (ConvertTo-Json -InputObject $v -Compress).Trim('"')
+                param($m) $j = ConvertTo-Json -InputObject ([string]$MatHubVars[$m.Groups[1].Value]) -Compress; $j.Substring(1, $j.Length - 2)
             })
             $reply = $null
             if ($env:MATHUB_AGENT_EXE -and (Test-Path -LiteralPath $env:MATHUB_AGENT_EXE)) {
@@ -371,11 +382,16 @@ public static partial class ScriptBlocks
                 try { $reply = ($out | Out-String) | ConvertFrom-Json } catch { $reply = $null }
             }
             if ($null -eq $reply) { $reply = [pscustomobject]@{ answer = 'nobody'; values = $null } }
+            # a notice or "please wait" answers nothing: the answer of the question before stays
+            if ($NoWait) { return }
             $MatHubVars['answer'] = [string]$reply.answer
             if ($null -ne $reply.values) {
-                foreach ($p in $reply.values.PSObject.Properties) { $MatHubVars[$p.Name] = [string]$p.Value }
+                # only the fields of this dialog: an answer cannot set another variable of the script
+                $fields = @()
+                try { $fields = @(($Json | ConvertFrom-Json).pages | ForEach-Object { $_.fields } | ForEach-Object { [string]$_.name }) } catch { }
+                foreach ($p in $reply.values.PSObject.Properties) { if ($fields -contains $p.Name) { $MatHubVars[$p.Name] = [string]$p.Value } }
             }
-            if (-not $NoWait) { Write-Output ("Dialog: " + $reply.answer) }
+            Write-Output ("Dialog: " + $reply.answer)
             return
         }
 
@@ -568,10 +584,136 @@ public static partial class ScriptBlocks
         return new ScriptModel { Nodes = nodes, Edges = edges };
     }
 
+    /// <summary>
+    /// Indents code for reading – but never a line that begins inside a string: the content of a multi-line value or of a here-string would change (and a
+    /// here-string ends only with its terminator at the very start of a line).
+    /// </summary>
     private static string Indent(string code, int spaces = 4)
     {
         var pad = new string(' ', spaces);
-        return string.Join('\n', code.Split('\n').Select(l => l.Length == 0 ? l : pad + l));
+        var inside = LinesInStrings(code);
+        return string.Join('\n', code.Split('\n').Select((l, i) => l.Length == 0 || inside.Contains(i) ? l : pad + l));
+    }
+
+    /// <summary>The numbers of the lines that begin inside a string of PowerShell ('…', "…", @'…'@, @"…"@; the typographic quotes count as quotes too).</summary>
+    internal static HashSet<int> LinesInStrings(string code)
+    {
+        const string singles = "'‘’‚‛";
+        const string doubles = "\"“”„";
+        var lines = new HashSet<int>();
+        var line = 0;
+        var mode = 0; // 0 code, 1 '…', 2 "…", 3 @'…'@, 4 @"…"@, 5 <#…#>
+        var comment = false;
+        char Next(int i) => i + 1 < code.Length ? code[i + 1] : '\0';
+        bool LineStart(int i) => i == 0 || code[i - 1] == '\n';
+        for (var i = 0; i < code.Length; i++)
+        {
+            var c = code[i];
+            if (c == '\n')
+            {
+                line++;
+                comment = false;
+                if (mode is >= 1 and <= 4)
+                {
+                    lines.Add(line);
+                }
+
+                continue;
+            }
+
+            if (comment)
+            {
+                continue;
+            }
+
+            switch (mode)
+            {
+                case 0:
+                    if (c == '`')
+                    {
+                        i++;
+                    }
+                    else if (c == '#' && (i == 0 || char.IsWhiteSpace(code[i - 1]) || code[i - 1] is ';' or '{' or '}' or '(' or ')'))
+                    {
+                        comment = true;
+                    }
+                    else if (c == '<' && Next(i) == '#')
+                    {
+                        mode = 5;
+                        i++;
+                    }
+                    else if (c == '@' && singles.Contains(Next(i)))
+                    {
+                        mode = 3;
+                        i++;
+                    }
+                    else if (c == '@' && doubles.Contains(Next(i)))
+                    {
+                        mode = 4;
+                        i++;
+                    }
+                    else if (singles.Contains(c))
+                    {
+                        mode = 1;
+                    }
+                    else if (doubles.Contains(c))
+                    {
+                        mode = 2;
+                    }
+
+                    break;
+                case 1:
+                    if (singles.Contains(c))
+                    {
+                        if (singles.Contains(Next(i)))
+                        {
+                            i++;
+                        }
+                        else
+                        {
+                            mode = 0;
+                        }
+                    }
+
+                    break;
+                case 2:
+                    if (c == '`')
+                    {
+                        i++;
+                    }
+                    else if (doubles.Contains(c))
+                    {
+                        if (doubles.Contains(Next(i)))
+                        {
+                            i++;
+                        }
+                        else
+                        {
+                            mode = 0;
+                        }
+                    }
+
+                    break;
+                case 3 or 4:
+                    if (LineStart(i) && (mode == 3 ? singles : doubles).Contains(c) && Next(i) == '@')
+                    {
+                        mode = 0;
+                        i++;
+                    }
+
+                    break;
+                case 5:
+                    if (c == '#' && Next(i) == '>')
+                    {
+                        mode = 0;
+                        i++;
+                    }
+
+                    break;
+            }
+        }
+
+        return lines;
     }
 
     /// <summary>A text inside a double-quoted PowerShell string and a comment: no quote, no $, no backtick, one line.</summary>

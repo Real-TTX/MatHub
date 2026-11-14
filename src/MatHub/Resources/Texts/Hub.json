@@ -113,6 +113,7 @@
   "Activity.Action.edit": { "en": "edited", "de": "bearbeitet" },
   "Activity.Action.delete": { "en": "deleted", "de": "gelöscht" },
   "Activity.Action.enroll": { "en": "enrolled", "de": "aufgenommen" },
+  "Activity.Action.enroll-again": { "en": "enrolled again while its agent still called (waits for an approval)", "de": "erneut aufgenommen, während sein Agent noch meldete (wartet auf Freigabe)" },
   "Activity.Action.approve": { "en": "approved", "de": "freigegeben" },
   "Activity.Action.enable": { "en": "switched on", "de": "eingeschaltet" },
   "Activity.Action.disable": { "en": "switched off", "de": "ausgeschaltet" },
