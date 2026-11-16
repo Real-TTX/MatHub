@@ -7,12 +7,13 @@ namespace MatHub.Agent;
 /// and report each one, and install a newer (or older) agent when the server offers one. A server that cannot be reached is asked again later; an agent the
 /// server refuses (removed, switched off) waits five minutes between its calls.
 /// </summary>
-public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunner runner, Updater updater, AgentSignal signal, UiBroker broker, ILogger<AgentWorker> logger) : BackgroundService
+public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunner runner, Updater updater, AgentSignal signal, UiBroker broker, AgentStatusBoard status, ILogger<AgentWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("MatHub agent {Version} for {Server} started.", AgentInfo.Version, config.ServerUrl);
         Updater.CleanUp();
+        Setup.Refresh(logger);
         var wait = TimeSpan.FromSeconds(5);
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -32,6 +33,7 @@ public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunne
                     UpdateStatus = Updater.LastStatus(),
                 }, stoppingToken);
                 wait = TimeSpan.FromSeconds(Math.Clamp(poll.PollSeconds, 10, 3600));
+                status.Contact(pending: poll.Status == "pending");
                 if (poll.Status == "pending")
                 {
                     continue;
@@ -69,12 +71,14 @@ public sealed class AgentWorker(AgentConfig config, AgentClient client, JobRunne
             catch (AgentRejectedException ex)
             {
                 logger.LogWarning("{Message} The agent asks again in five minutes; enroll it again if it was removed.", ex.Message);
+                status.Set(AgentCondition.Rejected);
                 wait = TimeSpan.FromMinutes(5);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
             {
                 // the server is not there (yet): the time between the calls grows up to five minutes
                 logger.LogWarning("The server cannot be reached: {Message}", ex.Message);
+                status.Set(AgentCondition.Unreachable);
                 wait = TimeSpan.FromSeconds(Math.Min(300, Math.Max(15, wait.TotalSeconds * 2)));
             }
             catch (Exception ex)

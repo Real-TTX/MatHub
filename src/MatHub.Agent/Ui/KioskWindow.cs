@@ -142,7 +142,7 @@ internal sealed class KioskWindow : Form
         _tiles.SuspendLayout();
         _tiles.Controls.Clear();
         var box = new Panel { Size = new Size(Math.Max(320, _tiles.ClientSize.Width - 60), 200), BackColor = Theme.Background, Margin = new Padding(0, 40, 0, 0) };
-        var icon = new GlyphBox(Theme.Glyph(glyph), Theme.Muted, Color.FromArgb(0xE9, 0xE9, 0xE9), 56, 22f) { Location = new Point((box.Width - 56) / 2, 10) };
+        var icon = new GlyphBox(Theme.Glyph(glyph), Theme.Muted, Theme.Surface3, 56, 22f) { Location = new Point((box.Width - 56) / 2, 10) };
         _message.Text = text;
         _message.Location = new Point(0, 82);
         _message.Width = box.Width;
@@ -166,7 +166,7 @@ internal sealed class KioskWindow : Form
         foreach (var category in new[] { string.Empty }.Concat(categories))
         {
             var count = category.Length == 0 ? _offer.Items.Count : _offer.Items.Count(i => string.Equals(i.Category, category, StringComparison.OrdinalIgnoreCase));
-            var tab = new FlatButton($"{(category.Length == 0 ? UiText.T("All") : category)}  {count}", category == _category ? FlatButton.Kinds.Primary : FlatButton.Kinds.Quiet)
+            var tab = new FlatButton($"{(category.Length == 0 ? UiText.T("All") : category)}  {count}", category == _category ? FlatButton.Kinds.Selected : FlatButton.Kinds.Quiet)
             {
                 Height = 30,
                 Margin = new Padding(0, 0, 6, 0),
@@ -354,7 +354,7 @@ internal sealed class KioskWindow : Form
                     _state.Text = string.Empty;
                     break;
                 case RunStates.Queued or RunStates.Running:
-                    _state.ForeColor = Theme.Accent;
+                    _state.ForeColor = Theme.AccentText;
                     _state.Text = "●  " + (state.Steps > 1 ? UiText.T("Step", state.Step, state.Steps) : UiText.T(state.Status == RunStates.Queued ? "Queued" : "Running"));
                     break;
                 case RunStates.Succeeded:

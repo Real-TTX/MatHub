@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -6,39 +5,6 @@ using System.Text;
 using System.Text.Json;
 
 namespace MatHub.Agent;
-
-/// <summary>The version of the agent (the same as the server's build: <c>0.1.42-20261112</c>, <c>nightly-42-20261112</c>, <c>local-20261112</c>).</summary>
-public static class AgentInfo
-{
-    public const string ServiceName = "MatHub Agent";
-
-    public static string Version { get; } =
-        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "local";
-
-    /// <summary>
-    /// Where the agent keeps its settings, its log and its downloads: <c>%ProgramData%\MatHub Agent</c>; <c>MATHUB_AGENT_DATA</c> names another folder (a test as a
-    /// normal user: then the folder keeps the rights it has).
-    /// </summary>
-    public static string DataDirectory => OwnDataDirectory
-        ? Environment.GetEnvironmentVariable("MATHUB_AGENT_DATA")!
-        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "MatHub Agent");
-
-    /// <summary>The data folder is named by <c>MATHUB_AGENT_DATA</c> (a test, not the service).</summary>
-    public static bool OwnDataDirectory => Environment.GetEnvironmentVariable("MATHUB_AGENT_DATA") is { Length: > 0 };
-
-    /// <summary>Where the installed agent lives: <c>%ProgramFiles%\MatHub Agent\mathub-agent.exe</c>.</summary>
-    public static string InstallDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "MatHub Agent");
-
-    public static string InstalledExe => Path.Combine(InstallDirectory, "mathub-agent.exe");
-
-    /// <summary>
-    /// The pipe of the service for its kiosk and the dialogs of scripts. A test with its own data folder has a pipe of its own (named by a hash of the folder),
-    /// so it never meets an installed agent.
-    /// </summary>
-    public static string PipeName => OwnDataDirectory
-        ? "MatHubAgent-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(DataDirectory.ToLowerInvariant())))[..12]
-        : "MatHubAgent";
-}
 
 /// <summary>
 /// The identity of the agent: the server, the token of its client and its secret. Kept in <c>%ProgramData%\MatHub Agent\agent.json</c>; the secret is encrypted

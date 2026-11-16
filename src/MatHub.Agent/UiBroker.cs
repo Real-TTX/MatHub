@@ -140,13 +140,15 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
         }
     }
 
-    /// <summary>The pipe: as SYSTEM (the service) every signed-in user may read and write it, the first instance makes sure the name is ours.</summary>
-    private static NamedPipeServerStream Create(bool first)
+    private static NamedPipeServerStream Create(bool first) => CreatePipe(AgentInfo.PipeName, PipeDirection.InOut, first);
+
+    /// <summary>A pipe of the service: as SYSTEM every signed-in user may read and write it (nobody over the network), the first instance makes sure the name is ours.</summary>
+    internal static NamedPipeServerStream CreatePipe(string name, PipeDirection direction, bool first)
     {
         var options = PipeOptions.Asynchronous | (first ? PipeOptions.FirstPipeInstance : PipeOptions.None);
         if (!WindowsIdentity.GetCurrent().IsSystem)
         {
-            return new NamedPipeServerStream(AgentInfo.PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, options);
+            return new NamedPipeServerStream(name, direction, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, options);
         }
 
         var security = new PipeSecurity();
@@ -155,7 +157,7 @@ public sealed class UiBroker(AgentClient client, AgentSignal signal, ILogger<UiB
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null), PipeAccessRights.ReadWrite, AccessControlType.Allow));
         // only the people at this computer: nobody over the network
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.NetworkSid, null), PipeAccessRights.FullControl, AccessControlType.Deny));
-        return NamedPipeServerStreamAcl.Create(AgentInfo.PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, options, 0, 0, security);
+        return NamedPipeServerStreamAcl.Create(name, direction, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, options, 0, 0, security);
     }
 
     private async Task HandleAsync(NamedPipeServerStream pipe, CancellationToken ct)

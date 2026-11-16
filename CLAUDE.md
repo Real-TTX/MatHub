@@ -80,11 +80,16 @@ src/MatHub
   wwwroot/js/                editors.js (code editor with toolbar/search/snippets, block editor, flow editor with zoom; the searchable palette, the field editor of dialogs),
                              scripttest.js (the test card of the editor), sequence.js (the steps of a sequence), kiosk.js (the preview of an offer), conditions.js (the rows of a group rule), live.js (refreshes running jobs), util.js, offline.js, pwa.js, zone.js, autosubmit.js
   wwwroot/css/               app.css (accent, shell), hub.css (the views of MatHub, prefix mh-)
-src/MatHub.Agent             Program (commands), Setup (install/enroll/uninstall, sc.exe), AgentWorker (the loop), AgentClient (HTTP), JobRunner (scripts, winget, MSI, EXE),
-                             Inventory (CIM through Windows PowerShell + registry + winget), Winget (locate as SYSTEM, read its tables), Updater (self-update, apply-update), AgentConfig (DPAPI, ACL),
+src/MatHub.Agent             Program (commands), Setup (install/enroll/uninstall, sc.exe, the entry in Installed apps, setup.log; Refresh at each start of the service), AgentWorker (the loop),
+                             AgentClient (HTTP), JobRunner (scripts, winget, MSI, EXE), Inventory (CIM through Windows PowerShell + registry + winget), Winget (locate as SYSTEM, read its tables),
+                             Updater (self-update, apply-update), AgentConfig (DPAPI, ACL), AgentInfo (names of AGENT-01, version and channel, folders, pipe names),
+                             AgentStatus (conditions, the four tray states, the snapshot, AgentStatusBoard), StatusPipe (the status channel `mathub-agent-status`), InstalledApp (the values of the entry),
                              UiBroker (the named pipe of the service: kiosk, dialogs; AgentSignal wakes the loop; UiPipe = the client, `ask`; PipeTrust checks the server process)
-  src/MatHub.Agent/Ui        WinForms in the session of the person: TrayApp (`tray`: symbol, dialog loop), KioskWindow (`kiosk`), DialogWindow (message, question, form/wizard),
-                             ProgressWindow, Theme (colours, Segoe UI Variable / Fluent Icons), UiText (de/en). `--snapshot <png|folder>` + `--auto` draw them without showing (tests, docs)
+  src/MatHub.Agent/MatDesktop  a COPY of MatDesktop's tokens (MatTokens.g.cs, MatColor.cs, MatPalette.cs + matdesktop.version): never edit, copy again
+  src/MatHub.Agent/Ui        WinForms in the session of the person: TrayApp (`tray`: the dot of the state, the menu of TrayMenuModel, Info, the service, Quit, the dialog loop), TrayIcons,
+                             AgentWindows (AgentWindow = the chrome of AGENT-05, InfoWindow, UninstallWindow), KioskWindow (`kiosk`), DialogWindow (message, question, form/wizard),
+                             ProgressWindow, Theme (colours from MatPalette, Segoe UI Variable / Fluent Icons), UiText (de/en). `--snapshot <png|folder>` + `--auto` draw them without
+                             showing (tests, docs): `tray` writes info.png, menu.png and tray-<state>.png too, `uninstall --snapshot file.png` the uninstall window
 netboot/mathub-embed.ipxe    the script built into MatHub's iPXE (Dockerfile stage netboot)
 tests/MatHub.Tests           unit + database tests
 tools/                       logo.js, logo-png.js
@@ -122,6 +127,16 @@ an uninstall may take a Retired one) (no winget upgrade as a job or a step any m
 **Agent**: polling only (no open port on the client); jobs one after the other; scripts as files in the agent's own folder (deleted after the run); winget as
 SYSTEM from the folder of the App Installer, its tables read by header positions (any language); the version is the server's build (`agent.version` next to
 the exe in the image), the agent follows it up or down.
+
+**Agent and the desktop rules of MatDesign** (`docs/DESKTOP.md` there; DESK, TRAY, SETUP, AGENT): the tray and its windows stay WinForms (AGENT-05) and take their
+colours from the tokens: `src/MatHub.Agent/MatDesktop` is a copy (`node ../MatDesign/tools/matdesktop-copy.js src/MatHub.Agent --tokens-only`; a test fails when a
+file of it was edited), `Theme` reads `MatPalette.For("#b45309", dark: false)`: no literal colour in a window. Names (AGENT-01): service and Installed apps
+`MatHub Agent`, the tray's autostart value `MatHub Agent Tray` (an older `MatHub Agent` value is renamed when the service starts), the status channel
+`mathub-agent-status` (a snapshot, never the token: AGENT-03); the kiosk pipe keeps its old name `MatHubAgent`, so a tray of the version before an update still finds the
+new service. The tray menu is `TrayMenuModel` in the order of TRAY-01 (no Uninstall in it); the version reads `Version <version> · <channel>` (SETUP-07, `AgentInfo`).
+`install` and the service write the entry in Installed apps (SETUP-04); `uninstall` keeps the data folder unless `--delete-data` or the tick in its window; `--quiet`
+has no window. Keep `install --server … --key|--rollout …` unchanged: `install.ps1` and the answer file of a rollout call it. `AgentDesktopTests` holds names, menu,
+states, entry, snapshot and the copy.
 
 **UI (MatDesign rules)**: CRUD = list page (toolbar above, table, pager under it, actions left below) + separate edit page (Save, Back, space, Delete); an entity
 with several areas has **tabs** (client, script, package); fields a kind does not need are hidden (`show-if`: package kind, profile kind, group kind, the

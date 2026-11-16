@@ -1,23 +1,77 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
+using MatDesktop;
 
 namespace MatHub.Agent.Ui;
 
-/// <summary>The look of the windows of the agent: the colours of MatHub (amber), the fonts of Windows 11 (Segoe UI Variable, Segoe Fluent Icons) and their fallbacks.</summary>
+/// <summary>
+/// The look of the windows of the agent. The colours are the tokens of MatUi (MatDesign DESK-02, AGENT-05): <c>MatDesktop/Tokens</c> is a copy of MatDesktop's
+/// tokens (<c>node ../MatDesign/tools/matdesktop-copy.js src/MatHub.Agent --tokens-only</c>, never edit it), and <see cref="MatPalette.For"/> derives every
+/// accent token from MatHub's accent the way the CSS does. WinForms has no transparency, so a token with an opacity is painted over the surface it stands on.
+/// The fonts are those of Windows 11 (Segoe UI Variable, Segoe Fluent Icons) and their fallbacks.
+/// </summary>
 internal static class Theme
 {
-    public static readonly Color Accent = Color.FromArgb(0xB4, 0x53, 0x09);
-    public static readonly Color AccentHover = Color.FromArgb(0x92, 0x40, 0x0E);
-    public static readonly Color AccentSoft = Color.FromArgb(0xFD, 0xF0, 0xE1);
-    public static readonly Color Background = Color.FromArgb(0xF3, 0xF3, 0xF3);
-    public static readonly Color Surface = Color.White;
-    public static readonly Color Border = Color.FromArgb(0xE3, 0xE3, 0xE3);
-    public static readonly Color Text = Color.FromArgb(0x1B, 0x1B, 0x1B);
-    public static readonly Color Muted = Color.FromArgb(0x5C, 0x5C, 0x5C);
-    public static readonly Color Ok = Color.FromArgb(0x0F, 0x7B, 0x0F);
-    public static readonly Color Danger = Color.FromArgb(0xC4, 0x2B, 0x1C);
-    public static readonly Color Warning = Color.FromArgb(0x9D, 0x5D, 0x00);
+    /// <summary>MatHub's accent (IDENT-01): amber, white text on it 5.0:1.</summary>
+    public const string AccentHex = "#b45309";
+
+    /// <summary>The colour tokens of the light mode for MatHub's accent.</summary>
+    public static readonly MatPalette Palette = MatPalette.For(AccentHex, dark: false);
+
+    /// <summary>Cards, dialogs, the header of a window (<c>--mat-surface</c>).</summary>
+    public static readonly Color Surface = Solid("--mat-surface");
+
+    /// <summary>The background of a window, its footer (<c>--mat-bg</c>).</summary>
+    public static readonly Color Background = Solid("--mat-bg");
+
+    /// <summary>A quiet surface: the hover of a secondary button (<c>--mat-surface-2</c>).</summary>
+    public static readonly Color Surface2 = Solid("--mat-surface-2");
+
+    /// <summary>A pressed button, the box of an empty state (<c>--mat-surface-3</c>).</summary>
+    public static readonly Color Surface3 = Solid("--mat-surface-3");
+
+    public static readonly Color Border = Solid("--mat-border");
+    public static readonly Color Text = Solid("--mat-text");
+    public static readonly Color Muted = Solid("--mat-text-muted");
+    public static readonly Color Accent = Solid("--mat-accent");
+    public static readonly Color AccentHover = Solid("--mat-accent-hover");
+    public static readonly Color AccentActive = Solid("--mat-accent-active");
+    public static readonly Color OnAccent = Solid("--mat-on-accent");
+
+    /// <summary>A tint of the accent: what is selected (COLOR-08), the box of an icon.</summary>
+    public static readonly Color AccentSoft = Solid("--mat-accent-soft");
+
+    public static readonly Color AccentSoftStrong = Solid("--mat-accent-soft-strong");
+
+    /// <summary>The accent as text on a surface (<c>--mat-accent-text</c>).</summary>
+    public static readonly Color AccentText = Solid("--mat-accent-text");
+
+    /// <summary>Text in the status colours (<c>--mat-success-text</c> …), on a surface.</summary>
+    public static readonly Color Ok = Solid("--mat-success-text");
+    public static readonly Color Warning = Solid("--mat-warning-text");
+    public static readonly Color Danger = Solid("--mat-danger-text");
+
+    /// <summary>The tints of the status colours (<c>--mat-warning-bg</c>, <c>--mat-danger-bg</c>).</summary>
+    public static readonly Color WarningSoft = Solid("--mat-warning-bg");
+    public static readonly Color DangerSoft = Solid("--mat-danger-bg");
+
+    /// <summary>The line of a danger button: <c>color-mix(in srgb, var(--mat-danger) 45%, transparent)</c>, as MatUi and MatDesktop draw it.</summary>
+    public static readonly Color DangerLine = From(MatColor.Transparent(Palette.Danger, 0.45).Over(Palette.Surface));
+
+    /// <summary>The dot of a state on the tray icon (TRAY-02): the status colours themselves.</summary>
+    public static Color Dot(TrayState state) => state switch
+    {
+        TrayState.Running => Solid("--mat-success"),
+        TrayState.Waiting => Solid("--mat-warning"),
+        TrayState.Stopped => Solid("--mat-danger"),
+        _ => Muted,
+    };
+
+    /// <summary>A token as a colour without transparency: painted over the surface (WinForms has no alpha in most places).</summary>
+    public static Color Solid(string token) => From(Palette[token].Over(Palette.Surface));
+
+    private static Color From(MatRgba c) => Color.FromArgb(c.R8, c.G8, c.B8);
 
     private static readonly Lazy<HashSet<string>> Families = new(() =>
     {
@@ -36,6 +90,9 @@ internal static class Theme
     public static Font Display(float size) => new(DisplayFamily, size, Families.Value.Contains("Segoe UI Variable Display") ? FontStyle.Bold : FontStyle.Regular);
 
     public static Font Icons(float size) => new(IconFamily, size);
+
+    /// <summary>A path or an address that is read character by character (the data folder in Info).</summary>
+    public static Font Mono(float size) => new(Families.Value.Contains("Cascadia Mono") ? "Cascadia Mono" : "Consolas", size);
 
     /// <summary>The glyph of an icon of the kiosk (the names of MatHub's icon set) in Segoe Fluent Icons / MDL2 Assets.</summary>
     public static string Glyph(string? icon) => icon switch
@@ -106,7 +163,10 @@ internal static class Theme
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }
 
-/// <summary>A flat button in the colours of MatHub: primary (amber), secondary (white with a border) or quiet (no border).</summary>
+/// <summary>
+/// A flat button in the colours of the tokens: primary (the accent), secondary (the surface with a border), quiet (no border), selected (a tint of the accent,
+/// COLOR-08: a tab that is chosen) or danger (the danger text with its line, BUTTON-01: the button of the uninstall).
+/// </summary>
 internal sealed class FlatButton : Button
 {
     public enum Kinds
@@ -114,6 +174,8 @@ internal sealed class FlatButton : Button
         Primary,
         Secondary,
         Quiet,
+        Selected,
+        Danger,
     }
 
     public FlatButton(string text, Kinds kind = Kinds.Secondary, string? glyph = null)
@@ -123,7 +185,7 @@ internal sealed class FlatButton : Button
         Text = text;
         FlatStyle = FlatStyle.Flat;
         Cursor = Cursors.Hand;
-        Font = Theme.Ui(9.5f, kind == Kinds.Primary ? FontStyle.Bold : FontStyle.Regular);
+        Font = Theme.Ui(9.5f, kind is Kinds.Primary or Kinds.Selected or Kinds.Danger ? FontStyle.Bold : FontStyle.Regular);
         // as wide as the text needs (in every size of the screen), at least a comfortable button
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -139,12 +201,16 @@ internal sealed class FlatButton : Button
 
     private void Apply()
     {
-        FlatAppearance.BorderSize = Kind == Kinds.Secondary ? 1 : 0;
-        FlatAppearance.BorderColor = Theme.Border;
-        BackColor = Kind == Kinds.Primary ? Theme.Accent : Kind == Kinds.Secondary ? Theme.Surface : Color.Transparent;
-        ForeColor = Kind == Kinds.Primary ? Color.White : Theme.Text;
-        FlatAppearance.MouseOverBackColor = Kind == Kinds.Primary ? Theme.AccentHover : Color.FromArgb(0xF0, 0xF0, 0xF0);
-        FlatAppearance.MouseDownBackColor = Kind == Kinds.Primary ? Theme.AccentHover : Color.FromArgb(0xE6, 0xE6, 0xE6);
+        FlatAppearance.BorderSize = Kind is Kinds.Secondary or Kinds.Danger ? 1 : 0;
+        FlatAppearance.BorderColor = Kind == Kinds.Danger ? Theme.DangerLine : Theme.Border;
+        (BackColor, ForeColor, FlatAppearance.MouseOverBackColor, FlatAppearance.MouseDownBackColor) = Kind switch
+        {
+            Kinds.Primary => (Theme.Accent, Theme.OnAccent, Theme.AccentHover, Theme.AccentActive),
+            Kinds.Secondary => (Theme.Surface, Theme.Text, Theme.Surface2, Theme.Surface3),
+            Kinds.Selected => (Theme.AccentSoft, Theme.AccentText, Theme.AccentSoftStrong, Theme.AccentSoftStrong),
+            Kinds.Danger => (Theme.Surface, Theme.Danger, Theme.DangerSoft, Theme.DangerSoft),
+            _ => (Color.Transparent, Theme.Text, Theme.Surface3, Theme.Surface3),
+        };
     }
 
     protected override void OnHandleCreated(EventArgs e)

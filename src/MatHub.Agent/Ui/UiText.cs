@@ -9,9 +9,22 @@ internal static class UiText
     private static extern ushort GetUserDefaultUILanguage();
 
     /// <summary>German when Windows speaks German to the person (LANG_GERMAN = 0x07); MATHUB_AGENT_LANGUAGE=en|de decides for a test.</summary>
-    public static bool German { get; } = Environment.GetEnvironmentVariable("MATHUB_AGENT_LANGUAGE") is { Length: > 0 } language
+    public static bool German { get; set; } = Environment.GetEnvironmentVariable("MATHUB_AGENT_LANGUAGE") is { Length: > 0 } language
         ? language.StartsWith("de", StringComparison.OrdinalIgnoreCase)
-        : (GetUserDefaultUILanguage() & 0x3FF) == 0x07;
+        : WindowsSpeaksGerman();
+
+    private static bool WindowsSpeaksGerman()
+    {
+        try
+        {
+            return (GetUserDefaultUILanguage() & 0x3FF) == 0x07;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // not Windows (the tests on Linux): English
+            return false;
+        }
+    }
 
     /// <summary>The name of the computer the kiosk names (MATHUB_AGENT_COMPUTER: another one for the pictures of the documentation).</summary>
     public static string Computer => Environment.GetEnvironmentVariable("MATHUB_AGENT_COMPUTER") is { Length: > 0 } name ? name : Environment.MachineName;
@@ -39,8 +52,51 @@ internal static class UiText
         ["Empty"] = ("There are no offers for this computer just now.", "Für diesen Computer gibt es gerade keine Angebote."),
         ["NoMatch"] = ("Nothing fits your search.", "Nichts passt zu deiner Suche."),
         ["Gone"] = ("This offer is not there any more.", "Dieses Angebot gibt es nicht mehr."),
-        ["OpenKiosk"] = ("Open the kiosk", "Kiosk öffnen"),
-        ["About"] = ("MatHub agent {0}", "MatHub-Agent {0}"),
+        // the tray (MatDesign TRAY-01, TRAY-02)
+        ["TrayOpen"] = ("Open MatHub Kiosk", "MatHub Kiosk öffnen"),
+        ["TrayInfo"] = ("Info …", "Info …"),
+        ["ServiceStart"] = ("Start service …", "Dienst starten …"),
+        ["ServiceStop"] = ("Stop service …", "Dienst beenden …"),
+        ["ServiceRestart"] = ("Restart service …", "Dienst neu starten …"),
+        ["TrayQuit"] = ("Quit", "Beenden"),
+        ["Tooltip"] = ("{0}: {1}", "{0}: {1}"),
+        ["StateRunning"] = ("Running", "Läuft"),
+        ["StateWaiting"] = ("Waiting", "Wartet"),
+        ["StateStopped"] = ("Stopped", "Gestoppt"),
+        ["StateNotSetUp"] = ("Not set up", "Nicht eingerichtet"),
+        ["ConditionConnecting"] = ("The agent is connecting to MatHub …", "Der Agent verbindet sich mit MatHub …"),
+        ["ConditionConnected"] = ("Connected to MatHub, last contact {0}.", "Mit MatHub verbunden, zuletzt {0}."),
+        ["ConditionPending"] = ("This computer waits for an approval in MatHub.", "Dieser Computer wartet auf die Freigabe in MatHub."),
+        ["ConditionUnreachable"] = ("MatHub cannot be reached just now; the agent tries again by itself.", "MatHub ist gerade nicht erreichbar; der Agent versucht es von selbst wieder."),
+        ["ConditionRejected"] = ("MatHub does not accept this computer (removed or switched off).", "MatHub nimmt diesen Computer nicht an (entfernt oder abgeschaltet)."),
+        ["ConditionServiceStopped"] = ("The service of the agent does not run.", "Der Dienst des Agenten läuft nicht."),
+        ["ConditionNotInstalled"] = ("The agent is not installed on this computer.", "Der Agent ist auf diesem Computer nicht installiert."),
+        ["ServiceFailed"] = ("The service could not be changed: {0}", "Der Dienst konnte nicht geändert werden: {0}"),
+
+        // Info (TRAY-05) and the uninstall (SETUP-04)
+        ["Info"] = ("Info", "Info"),
+        ["FactComputer"] = ("Computer", "Computer"),
+        ["FactServer"] = ("Server", "Server"),
+        ["FactLastContact"] = ("Last contact", "Letzter Kontakt"),
+        ["FactStarted"] = ("Running since", "Läuft seit"),
+        ["FactVersion"] = ("Version", "Version"),
+        ["FactData"] = ("Data folder", "Datenordner"),
+        ["Never"] = ("not yet", "noch nicht"),
+        ["OpenKiosk"] = ("Open kiosk", "Kiosk öffnen"),
+        ["Close"] = ("Close", "Schließen"),
+        ["Uninstall"] = ("Uninstall", "Deinstallation"),
+        ["UninstallTitle"] = ("Remove MatHub Agent from this computer?", "MatHub Agent von diesem Computer entfernen?"),
+        ["UninstallWhat"] = (
+            "The service, the program in {0}, the symbol beside the clock and the kiosk in the start menu are removed. The computer stays in MatHub until it is removed there.",
+            "Der Dienst, das Programm in {0}, das Symbol neben der Uhr und der Kiosk im Startmenü werden entfernt. Der Computer bleibt in MatHub, bis er dort entfernt wird."),
+        ["UninstallData"] = ("Also delete my data", "Auch meine Daten löschen"),
+        ["UninstallKeeps"] = ("Without the tick the settings stay in {0}.", "Ohne Haken bleiben die Einstellungen in {0}."),
+        ["UninstallButton"] = ("Uninstall", "Deinstallieren"),
+        ["Removing"] = ("Removing …", "Wird entfernt …"),
+        ["Removed"] = ("MatHub Agent is removed.", "MatHub Agent ist entfernt."),
+        ["RemovedData"] = ("Its data is deleted too.", "Seine Daten sind auch gelöscht."),
+        ["RemovedKept"] = ("Its settings are kept in {0}.", "Seine Einstellungen bleiben in {0}."),
+        ["RemoveFailed"] = ("The uninstall did not work (exit code {0}).", "Die Deinstallation hat nicht geklappt (Exit-Code {0})."),
         ["Started"] = ("{0} has started.", "{0} wurde gestartet."),
         ["Finished"] = ("{0} is done.", "{0} ist fertig."),
         ["FailedNotice"] = ("{0} did not work. Please ask your IT.", "{0} hat nicht geklappt. Bitte wende dich an die IT."),

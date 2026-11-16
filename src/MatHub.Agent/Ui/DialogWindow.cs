@@ -13,7 +13,7 @@ internal sealed class DialogWindow : Form
     private readonly List<UiPage> _pages;
     private readonly Dictionary<string, Control> _inputs = new(StringComparer.Ordinal);
     private readonly Panel _body = new() { Dock = DockStyle.Fill, BackColor = Theme.Surface, AutoScroll = true, Padding = new Padding(28, 18, 28, 12) };
-    private readonly Label _step = new() { AutoSize = true, ForeColor = Theme.Accent, Font = Theme.Ui(8.5f, FontStyle.Bold) };
+    private readonly Label _step = new() { AutoSize = true, ForeColor = Theme.AccentText, Font = Theme.Ui(8.5f, FontStyle.Bold) };
     private readonly Label _pageTitle = new() { AutoSize = true, ForeColor = Theme.Text };
     private readonly Label _error = new() { AutoSize = false, ForeColor = Theme.Danger, Font = Theme.Ui(9f), TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill };
     private readonly FlatButton _back = new(UiText.T("Back"));
@@ -53,8 +53,8 @@ internal sealed class DialogWindow : Form
             UiKinds.Form => ("settings", Theme.Accent, Theme.AccentSoft),
             _ => dialog.Level switch
             {
-                "warning" => ("warning", Theme.Warning, Color.FromArgb(0xFF, 0xF4, 0xCE)),
-                "error" => ("error", Theme.Danger, Color.FromArgb(0xFD, 0xE7, 0xE9)),
+                "warning" => ("warning", Theme.Warning, Theme.WarningSoft),
+                "error" => ("error", Theme.Danger, Theme.DangerSoft),
                 _ => ("info", Theme.Accent, Theme.AccentSoft),
             },
         };

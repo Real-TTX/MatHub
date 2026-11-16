@@ -21,10 +21,17 @@
     <ProjectReference Include="..\..\src\MatHub\MatHub.csproj" />
   </ItemGroup>
 
-  <!-- the parts of the agent that run anywhere (the agent itself is a Windows program): the tables of winget -->
+  <!-- the parts of the agent that run anywhere (the agent itself is a Windows program): the tables of winget, its names and version (AGENT-01, SETUP-07),
+       its states and tray menu (TRAY-01, TRAY-02), its entry in Installed apps (SETUP-04), its texts, and the copy of MatDesktop's tokens it takes its colours from -->
   <ItemGroup>
     <Compile Include="..\..\src\MatHub.Agent\Winget.cs" Link="Agent\Winget.cs" />
     <Compile Include="..\..\src\MatHub.Agent\ProcessRunner.cs" Link="Agent\ProcessRunner.cs" />
+    <Compile Include="..\..\src\MatHub.Agent\AgentInfo.cs" Link="Agent\AgentInfo.cs" />
+    <Compile Include="..\..\src\MatHub.Agent\AgentStatus.cs" Link="Agent\AgentStatus.cs" />
+    <Compile Include="..\..\src\MatHub.Agent\InstalledApp.cs" Link="Agent\InstalledApp.cs" />
+    <Compile Include="..\..\src\MatHub.Agent\Ui\TrayMenuModel.cs" Link="Agent\Ui\TrayMenuModel.cs" />
+    <Compile Include="..\..\src\MatHub.Agent\Ui\UiText.cs" Link="Agent\Ui\UiText.cs" />
+    <Compile Include="..\..\src\MatHub.Agent\MatDesktop\Tokens\*.cs" Link="Agent\MatDesktop\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

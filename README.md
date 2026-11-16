@@ -92,9 +92,15 @@ to `%ProgramFiles%\MatHub Agent` and runs as the service **MatHub Agent** (Local
 - It calls the server every 30 seconds (`/api/agent/v1/poll`), sends its inventory every 6 hours and after every change, runs its jobs one after the other and
   reports each one. There is no open port on the client.
 - It updates itself to the version its server offers (the image builds both), checks the download and puts the old one back when the new one does not start.
-- `mathub-agent uninstall` removes it; `mathub-agent inventory` shows what it would send.
-- **The kiosk**: the install puts **MatHub Kiosk** into the start menu and starts `mathub-agent tray` at every sign-in (a symbol beside the clock). The tray
-  opens the kiosk and shows the dialogs of scripts; both talk to the service through a local named pipe, so the person's process never sees the secret of
+- It is listed in **Installed apps** as **MatHub Agent** (publisher, version, icon); removing it there opens its uninstall window (it asks for administrator
+  rights): what goes, **Also delete my data** (off: the settings in `%ProgramData%\MatHub Agent` stay) and **Uninstall**. Without a window:
+  `mathub-agent uninstall --quiet [--delete-data]`. `mathub-agent install --quiet --url <server> --code <key>` is the same as `--server` / `--key`; exit code 0 when
+  it worked, else the message on the error output and in `setup.log` of the data folder. `mathub-agent inventory` shows what it would send.
+- **The tray and the kiosk**: the install puts **MatHub Kiosk** into the start menu and starts `mathub-agent tray` at every sign-in (the autostart value
+  **MatHub Agent Tray**, a symbol beside the clock). Its dot and its tooltip say the state (green running, amber waiting for an approval or for the server, red
+  stopped, grey not set up), which it reads from the status channel `mathub-agent-status` of the service (never a secret); a left click opens the kiosk, the menu
+  has the version, the state, **Open MatHub Kiosk**, **Info …**, the service (start, stop, restart, with administrator rights) and **Quit** (it ends the tray,
+  not the service). The tray shows the dialogs of scripts; the tray and the kiosk talk to the service through a local named pipe, so the person's process never sees the secret of
   the agent, and the service asks the server. A script shows a dialog with `mathub-agent ask` (the visual editors write that for you).
 - The secrets a script names reach it as environment variables of its own process (`MATHUB_SECRET_NAME`, in PowerShell `Get-MatHubSecret 'NAME'`), and
   every place of their values in the output becomes `***`.
